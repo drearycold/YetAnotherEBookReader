@@ -67,6 +67,7 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
     @Published var container: AppContainer
     @Published var listModel: ReadingPositionListViewModel
     @Published var position: BookDeviceReadingPosition
+    var targetWorkspaceID: UUID?
     
     @Published var selectedFormat = Format.UNKNOWN
     @Published var selectedFormatReader = ReaderType.UNSUPPORTED
@@ -76,10 +77,16 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
     let percentFormatter = NumberFormatter()
     let dateFormatter = DateFormatter()
 
-    init (container: AppContainer, listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
+    init(
+        container: AppContainer,
+        listModel: ReadingPositionListViewModel,
+        position: BookDeviceReadingPosition,
+        targetWorkspaceID: UUID? = nil
+    ) {
         self.container = container
         self.listModel = listModel
         self.position = position
+        self.targetWorkspaceID = targetWorkspaceID
 
         if let format = container.sessionManager.formatOfReader(readerName: position.readerName) {
             self.selectedFormat = format
@@ -132,7 +139,12 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
             position: position
         )
 
-        container.openReader(book: book, readerInfo: readerInfo, source: .readingPosition)
+        container.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .readingPosition,
+            targetWorkspaceID: targetWorkspaceID
+        )
     }
 
     func updatePosition() {

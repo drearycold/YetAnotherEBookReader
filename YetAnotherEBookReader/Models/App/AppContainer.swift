@@ -22,6 +22,11 @@ struct ReaderOpenRequest: Equatable {
     let targetWorkspaceID: UUID?
 }
 
+struct ReaderPresentationTransfer: Equatable {
+    let presentationID: ReaderPresentation.ID
+    let targetWorkspaceID: UUID
+}
+
 enum ReaderSceneActivity {
     static let activityType = "com.drearycold.dsreader.reader"
     private static let presentationIDKey = "presentationID"
@@ -104,6 +109,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
     private let readerOpenRequestBroadcaster = ManagerAsyncBroadcaster<ReaderOpenRequest>()
+    private let readerPresentationTransferBroadcaster = ManagerAsyncBroadcaster<ReaderPresentationTransfer>()
     private var activeReaderWorkspaceID: UUID?
     private var activeAppSceneIDs = Set<UUID>()
     private var transferringReaderPresentationIDs = Set<ReaderPresentation.ID>()
@@ -211,6 +217,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
         readerOpenRequestBroadcaster.finish()
+        readerPresentationTransferBroadcaster.finish()
         probeLibraryLastModifiedBroadcaster.finish()
         probeTimerTask?.cancel()
     }
@@ -291,6 +298,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         readerInfo: ReaderInfo? = nil,
         source: ReaderPresentationSource,
         placement: ReaderOpenPlacement = .currentWorkspace,
+        targetWorkspaceID: UUID? = nil,
         reuseExisting: Bool = true
     ) -> ReaderPresentation {
         let presentation = sessionManager.openReader(
@@ -303,7 +311,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             readerOpenRequestBroadcaster.send(
                 ReaderOpenRequest(
                     presentationID: presentation.id,
-                    targetWorkspaceID: activeReaderWorkspaceID
+                    targetWorkspaceID: targetWorkspaceID
                 )
             )
         }
@@ -312,6 +320,20 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     func readerOpenRequests() -> AsyncStream<ReaderOpenRequest> {
         readerOpenRequestBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishReaderPresentationTransfer(presentationID: ReaderPresentation.ID, targetWorkspaceID: UUID) {
+        readerPresentationTransferBroadcaster.send(
+            ReaderPresentationTransfer(
+                presentationID: presentationID,
+                targetWorkspaceID: targetWorkspaceID
+            )
+        )
+    }
+
+    func readerPresentationTransfers() -> AsyncStream<ReaderPresentationTransfer> {
+        readerPresentationTransferBroadcaster.stream()
     }
 
     @MainActor
@@ -620,5 +642,16 @@ extension EnvironmentValues {
     var appContainer: AppContainer {
         get { self[AppContainerEnvironmentKey.self] }
         set { self[AppContainerEnvironmentKey.self] = newValue }
+    }
+}
+
+private struct ReaderWorkspaceIDEnvironmentKey: EnvironmentKey {
+    static var defaultValue: UUID? = nil
+}
+
+extension EnvironmentValues {
+    var readerWorkspaceID: UUID? {
+        get { self[ReaderWorkspaceIDEnvironmentKey.self] }
+        set { self[ReaderWorkspaceIDEnvironmentKey.self] = newValue }
     }
 }

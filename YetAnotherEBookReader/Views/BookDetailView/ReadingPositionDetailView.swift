@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ReadingPositionDetailView: View {
+    @Environment(\.readerWorkspaceID) var readerWorkspaceID
     @ObservedObject private var _VM: ReadingPositionDetailViewModel
     
     @State private var overrideToggle = false
@@ -105,6 +106,9 @@ struct ReadingPositionDetailView: View {
         )
         .alert(item: $_VM.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
+        }
+        .onAppear {
+            _VM.targetWorkspaceID = readerWorkspaceID
         }
     }
 }

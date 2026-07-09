@@ -7,6 +7,19 @@
 
 import SwiftUI
 
+enum ReaderPresentationUnmountReason: Equatable {
+    case close
+    case temporary
+    case transfer
+}
+
+enum ReaderPresentationLifecycleEvent {
+    case activated
+    case deactivated
+    case scenePhase(ScenePhase)
+    case unmount(ReaderPresentationUnmountReason)
+}
+
 @MainActor @available(macCatalyst 14.0, *)
 final class MainViewModel: ObservableObject {
     private let container: AppContainer
@@ -40,10 +53,14 @@ final class MainViewModel: ObservableObject {
     init(container: AppContainer, sessionManager: ReadingSessionManager) {
         self.container = container
         self.sessionManager = sessionManager
-        self.recentShelfViewModel = RecentShelfViewModel(container: container)
+        let readerWorkspaceViewModel = ReaderWorkspaceViewModel(container: container)
+        self.readerWorkspaceViewModel = readerWorkspaceViewModel
+        self.recentShelfViewModel = RecentShelfViewModel(
+            container: container,
+            targetWorkspaceID: readerWorkspaceViewModel.id
+        )
         self.sectionShelfViewModel = SectionShelfViewModel(container: container)
         self.settingsViewModel = SettingsViewModel(container: container)
-        self.readerWorkspaceViewModel = ReaderWorkspaceViewModel(container: container)
         
         setupSubscriptions()
     }
@@ -165,7 +182,12 @@ final class MainViewModel: ObservableObject {
         guard let importedBook = container.bookManager.booksInShelf[book.inShelfId] ?? container.bookRepository.getBook(id: book.inShelfId) else { return }
         let readerInfo = sessionManager.prepareBookReading(book: importedBook)
         guard readerInfo.missing == false else { return }
-        container.openReader(book: importedBook, readerInfo: readerInfo, source: .importResult)
+        container.openReader(
+            book: importedBook,
+            readerInfo: readerInfo,
+            source: .importResult,
+            targetWorkspaceID: readerWorkspaceViewModel.id
+        )
     }
 
     func reportImportError() {
@@ -199,7 +221,7 @@ final class MainViewModel: ObservableObject {
 
     func handleReaderSceneActivity(_ activity: NSUserActivity) {
         guard let presentationID = ReaderSceneActivity.presentationID(from: activity) else { return }
-        readerWorkspaceViewModel.attachPresentation(id: presentationID)
+        readerWorkspaceViewModel.attachPresentation(id: presentationID, completesTransfer: true)
     }
 }
 
@@ -214,13 +236,16 @@ extension MainViewModel: AlertDelegate {
 final class ReaderWorkspaceViewModel: ObservableObject {
     let id = UUID()
 
+    private let mountedPresentationLimit = 3
     private let container: AppContainer
     private var registryTask: Task<Void, Never>?
     private var openRequestTask: Task<Void, Never>?
-    private let lifecycleBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
+    private var transferTask: Task<Void, Never>?
+    private var lifecycleBroadcasters = [ReaderPresentation.ID: ManagerAsyncBroadcaster<ReaderPresentationLifecycleEvent>]()
 
     @Published private(set) var presentationIDs: [ReaderPresentation.ID] = []
     @Published private(set) var presentationsByID: [ReaderPresentation.ID: ReaderPresentation] = [:]
+    @Published private(set) var mountedPresentationIDs: [ReaderPresentation.ID] = []
     @Published var activePresentationID: ReaderPresentation.ID?
     @Published var isPresented = false
 
@@ -232,7 +257,8 @@ final class ReaderWorkspaceViewModel: ObservableObject {
     deinit {
         registryTask?.cancel()
         openRequestTask?.cancel()
-        lifecycleBroadcaster.finish()
+        transferTask?.cancel()
+        lifecycleBroadcasters.values.forEach { $0.finish() }
     }
 
     var hasReaders: Bool {
@@ -248,38 +274,62 @@ final class ReaderWorkspaceViewModel: ObservableObject {
         return presentationsByID[activePresentationID]
     }
 
+    var mountedPresentations: [ReaderPresentation] {
+        mountedPresentationIDs.compactMap { presentationsByID[$0] }
+    }
+
     var supportsReaderWindows: Bool {
         container.supportsReaderWindows
     }
 
-    func readerLifecycleEvents() -> AsyncStream<ScenePhase> {
-        lifecycleBroadcaster.stream()
+    func readerLifecycleEvents(for presentationID: ReaderPresentation.ID) -> AsyncStream<ReaderPresentationLifecycleEvent> {
+        let broadcaster = lifecycleBroadcaster(for: presentationID)
+        let initialEvent: ReaderPresentationLifecycleEvent = activePresentationID == presentationID && isPresented ? .activated : .deactivated
+        return broadcaster.stream(initialValue: initialEvent)
     }
 
-    func attachPresentation(id presentationID: ReaderPresentation.ID) {
-        guard container.sessionManager.readerPresentation(id: presentationID) != nil else { return }
+    func attachPresentation(id presentationID: ReaderPresentation.ID, completesTransfer: Bool = false) {
+        guard let presentation = container.sessionManager.readerPresentationForMount(id: presentationID) else { return }
+        presentationsByID[presentationID] = presentation
         if presentationIDs.contains(presentationID) == false {
             presentationIDs.append(presentationID)
         }
-        activatePresentation(id: presentationID)
         isPresented = true
+        activatePresentation(id: presentationID)
+        if completesTransfer {
+            container.publishReaderPresentationTransfer(presentationID: presentationID, targetWorkspaceID: id)
+        }
     }
 
     func activatePresentation(id presentationID: ReaderPresentation.ID) {
         guard presentationIDs.contains(presentationID) else { return }
+        let previousActivePresentationID = activePresentationID
+        if let presentation = container.sessionManager.readerPresentationForMount(id: presentationID) {
+            presentationsByID[presentationID] = presentation
+        }
+        if previousActivePresentationID != presentationID,
+           let previousActivePresentationID {
+            lifecycleBroadcaster(for: previousActivePresentationID).send(.deactivated)
+        }
         activePresentationID = presentationID
+        mountPresentation(id: presentationID)
         container.sessionManager.activateReader(id: presentationID)
+        if isPresented {
+            lifecycleBroadcaster(for: presentationID).send(.activated)
+        }
     }
 
     func closePresentation(id presentationID: ReaderPresentation.ID) {
         let wasActive = activePresentationID == presentationID
+        sendUnmount(.close, for: presentationID)
         presentationIDs.removeAll { $0 == presentationID }
+        mountedPresentationIDs.removeAll { $0 == presentationID }
         container.sessionManager.closeReader(id: presentationID)
 
         if wasActive {
-            activePresentationID = presentationIDs.last
-            if let activePresentationID {
-                container.sessionManager.activateReader(id: activePresentationID)
+            activePresentationID = nil
+            if let nextActivePresentationID = presentationIDs.last {
+                activatePresentation(id: nextActivePresentationID)
             }
         }
 
@@ -296,9 +346,15 @@ final class ReaderWorkspaceViewModel: ObservableObject {
     func showReader() {
         guard hasReaders else { return }
         isPresented = true
+        if let activePresentationID {
+            lifecycleBroadcaster(for: activePresentationID).send(.activated)
+        }
     }
 
     func hideReader() {
+        if let activePresentationID {
+            lifecycleBroadcaster(for: activePresentationID).send(.deactivated)
+        }
         isPresented = false
     }
 
@@ -310,8 +366,6 @@ final class ReaderWorkspaceViewModel: ObservableObject {
     func moveActivePresentationToNewWindow() {
         guard supportsReaderWindows, let activePresentation else { return }
         guard container.requestReaderWindow(for: activePresentation) else { return }
-        container.markReaderPresentationTransfer(id: activePresentation.id)
-        detachPresentation(id: activePresentation.id)
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {
@@ -325,22 +379,34 @@ final class ReaderWorkspaceViewModel: ObservableObject {
         @unknown default:
             break
         }
-        lifecycleBroadcaster.send(scenePhase)
+        mountedPresentationIDs.forEach { presentationID in
+            lifecycleBroadcaster(for: presentationID).send(.scenePhase(scenePhase))
+        }
     }
 
     private func setupTasks() {
         let registrySnapshots = container.sessionManager.readerPresentationSnapshots()
         registryTask = Task { @MainActor [weak self] in
-            for await presentations in registrySnapshots {
+            for await _ in registrySnapshots {
                 guard !Task.isCancelled, let self else { return }
+                let presentations = self.container.sessionManager.readerPresentations
+                let presentationMap = Dictionary(uniqueKeysWithValues: presentations.map { ($0.id, $0) })
+                let removedPresentationIDs = self.presentationIDs.filter { presentationMap[$0] == nil }
+                removedPresentationIDs.forEach { self.sendUnmount(.close, for: $0) }
                 self.presentationsByID = Dictionary(uniqueKeysWithValues: presentations.map { ($0.id, $0) })
                 self.presentationIDs.removeAll { self.presentationsByID[$0] == nil }
+                self.mountedPresentationIDs.removeAll { self.presentationsByID[$0] == nil }
                 if let activePresentationID = self.activePresentationID,
                    self.presentationsByID[activePresentationID] == nil {
-                    self.activePresentationID = self.presentationIDs.last
+                    self.activePresentationID = nil
+                    if let nextActivePresentationID = self.presentationIDs.last {
+                        self.activatePresentation(id: nextActivePresentationID)
+                    }
                 }
                 if self.presentationIDs.isEmpty {
                     self.isPresented = false
+                } else if let activePresentationID = self.activePresentationID {
+                    self.mountPresentation(id: activePresentationID)
                 }
             }
         }
@@ -353,16 +419,29 @@ final class ReaderWorkspaceViewModel: ObservableObject {
                 self.attachPresentation(id: request.presentationID)
             }
         }
+
+        let transferCompletions = container.readerPresentationTransfers()
+        transferTask = Task { @MainActor [weak self] in
+            for await transfer in transferCompletions {
+                guard !Task.isCancelled, let self else { return }
+                guard transfer.targetWorkspaceID != self.id else { continue }
+                guard self.presentationIDs.contains(transfer.presentationID) else { continue }
+                self.container.markReaderPresentationTransfer(id: transfer.presentationID)
+                self.detachPresentation(id: transfer.presentationID, unmountReason: .transfer)
+            }
+        }
     }
 
-    private func detachPresentation(id presentationID: ReaderPresentation.ID) {
+    private func detachPresentation(id presentationID: ReaderPresentation.ID, unmountReason: ReaderPresentationUnmountReason) {
         let wasActive = activePresentationID == presentationID
+        sendUnmount(unmountReason, for: presentationID)
         presentationIDs.removeAll { $0 == presentationID }
+        mountedPresentationIDs.removeAll { $0 == presentationID }
 
         if wasActive {
-            activePresentationID = presentationIDs.last
-            if let activePresentationID {
-                container.sessionManager.activateReader(id: activePresentationID)
+            activePresentationID = nil
+            if let nextActivePresentationID = presentationIDs.last {
+                activatePresentation(id: nextActivePresentationID)
             }
         }
 
@@ -370,5 +449,36 @@ final class ReaderWorkspaceViewModel: ObservableObject {
             activePresentationID = nil
             isPresented = false
         }
+    }
+
+    private func mountPresentation(id presentationID: ReaderPresentation.ID) {
+        mountedPresentationIDs.removeAll { $0 == presentationID }
+        mountedPresentationIDs.append(presentationID)
+        trimMountedPresentations()
+    }
+
+    private func trimMountedPresentations() {
+        while mountedPresentationIDs.count > mountedPresentationLimit,
+              let presentationIDToUnmount = mountedPresentationIDs.first(where: { $0 != activePresentationID }) {
+            sendUnmount(.temporary, for: presentationIDToUnmount)
+            mountedPresentationIDs.removeAll { $0 == presentationIDToUnmount }
+        }
+    }
+
+    private func sendUnmount(_ reason: ReaderPresentationUnmountReason, for presentationID: ReaderPresentation.ID) {
+        guard mountedPresentationIDs.contains(presentationID) else { return }
+        lifecycleBroadcaster(for: presentationID).send(.unmount(reason))
+        if reason == .close {
+            lifecycleBroadcasters.removeValue(forKey: presentationID)?.finish()
+        }
+    }
+
+    private func lifecycleBroadcaster(for presentationID: ReaderPresentation.ID) -> ManagerAsyncBroadcaster<ReaderPresentationLifecycleEvent> {
+        if let broadcaster = lifecycleBroadcasters[presentationID] {
+            return broadcaster
+        }
+        let broadcaster = ManagerAsyncBroadcaster<ReaderPresentationLifecycleEvent>()
+        lifecycleBroadcasters[presentationID] = broadcaster
+        return broadcaster
     }
 }

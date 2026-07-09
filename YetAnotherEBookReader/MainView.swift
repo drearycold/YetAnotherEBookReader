@@ -237,6 +237,7 @@ struct MainView: View {
                 viewModel.urlToOpen = nil
             }
         }
+        .environment(\.readerWorkspaceID, viewModel.readerWorkspaceViewModel.id)
     }
 
     private func requestIDFA() {
@@ -473,19 +474,23 @@ private struct ReaderWorkspaceView: View {
 
     @ViewBuilder
     private var readerContent: some View {
-        if viewModel.presentations.isEmpty == false {
+        if viewModel.mountedPresentations.isEmpty == false {
             ZStack {
-                ForEach(viewModel.presentations) { presentation in
+                ForEach(viewModel.mountedPresentations) { presentation in
+                    let isActive = viewModel.activePresentationID == presentation.id
                     YabrEBookReaderRepresentable(
                         book: presentation.book,
                         readerInfo: presentation.readerInfo,
                         presentationID: presentation.id,
-                        lifecycleEvents: viewModel.readerLifecycleEvents
+                        lifecycleEvents: {
+                            viewModel.readerLifecycleEvents(for: presentation.id)
+                        }
                     )
                     .id(presentation.id)
-                    .opacity(viewModel.activePresentationID == presentation.id ? 1 : 0)
-                    .allowsHitTesting(viewModel.activePresentationID == presentation.id)
-                    .accessibilityHidden(viewModel.activePresentationID != presentation.id)
+                    .opacity(isActive ? 1 : 0)
+                    .allowsHitTesting(isActive)
+                    .accessibilityHidden(isActive == false)
+                    .zIndex(isActive ? 1 : 0)
                 }
             }
         } else if viewModel.isPresented {

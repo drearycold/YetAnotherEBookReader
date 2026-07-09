@@ -28,6 +28,7 @@ enum RecentShelfAlert: Identifiable {
 @MainActor @available(macCatalyst 14.0, *)
 final class RecentShelfViewModel: ObservableObject {
     let container: AppContainer
+    let targetWorkspaceID: UUID?
     private var recentSnapshotTask: Task<Void, Never>?
     private var calibreEventTask: Task<Void, Never>?
     
@@ -41,8 +42,9 @@ final class RecentShelfViewModel: ObservableObject {
     @Published var presentingHistoryBookId: String? = nil
     @Published var activeAlert: RecentShelfAlert? = nil
     
-    init(container: AppContainer) {
+    init(container: AppContainer, targetWorkspaceID: UUID? = nil) {
         self.container = container
+        self.targetWorkspaceID = targetWorkspaceID
         setupTasks()
     }
 
@@ -118,7 +120,12 @@ final class RecentShelfViewModel: ObservableObject {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
         } else {
-            container.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+            container.openReader(
+                book: book,
+                readerInfo: readerInfo,
+                source: .shelf,
+                targetWorkspaceID: targetWorkspaceID
+            )
         }
     }
     

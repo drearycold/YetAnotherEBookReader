@@ -198,6 +198,73 @@ import Combine
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentations.count, 2)
     }
 
+    func testReaderWorkspaceKeepsInactiveTabMountedWhenSwitching() async throws {
+        let presentations = try makeReaderPresentations(count: 2)
+        presentations.forEach { presentation in
+            viewModel.readerWorkspaceViewModel.attachPresentation(id: presentation.id)
+        }
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, presentations[1].id)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, presentations.map(\.id))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.mountedPresentationIDs, presentations.map(\.id))
+
+        viewModel.readerWorkspaceViewModel.activatePresentation(id: presentations[0].id)
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, presentations[0].id)
+        XCTAssertEqual(Set(viewModel.readerWorkspaceViewModel.mountedPresentationIDs), Set(presentations.map(\.id)))
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), presentations.map(\.id))
+    }
+
+    func testReaderWorkspaceUnmountsOldestInactiveWhenHotMountLimitExceeded() async throws {
+        let presentations = try makeReaderPresentations(count: 4)
+        presentations.forEach { presentation in
+            viewModel.readerWorkspaceViewModel.attachPresentation(id: presentation.id)
+        }
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, presentations.map(\.id))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.mountedPresentationIDs, presentations.dropFirst().map(\.id))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, presentations[3].id)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), presentations.map(\.id))
+    }
+
+    func testReaderWorkspaceLifecycleDistinguishesCloseAndTemporaryUnmount() async throws {
+        let closePresentation = try makeReaderPresentations(count: 1, idOffset: 400).first!
+        viewModel.readerWorkspaceViewModel.attachPresentation(id: closePresentation.id)
+        let closeExpectation = expectation(description: "Close unmount reason")
+        let closeReason = UnmountReasonBox()
+        let closeObservation = observeUnmountReason(
+            from: viewModel.readerWorkspaceViewModel.readerLifecycleEvents(for: closePresentation.id),
+            expectation: closeExpectation,
+            reason: closeReason
+        )
+
+        viewModel.readerWorkspaceViewModel.closePresentation(id: closePresentation.id)
+
+        await fulfillment(of: [closeExpectation], timeout: 1.0)
+        closeObservation.cancel()
+        XCTAssertEqual(closeReason.value, .close)
+
+        let presentations = try makeReaderPresentations(count: 4, idOffset: 500)
+        viewModel.readerWorkspaceViewModel.attachPresentation(id: presentations[0].id)
+        let temporaryExpectation = expectation(description: "Temporary unmount reason")
+        let temporaryReason = UnmountReasonBox()
+        let temporaryObservation = observeUnmountReason(
+            from: viewModel.readerWorkspaceViewModel.readerLifecycleEvents(for: presentations[0].id),
+            expectation: temporaryExpectation,
+            reason: temporaryReason
+        )
+
+        presentations.dropFirst().forEach { presentation in
+            viewModel.readerWorkspaceViewModel.attachPresentation(id: presentation.id)
+        }
+
+        await fulfillment(of: [temporaryExpectation], timeout: 1.0)
+        temporaryObservation.cancel()
+        XCTAssertEqual(temporaryReason.value, .temporary)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, presentations.map(\.id))
+        XCTAssertFalse(viewModel.readerWorkspaceViewModel.mountedPresentationIDs.contains(presentations[0].id))
+    }
+
     func testReaderWindowActionsDoNothingWhenUnsupported() async throws {
         guard mockAppContainer.supportsReaderWindows == false else {
             throw XCTSkip("Current test destination supports reader windows.")
@@ -220,6 +287,39 @@ import Combine
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, originalPresentationIDs)
     }
 
+    func testReaderOpenTargetsInitiatingShelfWorkspace() async throws {
+        let secondViewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+
+        secondViewModel.recentShelfViewModel.tapBook(bookId: book.inShelfId)
+
+        let attachedToSecond = await waitUntil {
+            secondViewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attachedToSecond)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
+    }
+
+    func testReaderOpenTargetsInitiatingBookDetailWorkspace() async throws {
+        let secondViewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
+        var book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        book.inShelf = true
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+
+        let detailViewModel = BookDetailViewModel(
+            container: mockAppContainer,
+            targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id
+        )
+        detailViewModel.readBook(book: book)
+
+        let attachedToSecond = await waitUntil {
+            secondViewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attachedToSecond)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
+    }
+
     func testOpenEmptyReaderWindowDoesNotChangeReaderTabs() async throws {
         mockAppContainer.readerWindowSupportOverride = true
         var requestedActivities: [NSUserActivity?] = []
@@ -240,13 +340,13 @@ import Combine
         viewModel.readerWorkspaceViewModel.openEmptyReaderWindow()
 
         XCTAssertEqual(requestedActivities.count, 1)
-        XCTAssertNil(requestedActivities[0])
+        XCTAssertNil(try XCTUnwrap(requestedActivities.first))
         XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), originalPresentationIDs)
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, originalPresentationIDs)
         XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
     }
 
-    func testMoveActivePresentationToNewWindowMovesLastTabWithoutClosingSession() async throws {
+    func testMoveActivePresentationToNewWindowKeepsSourceUntilDestinationAttaches() async throws {
         mockAppContainer.readerWindowSupportOverride = true
         var requestedActivities: [NSUserActivity?] = []
         mockAppContainer.readerWindowRequestHandler = { activity in
@@ -255,27 +355,28 @@ import Combine
 
         let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
         let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
-        mockAppContainer.openReader(book: book, readerInfo: readerInfo, source: .shelf)
-
-        let attached = await waitUntil {
-            self.viewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
-        }
-        XCTAssertTrue(attached)
-        let presentationID = try XCTUnwrap(viewModel.readerWorkspaceViewModel.activePresentationID)
+        let presentation = mockAppContainer.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .shelf,
+            placement: .registryOnly
+        )
+        viewModel.readerWorkspaceViewModel.attachPresentation(id: presentation.id)
+        let presentationID = presentation.id
 
         viewModel.readerWorkspaceViewModel.moveActivePresentationToNewWindow()
 
         XCTAssertEqual(requestedActivities.count, 1)
-        XCTAssertEqual(ReaderSceneActivity.presentationID(from: try XCTUnwrap(requestedActivities[0])), presentationID)
+        let requestedActivity = try XCTUnwrap(requestedActivities.first ?? nil)
+        XCTAssertEqual(ReaderSceneActivity.presentationID(from: requestedActivity), presentationID)
         XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), [presentationID])
-        XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
-        XCTAssertNil(viewModel.readerWorkspaceViewModel.activePresentationID)
-        XCTAssertFalse(viewModel.readerWorkspaceViewModel.isPresented)
-        XCTAssertTrue(mockAppContainer.consumeReaderPresentationTransfer(id: presentationID))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, [presentationID])
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, presentationID)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
         XCTAssertFalse(mockAppContainer.consumeReaderPresentationTransfer(id: presentationID))
     }
 
-    func testMoveActivePresentationToNewWindowActivatesRemainingTab() async throws {
+    func testMoveActivePresentationToNewWindowDetachesAfterDestinationAttach() async throws {
         mockAppContainer.readerWindowSupportOverride = true
         var requestedActivities: [NSUserActivity?] = []
         mockAppContainer.readerWindowRequestHandler = { activity in
@@ -292,23 +393,42 @@ import Combine
 
         let firstInfo = mockAppContainer.sessionManager.prepareBookReading(book: firstBook)
         let secondInfo = mockAppContainer.sessionManager.prepareBookReading(book: secondBook)
-        let firstPresentation = mockAppContainer.openReader(book: firstBook, readerInfo: firstInfo, source: .shelf)
-        let secondPresentation = mockAppContainer.openReader(book: secondBook, readerInfo: secondInfo, source: .bookDetail)
-
-        let attached = await waitUntil {
-            self.viewModel.readerWorkspaceViewModel.presentationIDs == [firstPresentation.id, secondPresentation.id] &&
-                self.viewModel.readerWorkspaceViewModel.activePresentationID == secondPresentation.id
-        }
-        XCTAssertTrue(attached)
+        let firstPresentation = mockAppContainer.openReader(
+            book: firstBook,
+            readerInfo: firstInfo,
+            source: .shelf,
+            placement: .registryOnly
+        )
+        let secondPresentation = mockAppContainer.openReader(
+            book: secondBook,
+            readerInfo: secondInfo,
+            source: .bookDetail,
+            placement: .registryOnly
+        )
+        viewModel.readerWorkspaceViewModel.attachPresentation(id: firstPresentation.id)
+        viewModel.readerWorkspaceViewModel.attachPresentation(id: secondPresentation.id)
 
         viewModel.readerWorkspaceViewModel.moveActivePresentationToNewWindow()
 
         XCTAssertEqual(requestedActivities.count, 1)
-        XCTAssertEqual(ReaderSceneActivity.presentationID(from: try XCTUnwrap(requestedActivities[0])), secondPresentation.id)
+        let requestedActivity = try XCTUnwrap(requestedActivities.first ?? nil)
+        XCTAssertEqual(ReaderSceneActivity.presentationID(from: requestedActivity), secondPresentation.id)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, [firstPresentation.id, secondPresentation.id])
+
+        let destinationViewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
+        destinationViewModel.handleReaderSceneActivity(requestedActivity)
+
+        let transferred = await waitUntil {
+            self.viewModel.readerWorkspaceViewModel.presentationIDs == [firstPresentation.id] &&
+                destinationViewModel.readerWorkspaceViewModel.presentationIDs == [secondPresentation.id]
+        }
+        XCTAssertTrue(transferred)
         XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), [firstPresentation.id, secondPresentation.id])
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, [firstPresentation.id])
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, firstPresentation.id)
         XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
+        XCTAssertEqual(destinationViewModel.readerWorkspaceViewModel.activePresentationID, secondPresentation.id)
+        XCTAssertTrue(destinationViewModel.readerWorkspaceViewModel.isPresented)
         XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.id, firstPresentation.id)
         XCTAssertTrue(mockAppContainer.consumeReaderPresentationTransfer(id: secondPresentation.id))
         XCTAssertFalse(mockAppContainer.consumeReaderPresentationTransfer(id: secondPresentation.id))
@@ -347,4 +467,58 @@ import Combine
         }
         return condition()
     }
+
+    private func makeReaderPresentations(
+        count: Int,
+        idOffset: Int32 = 200
+    ) throws -> [ReaderPresentation] {
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.calibreLibraries.first?.value)
+        let templateBook = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+
+        return try (0..<count).map { index in
+            var book = CalibreBook(id: idOffset + Int32(index), library: library)
+            book.title = "Reader \(index)"
+            book.formats = templateBook.formats
+            let readerInfo = ReaderInfo(
+                deviceName: mockAppContainer.deviceName,
+                url: URL(fileURLWithPath: "/tmp/reader-\(index).epub"),
+                missing: false,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                position: TestFixtures.makeReadingPosition(
+                    id: mockAppContainer.deviceName,
+                    readerName: ReaderType.YabrEPUB.rawValue,
+                    lastReadPage: index + 1,
+                    epoch: Double(index + 1)
+                )
+            )
+            return mockAppContainer.openReader(
+                book: book,
+                readerInfo: readerInfo,
+                source: .shelf,
+                placement: .registryOnly
+            )
+        }
+    }
+
+    private func observeUnmountReason(
+        from stream: AsyncStream<ReaderPresentationLifecycleEvent>,
+        expectation: XCTestExpectation,
+        reason: UnmountReasonBox
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            var iterator = stream.makeAsyncIterator()
+            while let event = await iterator.next() {
+                guard case let .unmount(unmountReason) = event else { continue }
+                reason.value = unmountReason
+                expectation.fulfill()
+                return
+            }
+        }
+    }
+}
+
+@MainActor
+private final class UnmountReasonBox {
+    var value: ReaderPresentationUnmountReason?
 }

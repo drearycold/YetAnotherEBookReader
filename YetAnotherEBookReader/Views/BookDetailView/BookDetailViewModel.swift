@@ -24,6 +24,7 @@ class BookDetailViewModel: ObservableObject {
     @Published var readingPositionHistoryViewPresenting = false
     
     private weak var container: AppContainer?
+    var targetWorkspaceID: UUID?
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
@@ -39,8 +40,9 @@ class BookDetailViewModel: ObservableObject {
         return container
     }
     
-    init(container: AppContainer? = AppContainer.shared) {
+    init(container: AppContainer? = AppContainer.shared, targetWorkspaceID: UUID? = nil) {
         self.container = container
+        self.targetWorkspaceID = targetWorkspaceID
         print("BookDetailViewModel INIT")
     }
     
@@ -271,7 +273,12 @@ class BookDetailViewModel: ObservableObject {
         guard let container else { return }
         let readerInfo = container.sessionManager.prepareBookReading(book: book)
         guard readerInfo.missing == false else { return }
-        container.openReader(book: book, readerInfo: readerInfo, source: .bookDetail)
+        container.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .bookDetail,
+            targetWorkspaceID: targetWorkspaceID
+        )
     }
 
     var updatingMetadata: Bool {

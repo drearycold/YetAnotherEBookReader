@@ -19,13 +19,13 @@ struct YabrEBookReader: View {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     let presentationID: ReaderPresentation.ID?
-    let lifecycleEvents: () -> AsyncStream<ScenePhase>
+    let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
 
     init(
         book: CalibreBook,
         readerInfo: ReaderInfo,
         presentationID: ReaderPresentation.ID? = nil,
-        lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
+        lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
@@ -45,7 +45,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     let presentationID: ReaderPresentation.ID?
-    let lifecycleEvents: () -> AsyncStream<ScenePhase>
+    let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
     
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
@@ -56,7 +56,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         book: CalibreBook,
         readerInfo: ReaderInfo,
         presentationID: ReaderPresentation.ID? = nil,
-        lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
+        lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
@@ -316,6 +316,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             dbPosition.epoch = Date().timeIntervalSince1970
             
             parent.container.readingPositionRepository.savePosition(dbPosition, for: parent.book)
+            parent.container.sessionManager.recordReaderPresentationPosition(id: parent.presentationID, position: dbPosition)
         }
         
         func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {

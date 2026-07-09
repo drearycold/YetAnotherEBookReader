@@ -39,6 +39,10 @@ struct ReaderPresentation: Identifiable, Equatable {
     var inShelfId: String { book.inShelfId }
     var title: String { book.title }
 
+    func withReaderInfo(_ readerInfo: ReaderInfo) -> ReaderPresentation {
+        ReaderPresentation(id: id, book: book, readerInfo: readerInfo, source: source)
+    }
+
     func matches(book: CalibreBook, readerInfo: ReaderInfo) -> Bool {
         self.book.inShelfId == book.inShelfId &&
             self.readerInfo.format == readerInfo.format &&
@@ -70,6 +74,7 @@ class ReadingSessionManager {
     
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
     private var legacyPresentingEBookReaderFromShelf = false
+    private var latestPositionsByPresentationID = [ReaderPresentation.ID: BookDeviceReadingPosition]()
 
     var readerPresentations: [ReaderPresentation] = [] {
         didSet {
@@ -101,6 +106,23 @@ class ReadingSessionManager {
 
     func readerPresentation(id: ReaderPresentation.ID) -> ReaderPresentation? {
         readerPresentations.first { $0.id == id }
+    }
+
+    func readerPresentationForMount(id: ReaderPresentation.ID) -> ReaderPresentation? {
+        guard let presentation = readerPresentation(id: id) else { return nil }
+        return presentation.withReaderInfo(readerInfoForMounting(presentation: presentation))
+    }
+
+    func readerInfoForMounting(presentation: ReaderPresentation) -> ReaderInfo {
+        let latestPosition = latestPositionForMounting(presentation: presentation) ?? presentation.readerInfo.position
+        return ReaderInfo(
+            deviceName: presentation.readerInfo.deviceName,
+            url: presentation.readerInfo.url,
+            missing: presentation.readerInfo.missing,
+            format: presentation.readerInfo.format,
+            readerType: presentation.readerInfo.readerType,
+            position: latestPosition
+        )
     }
 
     var presentingEBookReaderFromShelf: Bool {
@@ -278,6 +300,7 @@ class ReadingSessionManager {
     func closeReader(id: ReaderPresentation.ID) {
         let wasActive = activeReaderPresentationID == id
         readerPresentations.removeAll { $0.id == id }
+        latestPositionsByPresentationID.removeValue(forKey: id)
         if wasActive {
             activeReaderPresentationID = readerPresentations.last?.id
         }
@@ -294,6 +317,33 @@ class ReadingSessionManager {
         activeReaderPresentationID = id
         readingBookBroadcaster.send(self.readingBook)
         readerInfoBroadcaster.send(self.readerInfo)
+    }
+
+    func recordReaderPresentationPosition(id: ReaderPresentation.ID?, position: BookDeviceReadingPosition) {
+        guard let id,
+              let presentation = readerPresentation(id: id),
+              position.readerName == presentation.readerInfo.readerType.rawValue else {
+            return
+        }
+        latestPositionsByPresentationID[id] = position
+        if activeReaderPresentationID == id {
+            legacyReaderInfo = readerInfoForMounting(presentation: presentation)
+            readerInfoBroadcaster.send(self.readerInfo)
+        }
+    }
+
+    private func latestPositionForMounting(presentation: ReaderPresentation) -> BookDeviceReadingPosition? {
+        if let recordedPosition = latestPositionsByPresentationID[presentation.id],
+           recordedPosition.readerName == presentation.readerInfo.readerType.rawValue {
+            return recordedPosition
+        }
+
+        return container?.readingPositionRepository
+            .getPositions(for: presentation.book)
+            .first { position in
+                position.id == presentation.readerInfo.deviceName &&
+                    position.readerName == presentation.readerInfo.readerType.rawValue
+            }
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {

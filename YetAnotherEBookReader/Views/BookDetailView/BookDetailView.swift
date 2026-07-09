@@ -13,6 +13,7 @@ import KingfisherSwiftUI
 struct BookDetailView: View {
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.openURL) var openURL
+    @Environment(\.readerWorkspaceID) var readerWorkspaceID
     
     let bookId: String
     
@@ -42,6 +43,7 @@ struct BookDetailView: View {
             }
         }
         .onAppear() {
+            _viewModel.targetWorkspaceID = readerWorkspaceID
             _viewModel.setup(bookId: bookId)
             if let calibreBook = _viewModel.calibreBook {
                 _viewModel.fetchMetadata(book: calibreBook)
