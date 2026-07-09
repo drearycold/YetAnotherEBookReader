@@ -219,6 +219,21 @@ final class MainViewModel: ObservableObject {
         readerWorkspaceViewModel.handleScenePhase(scenePhase)
     }
 
+    func restorePersistedReadersIfNeeded() {
+        let restoredPresentations = sessionManager.restorePersistedReaderPresentationsIfNeeded()
+        guard restoredPresentations.isEmpty == false else { return }
+        let restoredActivePresentationID = sessionManager.activeReaderPresentationID
+
+        restoredPresentations.forEach { presentation in
+            readerWorkspaceViewModel.attachPresentation(id: presentation.id)
+        }
+        if let activePresentationID = restoredActivePresentationID {
+            readerWorkspaceViewModel.activatePresentation(id: activePresentationID)
+        }
+        activeReaderPresentation = sessionManager.activeReaderPresentation
+        readerWorkspaceViewModel.showReader()
+    }
+
     func handleReaderSceneActivity(_ activity: NSUserActivity) {
         guard let presentationID = ReaderSceneActivity.presentationID(from: activity) else { return }
         readerWorkspaceViewModel.attachPresentation(id: presentationID, completesTransfer: true)

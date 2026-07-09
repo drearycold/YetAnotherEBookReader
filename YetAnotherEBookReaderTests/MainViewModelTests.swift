@@ -198,6 +198,54 @@ import Combine
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentations.count, 2)
     }
 
+    func testRestorePersistedReadersAttachesWorkspaceAndShowsActiveTab() throws {
+        let snapshots = try seedPersistedReaderSnapshots(count: 2, activeIndex: 0, idOffset: 1_100)
+
+        viewModel.restorePersistedReadersIfNeeded()
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, snapshots.map(\.id))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, snapshots[0].id)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
+        XCTAssertEqual(viewModel.activeReaderPresentation?.id, snapshots[0].id)
+    }
+
+    func testRestorePersistedReadersDoesNotRepeatAcrossMainViewModels() throws {
+        let snapshots = try seedPersistedReaderSnapshots(count: 1, activeIndex: 0, idOffset: 1_120)
+
+        viewModel.restorePersistedReadersIfNeeded()
+        let secondViewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
+        secondViewModel.restorePersistedReadersIfNeeded()
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, snapshots.map(\.id))
+        XCTAssertTrue(secondViewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), snapshots.map(\.id))
+    }
+
+    func testRestorePersistedReadersKeepsHotMountLimit() throws {
+        let snapshots = try seedPersistedReaderSnapshots(count: 4, activeIndex: 0, idOffset: 1_140)
+
+        viewModel.restorePersistedReadersIfNeeded()
+
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, snapshots.map(\.id))
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, snapshots[0].id)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.mountedPresentationIDs.count, 3)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.mountedPresentationIDs.contains(snapshots[0].id))
+    }
+
+    func testHideReaderKeepsPersistedSnapshotAndCloseRemovesIt() throws {
+        let snapshots = try seedPersistedReaderSnapshots(count: 1, activeIndex: 0, idOffset: 1_160)
+        let store = try XCTUnwrap(mockAppContainer.readerPresentationPersistenceStore as? InMemoryReaderPresentationPersistenceStore)
+
+        viewModel.restorePersistedReadersIfNeeded()
+        viewModel.readerWorkspaceViewModel.hideReader()
+
+        XCTAssertEqual(store.snapshots.map(\.id), snapshots.map(\.id))
+
+        viewModel.readerWorkspaceViewModel.closeActivePresentation()
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+    }
+
     func testReaderWorkspaceKeepsInactiveTabMountedWhenSwitching() async throws {
         let presentations = try makeReaderPresentations(count: 2)
         presentations.forEach { presentation in
@@ -499,6 +547,51 @@ import Combine
                 placement: .registryOnly
             )
         }
+    }
+
+    private func seedPersistedReaderSnapshots(
+        count: Int,
+        activeIndex: Int,
+        idOffset: Int32
+    ) throws -> [ReaderPresentationSnapshot] {
+        let store = try XCTUnwrap(mockAppContainer.readerPresentationPersistenceStore as? InMemoryReaderPresentationPersistenceStore)
+        let snapshots = try (0..<count).map { index in
+            let book = try makeRestorableBook(id: idOffset + Int32(index), title: "Persisted Reader \(index)")
+            return ReaderPresentationSnapshot(
+                id: UUID(),
+                bookInShelfId: book.inShelfId,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .shelf,
+                isActive: index == activeIndex,
+                order: index
+            )
+        }
+        store.saveReaderPresentationSnapshots(snapshots)
+        return snapshots
+    }
+
+    private func makeRestorableBook(id: Int32, title: String) throws -> CalibreBook {
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: id, library: library)
+        book.title = title
+        book.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: nil,
+            filename: "\(title).epub",
+            serverSize: 1000,
+            serverMTime: Date(),
+            cached: true,
+            cacheSize: 1000,
+            cacheMTime: Date(),
+            manifest: nil
+        )
+        mockAppContainer.bookRepository.saveBook(book)
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+        if let savedURL = getSavedUrl(book: book, format: .EPUB),
+           FileManager.default.fileExists(atPath: savedURL.path) == false {
+            _ = FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8), attributes: nil)
+        }
+        return book
     }
 
     private func observeUnmountReason(

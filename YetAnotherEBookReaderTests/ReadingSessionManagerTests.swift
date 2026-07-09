@@ -12,18 +12,21 @@ import RealmSwift
 final class ReadingSessionManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: ReadingSessionManager!
+    private var persistenceStore: InMemoryReaderPresentationPersistenceStore!
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(
             testName: "ReadingSessionManagerTests"
         )
 
-        manager = ReadingSessionManager(container: container)
+        persistenceStore = InMemoryReaderPresentationPersistenceStore()
+        manager = ReadingSessionManager(container: container, persistenceStore: persistenceStore)
     }
 
     override func tearDownWithError() throws {
         AppContainer.shared = nil
         manager = nil
+        persistenceStore = nil
         container = nil
     }
     
@@ -199,6 +202,144 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 1)
         XCTAssertEqual(mountPresentation.readerInfo.position.readerName, ReaderType.YabrEPUB.rawValue)
     }
+
+    func testReaderPresentationsPersistSnapshotsWhenOpenedAndActivated() throws {
+        let firstBook = try makeRestorableBook(id: 301, title: "First Persisted Reader")
+        let secondBook = try makeRestorableBook(id: 302, title: "Second Persisted Reader")
+        let firstInfo = makeReaderInfo(book: firstBook, page: 3)
+        let secondInfo = makeReaderInfo(book: secondBook, page: 9)
+
+        let firstPresentation = manager.openReader(book: firstBook, readerInfo: firstInfo, source: .shelf)
+        let secondPresentation = manager.openReader(book: secondBook, readerInfo: secondInfo, source: .bookDetail)
+
+        XCTAssertEqual(persistenceStore.snapshots.map(\.id), [firstPresentation.id, secondPresentation.id])
+        XCTAssertEqual(persistenceStore.snapshots.map(\.isActive), [false, true])
+        XCTAssertEqual(persistenceStore.snapshots.map(\.order), [0, 1])
+
+        manager.activateReader(id: firstPresentation.id)
+
+        XCTAssertEqual(persistenceStore.snapshots.map(\.id), [firstPresentation.id, secondPresentation.id])
+        XCTAssertEqual(persistenceStore.snapshots.map(\.isActive), [true, false])
+    }
+
+    func testCloseReaderRemovesPersistedSnapshots() throws {
+        let firstBook = try makeRestorableBook(id: 311, title: "First Close Reader")
+        let secondBook = try makeRestorableBook(id: 312, title: "Second Close Reader")
+        let firstPresentation = manager.openReader(book: firstBook, readerInfo: makeReaderInfo(book: firstBook), source: .shelf)
+        let secondPresentation = manager.openReader(book: secondBook, readerInfo: makeReaderInfo(book: secondBook), source: .bookDetail)
+
+        manager.closeReader(id: firstPresentation.id)
+
+        XCTAssertEqual(persistenceStore.snapshots.map(\.id), [secondPresentation.id])
+        XCTAssertEqual(persistenceStore.snapshots.first?.isActive, true)
+
+        manager.closeReader(id: secondPresentation.id)
+
+        XCTAssertTrue(persistenceStore.snapshots.isEmpty)
+    }
+
+    func testRestorePersistedReaderPresentationsUsesSavedReaderTypePosition() throws {
+        let book = try makeRestorableBook(id: 321, title: "Restore Reader Type")
+        var yabrPosition = TestFixtures.makeReadingPosition(
+            id: container.deviceName,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 12,
+            epoch: 100
+        )
+        yabrPosition.lastProgress = 12
+        let readiumPosition = TestFixtures.makeReadingPosition(
+            id: container.deviceName,
+            readerName: ReaderType.ReadiumEPUB.rawValue,
+            lastReadPage: 88,
+            epoch: 200
+        )
+        container.readingPositionRepository.savePosition(yabrPosition, for: book)
+        container.readingPositionRepository.savePosition(readiumPosition, for: book)
+        let snapshotID = UUID()
+        persistenceStore.saveReaderPresentationSnapshots([
+            ReaderPresentationSnapshot(
+                id: snapshotID,
+                bookInShelfId: book.inShelfId,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .shelf,
+                isActive: true,
+                order: 0
+            )
+        ])
+
+        let restored = manager.restorePersistedReaderPresentationsIfNeeded()
+
+        XCTAssertEqual(restored.map(\.id), [snapshotID])
+        XCTAssertEqual(manager.activeReaderPresentationID, snapshotID)
+        XCTAssertEqual(restored.first?.readerInfo.readerType, .YabrEPUB)
+        XCTAssertEqual(restored.first?.readerInfo.position.lastReadPage, 12)
+    }
+
+    func testRestorePersistedReaderPresentationsSkipsInvalidSnapshotsAndCleansStore() throws {
+        let validBook = try makeRestorableBook(id: 331, title: "Valid Restore Reader")
+        let validID = UUID()
+        let deletedID = UUID()
+        persistenceStore.saveReaderPresentationSnapshots([
+            ReaderPresentationSnapshot(
+                id: deletedID,
+                bookInShelfId: "missing-book",
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .shelf,
+                isActive: true,
+                order: 0
+            ),
+            ReaderPresentationSnapshot(
+                id: validID,
+                bookInShelfId: validBook.inShelfId,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .bookDetail,
+                isActive: false,
+                order: 1
+            )
+        ])
+
+        let restored = manager.restorePersistedReaderPresentationsIfNeeded()
+
+        XCTAssertEqual(restored.map(\.id), [validID])
+        XCTAssertEqual(manager.activeReaderPresentationID, validID)
+        XCTAssertEqual(persistenceStore.snapshots.map(\.id), [validID])
+        XCTAssertEqual(persistenceStore.snapshots.first?.isActive, true)
+    }
+
+    func testRestorePersistedDuplicateReaderPresentationsDoesNotMergeTabs() throws {
+        let book = try makeRestorableBook(id: 341, title: "Duplicate Restore Reader")
+        let firstID = UUID()
+        let secondID = UUID()
+        persistenceStore.saveReaderPresentationSnapshots([
+            ReaderPresentationSnapshot(
+                id: firstID,
+                bookInShelfId: book.inShelfId,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .shelf,
+                isActive: false,
+                order: 0
+            ),
+            ReaderPresentationSnapshot(
+                id: secondID,
+                bookInShelfId: book.inShelfId,
+                format: .EPUB,
+                readerType: .YabrEPUB,
+                source: .bookDetail,
+                isActive: true,
+                order: 1
+            )
+        ])
+
+        let restored = manager.restorePersistedReaderPresentationsIfNeeded()
+
+        XCTAssertEqual(restored.map(\.id), [firstID, secondID])
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [firstID, secondID])
+        XCTAssertEqual(manager.activeReaderPresentationID, secondID)
+    }
     
     func testSelectedReadingBook_publishesChange() throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
@@ -247,6 +388,55 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.startPosition?.lastReadPage, 5)
         XCTAssertEqual(sessions.first?.endPosition?.lastReadPage, 15)
+    }
+
+    private func makeRestorableBook(
+        id: Int32,
+        title: String,
+        format: Format = .EPUB
+    ) throws -> CalibreBook {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: id, library: library)
+        book.title = title
+        book.formats[format.rawValue] = FormatInfo(
+            selected: nil,
+            filename: "\(title).\(format.ext)",
+            serverSize: 1000,
+            serverMTime: Date(),
+            cached: true,
+            cacheSize: 1000,
+            cacheMTime: Date(),
+            manifest: nil
+        )
+        container.bookRepository.saveBook(book)
+        container.bookManager.booksInShelf[book.inShelfId] = book
+        if let savedURL = getSavedUrl(book: book, format: format),
+           FileManager.default.fileExists(atPath: savedURL.path) == false {
+            _ = FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8), attributes: nil)
+        }
+        return book
+    }
+
+    private func makeReaderInfo(
+        book: CalibreBook,
+        page: Int = 1,
+        readerType: ReaderType = .YabrEPUB
+    ) -> ReaderInfo {
+        let format = readerType.format
+        let savedURL = getSavedUrl(book: book, format: format) ?? URL(fileURLWithPath: "/invalid")
+        return ReaderInfo(
+            deviceName: container.deviceName,
+            url: savedURL,
+            missing: false,
+            format: format,
+            readerType: readerType,
+            position: TestFixtures.makeReadingPosition(
+                id: container.deviceName,
+                readerName: readerType.rawValue,
+                lastReadPage: page,
+                epoch: Double(page)
+            )
+        )
     }
     
     func testUpdateCurrentPosition_savesViaRepository() throws {

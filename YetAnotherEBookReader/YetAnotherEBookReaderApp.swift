@@ -49,11 +49,11 @@ private struct AppRootView: View {
     }
 
     let container: AppContainer
-    private let sceneID = UUID()
 
     @StateObject private var mainViewModel: MainViewModel
     @Environment(\.scenePhase) private var scenePhase
 
+    @State private var sceneID = UUID()
     @State private var launchState: LaunchState
     @State private var bootstrapInFlight = false
 
@@ -118,7 +118,7 @@ private struct AppRootView: View {
             guard !bootstrapInFlight else { return }
 
             if case .ready = launchState, container.isDatabaseReady {
-                container.markAppSceneActive(id: sceneID)
+                handleDatabaseReady()
             } else {
                 bootstrapInFlight = true
                 launchState = .initializing(status: "Initializing...")
@@ -140,7 +140,7 @@ private struct AppRootView: View {
                                 bootstrapInFlight = false
                                 return
                             }
-                            container.markAppSceneActive(id: sceneID)
+                            handleDatabaseReady()
                         }
                     } catch {
                         DispatchQueue.main.async {
@@ -157,5 +157,10 @@ private struct AppRootView: View {
         @unknown default:
             break
         }
+    }
+
+    private func handleDatabaseReady() {
+        mainViewModel.restorePersistedReadersIfNeeded()
+        container.markAppSceneActive(id: sceneID)
     }
 }

@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 import OSLog
 
-enum ReaderPresentationSource: String, Equatable {
+enum ReaderPresentationSource: String, Equatable, Codable {
     case shelf
     case bookDetail
     case importResult
@@ -54,6 +54,64 @@ struct ReaderPresentation: Identifiable, Equatable {
     }
 }
 
+struct ReaderPresentationSnapshot: Codable, Equatable {
+    let id: UUID
+    let bookInShelfId: String
+    let format: Format
+    let readerType: ReaderType
+    let source: ReaderPresentationSource
+    let isActive: Bool
+    let order: Int
+}
+
+protocol ReaderPresentationPersistenceStore {
+    func loadReaderPresentationSnapshots() -> [ReaderPresentationSnapshot]
+    func saveReaderPresentationSnapshots(_ snapshots: [ReaderPresentationSnapshot])
+}
+
+final class UserDefaultsReaderPresentationPersistenceStore: ReaderPresentationPersistenceStore {
+    private let userDefaults: UserDefaults
+    private let key: String
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        key: String = Constants.KEY_DEFAULTS_READER_PRESENTATION_SNAPSHOTS
+    ) {
+        self.userDefaults = userDefaults
+        self.key = key
+    }
+
+    func loadReaderPresentationSnapshots() -> [ReaderPresentationSnapshot] {
+        guard let data = userDefaults.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([ReaderPresentationSnapshot].self, from: data)) ?? []
+    }
+
+    func saveReaderPresentationSnapshots(_ snapshots: [ReaderPresentationSnapshot]) {
+        if snapshots.isEmpty {
+            userDefaults.removeObject(forKey: key)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(snapshots) else { return }
+        userDefaults.set(data, forKey: key)
+    }
+}
+
+final class InMemoryReaderPresentationPersistenceStore: ReaderPresentationPersistenceStore {
+    private(set) var snapshots: [ReaderPresentationSnapshot]
+
+    init(snapshots: [ReaderPresentationSnapshot] = []) {
+        self.snapshots = snapshots
+    }
+
+    func loadReaderPresentationSnapshots() -> [ReaderPresentationSnapshot] {
+        snapshots
+    }
+
+    func saveReaderPresentationSnapshots(_ snapshots: [ReaderPresentationSnapshot]) {
+        self.snapshots = snapshots
+    }
+}
+
 class ReadingSessionManager {
     private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
     private let readingBookInShelfIdBroadcaster = ManagerAsyncBroadcaster<String?>()
@@ -75,6 +133,9 @@ class ReadingSessionManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
     private var legacyPresentingEBookReaderFromShelf = false
     private var latestPositionsByPresentationID = [ReaderPresentation.ID: BookDeviceReadingPosition]()
+    private let persistenceStore: ReaderPresentationPersistenceStore
+    private var suppressPersistence = false
+    private var hasAttemptedPersistedRestore = false
 
     var readerPresentations: [ReaderPresentation] = [] {
         didSet {
@@ -87,6 +148,7 @@ class ReadingSessionManager {
             readerPresentationsBroadcaster.send(readerPresentations)
             activeReaderPresentationBroadcaster.send(activeReaderPresentation)
             presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
+            persistReaderPresentationSnapshots()
             publishStateChange()
         }
     }
@@ -95,6 +157,7 @@ class ReadingSessionManager {
         didSet {
             activeReaderPresentationBroadcaster.send(activeReaderPresentation)
             presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
+            persistReaderPresentationSnapshots()
             publishStateChange()
         }
     }
@@ -200,8 +263,12 @@ class ReadingSessionManager {
     
     weak var container: AppContainerProtocol?
 
-    init(container: AppContainerProtocol? = nil) {
+    init(
+        container: AppContainerProtocol? = nil,
+        persistenceStore: ReaderPresentationPersistenceStore = UserDefaultsReaderPresentationPersistenceStore()
+    ) {
         self.container = container
+        self.persistenceStore = persistenceStore
         
         switch UIDevice.current.userInterfaceIdiom {
             case .phone:
@@ -259,6 +326,44 @@ class ReadingSessionManager {
     
     func onBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
         await handleBookReaderClosed(book: book, lastPosition: lastPosition)
+    }
+
+    @discardableResult
+    func restorePersistedReaderPresentationsIfNeeded() -> [ReaderPresentation] {
+        guard hasAttemptedPersistedRestore == false else { return [] }
+        hasAttemptedPersistedRestore = true
+
+        guard readerPresentations.isEmpty else {
+            persistReaderPresentationSnapshots()
+            return []
+        }
+
+        let snapshots = persistenceStore.loadReaderPresentationSnapshots()
+            .sorted { $0.order < $1.order }
+        guard snapshots.isEmpty == false else { return [] }
+
+        let restoredPresentations = snapshots.compactMap { restorePresentation(from: $0) }
+        let activeSnapshotID = snapshots.first { $0.isActive }?.id
+        let restoredActiveID: ReaderPresentation.ID? = restoredPresentations.contains(where: { $0.id == activeSnapshotID })
+            ? activeSnapshotID
+            : restoredPresentations.last?.id
+
+        suppressPersistence = true
+        readerPresentations = restoredPresentations
+        activeReaderPresentationID = restoredActiveID
+        suppressPersistence = false
+
+        if let activePresentation = activeReaderPresentation {
+            legacyReadingBook = activePresentation.book
+            legacyReaderInfo = activePresentation.readerInfo
+            selectedPosition = activePresentation.readerInfo.position.id
+        }
+        legacyPresentingEBookReaderFromShelf = restoredPresentations.isEmpty == false
+        readingBookBroadcaster.send(self.readingBook)
+        readerInfoBroadcaster.send(self.readerInfo)
+        persistReaderPresentationSnapshots()
+
+        return restoredPresentations
     }
 
     @discardableResult
@@ -344,6 +449,62 @@ class ReadingSessionManager {
                 position.id == presentation.readerInfo.deviceName &&
                     position.readerName == presentation.readerInfo.readerType.rawValue
             }
+    }
+
+    private func restorePresentation(from snapshot: ReaderPresentationSnapshot) -> ReaderPresentation? {
+        guard let container,
+              snapshot.readerType != .UNSUPPORTED,
+              snapshot.readerType.format == snapshot.format,
+              let book = container.bookRepository.getBook(id: snapshot.bookInShelfId),
+              book.formats[snapshot.format.rawValue] != nil,
+              let savedURL = getSavedUrl(book: book, format: snapshot.format),
+              FileManager.default.fileExists(atPath: savedURL.path)
+        else { return nil }
+
+        let positions = container.readingPositionRepository.getPositions(for: book)
+            .filter { position in
+                position.id == container.deviceName &&
+                    position.readerName == snapshot.readerType.rawValue
+            }
+        let position = ReadingPositionSelectionPolicy.latest.select(from: positions)
+            ?? container.readingPositionRepository.createInitial(
+                deviceName: container.deviceName,
+                reader: snapshot.readerType
+            )
+        let readerInfo = ReaderInfo(
+            deviceName: container.deviceName,
+            url: savedURL,
+            missing: false,
+            format: snapshot.format,
+            readerType: snapshot.readerType,
+            position: position
+        )
+
+        return ReaderPresentation(
+            id: snapshot.id,
+            book: book,
+            readerInfo: readerInfo,
+            source: snapshot.source
+        )
+    }
+
+    private func persistReaderPresentationSnapshots() {
+        guard suppressPersistence == false else { return }
+        persistenceStore.saveReaderPresentationSnapshots(currentReaderPresentationSnapshots())
+    }
+
+    private func currentReaderPresentationSnapshots() -> [ReaderPresentationSnapshot] {
+        readerPresentations.enumerated().map { index, presentation in
+            ReaderPresentationSnapshot(
+                id: presentation.id,
+                bookInShelfId: presentation.book.inShelfId,
+                format: presentation.readerInfo.format,
+                readerType: presentation.readerInfo.readerType,
+                source: presentation.source,
+                isActive: presentation.id == activeReaderPresentationID,
+                order: index
+            )
+        }
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {

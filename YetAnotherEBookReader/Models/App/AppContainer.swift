@@ -117,9 +117,13 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
     var readerWindowSupportOverride: Bool?
     var readerWindowRequestHandler: ((NSUserActivity?) -> Void)?
+    var readerPresentationPersistenceStore: ReaderPresentationPersistenceStore = UserDefaultsReaderPresentationPersistenceStore()
 
     var downloadManager = BookDownloadManager()
-    lazy var sessionManager = ReadingSessionManager(container: self)
+    lazy var sessionManager = ReadingSessionManager(
+        container: self,
+        persistenceStore: readerPresentationPersistenceStore
+    )
 
     var updatingMetadata = false {
         didSet {
@@ -406,6 +410,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         testRealmEnvironment: TestRealmEnvironment? = nil
     ) {
         AppContainer.shared = self
+        if mock {
+            readerPresentationPersistenceStore = InMemoryReaderPresentationPersistenceStore()
+        }
 
         setupRealmDefaults()
 

@@ -8,7 +8,7 @@
 import Foundation
 import CoreText
 
-enum Format: String, CaseIterable, Identifiable {
+enum Format: String, CaseIterable, Identifiable, Codable {
     case UNKNOWN
     
     case EPUB
@@ -36,7 +36,7 @@ struct FormatInfo: Codable {
     }
 }
 
-enum ReaderType: String, CaseIterable, Identifiable {
+enum ReaderType: String, CaseIterable, Identifiable, Codable {
     case UNSUPPORTED
     
     case YabrEPUB
