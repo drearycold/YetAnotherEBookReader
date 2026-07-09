@@ -23,13 +23,13 @@ private struct BannerVC: UIViewControllerRepresentable  {
         let viewController = UIViewController()
         
         #if canImport(GoogleMobileAds)
-        let view = GADBannerView(adSize: GADAdSizeBanner)
+        let view = BannerView(adSize: AdSizeBanner)
 
         view.adUnitID = self.adUnitID
         view.rootViewController = viewController
         viewController.view.addSubview(view)
-        viewController.view.frame = CGRect(origin: .zero, size: GADAdSizeBanner.size)
-        view.load(GADRequest())
+        viewController.view.frame = CGRect(origin: .zero, size: AdSizeBanner.size)
+        view.load(Request())
         #endif
 
         return viewController

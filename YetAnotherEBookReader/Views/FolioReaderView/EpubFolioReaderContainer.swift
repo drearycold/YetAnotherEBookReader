@@ -34,8 +34,8 @@ class EpubFolioReaderContainer: FolioReaderContainer {
     var epubArchive: Archive?
 
 #if canImport(GoogleMobileAds)
-    let bannerSize = GADAdSizeMediumRectangle
-    var interstitialAd: GADInterstitialAd?
+    let bannerSize = AdSizeMediumRectangle
+    var interstitialAd: InterstitialAd?
 #endif
     
     func open(bookReadingPosition: BookDeviceReadingPosition) {
@@ -55,11 +55,11 @@ class EpubFolioReaderContainer: FolioReaderContainer {
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
 #if canImport(GoogleMobileAds)
 #if GAD_ENABLED
-        let gadRequest = GADRequest()
+        let gadRequest = Request()
         //        gadRequest.scene = self.view.window?.windowScene
         gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
         
-        GADInterstitialAd.load(withAdUnitID: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
+        InterstitialAd.load(with: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
             if let error = error {
                 print("\(#function) interstitial error=\(error.localizedDescription)")
                 return
@@ -109,13 +109,13 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
     
     func folioReaderAdView(_ folioReader: FolioReader) -> UIView? {
 #if canImport(GoogleMobileAds)
-        let bannerView = GADBannerView(
+        let bannerView = BannerView(
             frame: .init(origin: .zero, size: bannerSize.size)
         )
         bannerView.adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID
 #if DEBUG
         if let deviceIdentifier = YabrAppInfo.shared.gadDeviceIdentifierTest {
-            GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ deviceIdentifier ]
+            MobileAds.shared.requestConfiguration.testDeviceIdentifiers = [ deviceIdentifier ]
         }
 #endif
         bannerView.rootViewController = self
@@ -124,7 +124,7 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
         bannerView.adSize = bannerSize
         
 #if GAD_ENABLED
-        let gadRequest = GADRequest()
+        let gadRequest = Request()
         //        gadRequest.scene = self.view.window?.windowScene
         gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
         bannerView.load(gadRequest)
@@ -144,21 +144,21 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
         }
         guard let readerCenter = folioReader.readerCenter else { return }
         
-        interstitialAd.present(fromRootViewController: readerCenter)
+        interstitialAd.present(from: readerCenter)
 #endif
     }
 }
 
 #if canImport(GoogleMobileAds)
-extension EpubFolioReaderContainer: GADFullScreenContentDelegate {
+extension EpubFolioReaderContainer: FullScreenContentDelegate {
     func initInterstitialAd() {
         self.interstitialAd = nil
         
-        let gadRequest = GADRequest()
+        let gadRequest = Request()
         //        gadRequest.scene = self.view.window?.windowScene
         gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
         
-        GADInterstitialAd.load(withAdUnitID: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
+        InterstitialAd.load(with: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
             if let error = error {
                 print("\(#function) interstitial error=\(error.localizedDescription)")
                 return
@@ -168,19 +168,19 @@ extension EpubFolioReaderContainer: GADFullScreenContentDelegate {
         }
     }
     
-    func adWillDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+    func adWillDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
 
     }
     
-    func adWillPresentFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+    func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
         initInterstitialAd()
     }
     
-    func adDidDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+    func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         
     }
     
-    func ad(_ ad: GADFullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
+    func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
         print("\(#function) interstitial present error=\(error.localizedDescription)")
     }
 }
