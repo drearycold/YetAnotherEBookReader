@@ -32,7 +32,8 @@ actor LibrarySearchService {
         library: CalibreLibrary,
         criteria: SearchCriteria,
         limit: Int,
-        force: Bool
+        force: Bool,
+        forceMetadataRefresh: Bool = false
     ) async throws -> LibraryCachedResult {
         // Check cache first
         let cacheResult = try? repository.fetchLibraryCachedResult(
@@ -61,7 +62,10 @@ actor LibrarySearchService {
             let booksById = sourceObj.books.reduce(into: [Int32: CalibreBook]()) { partialResult, book in
                 partialResult[book.id] = book
             }
-            let refreshIDs = metadataRefreshIDs(bookIds: sourceObj.bookIds, booksById: booksById)
+            let loadedBookIds = Array(sourceObj.bookIds.prefix(limit))
+            let refreshIDs = forceMetadataRefresh
+                ? loadedBookIds
+                : metadataRefreshIDs(bookIds: sourceObj.bookIds, booksById: booksById)
             guard !refreshIDs.isEmpty else {
                 return cached
             }
@@ -120,14 +124,19 @@ actor LibrarySearchService {
         }
 
         currentBookIds = currentBookIds.uniquedPreservingOrder()
+        let newlyFetchedBookIds = searchResult.book_ids.uniquedPreservingOrder()
 
         var booksById = cachedBooksById
         let existingBooks = try repository.fetchBooks(library: library, bookIds: currentBookIds)
         booksById.merge(existingBooks) { _, new in new }
 
-        toFetchIDs = isStaleGeneration
-            ? currentBookIds
-            : metadataRefreshIDs(bookIds: currentBookIds, booksById: booksById)
+        if forceMetadataRefresh {
+            toFetchIDs = offset == 0 ? currentBookIds : newlyFetchedBookIds
+        } else if isStaleGeneration {
+            toFetchIDs = currentBookIds
+        } else {
+            toFetchIDs = metadataRefreshIDs(bookIds: currentBookIds, booksById: booksById)
+        }
 
         try Task.checkCancellation()
 
