@@ -33,6 +33,12 @@ public struct ShelfLegacyMetrics {
     
     public static let selectionWidth: CGFloat = 32.0
     public static let selectionHeight: CGFloat = 32.0
+
+    public static let shelfAdInlineMaxHeight: CGFloat = 60.0
+    public static let shelfAdInlineRowHeight: CGFloat = 104.0
+    public static let shelfNativeStripRowHeight: CGFloat = 200.0
+    public static let shelfSectionRowHeight: CGFloat = sectionHeaderHeight + tileHeight
+    public static let shelfTabBarExclusionHeight: CGFloat = 112.0
     
     public static let shelfBackgroundColor = Color(red: 0xC4 / 255.0, green: 0x9E / 255.0, blue: 0x7A / 255.0)
 }

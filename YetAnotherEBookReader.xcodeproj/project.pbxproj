@@ -417,6 +417,9 @@
 		E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
 		E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
 		E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */; };
+		E7AD300130F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */; };
+		E7AD300230F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */; };
+		E7AD300430F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */; };
 		E7226E362FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
 		E7226E372FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
 		E7226E392FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
@@ -767,6 +770,8 @@
 		E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppContainerFactoryTests.swift; sourceTree = "<group>"; };
 		E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyle.swift; sourceTree = "<group>"; };
 		E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyleTests.swift; sourceTree = "<group>"; };
+		E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfAdLayoutPolicy.swift; sourceTree = "<group>"; };
+		E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfAdLayoutPolicyTests.swift; sourceTree = "<group>"; };
 		E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyTile.swift; sourceTree = "<group>"; };
 		E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyCoverView.swift; sourceTree = "<group>"; };
 		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
@@ -1065,6 +1070,7 @@
 				E71F35942FE8EC1F007AB0B1 /* RecentShelfView.swift */,
 				E71F35972FE8EE30007AB0B1 /* ShelfBookCard.swift */,
 				E71F359A2FE8EE7B007AB0B1 /* SectionShelfView.swift */,
+				E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */,
 				E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */,
 				E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */,
 				E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */,
@@ -1188,6 +1194,7 @@
 				E71F35DD2FEBBF9C007AB0B1 /* IntegrationTests.swift */,
 				E7226E1D2FED348F009D3BB3 /* DatabaseBootstrapperTests.swift */,
 				E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */,
+				E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */,
 				E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */,
 				E7226E412FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift */,
 				E7226E462FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift */,
@@ -1798,6 +1805,7 @@
 				E7226E452FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35272FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
+				E7AD300230F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */,
 				E71F352A2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */,
 				E71F352D2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */,
 				2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */,
@@ -1895,6 +1903,7 @@
 				E7226E2F2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift in Sources */,
 				E71F35DE2FEBBF9C007AB0B1 /* IntegrationTests.swift in Sources */,
 				E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */,
+				E7AD300430F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift in Sources */,
 				E7226E472FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift in Sources */,
 				E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */,
 				E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */,
@@ -2087,6 +2096,7 @@
 				E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
 				E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
+				E7AD300130F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */,
 				E71F35832FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,
 				E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E71F351E2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift in Sources */,

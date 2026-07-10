@@ -264,6 +264,8 @@ struct MainView: View {
                     let formStatus = ConsentInformation.shared.formStatus
                     if formStatus == FormStatus.available {
                         loadForm()
+                    } else {
+                        startAdsIfConsentAllows()
                     }
                 }
             })
@@ -274,15 +276,22 @@ struct MainView: View {
     private func loadForm() {
         ConsentForm.load(
             with: { form, loadError in
-                guard loadError == nil else { return }
-                guard ConsentInformation.shared.consentStatus == ConsentStatus.required else { return }
+                guard loadError == nil else {
+                    self.startAdsIfConsentAllows()
+                    return
+                }
+                guard ConsentInformation.shared.consentStatus == ConsentStatus.required else {
+                    self.startAdsIfConsentAllows()
+                    return
+                }
                 guard let form = form,
                       let viewController = self.consentPresentationViewController else {
+                    self.startAdsIfConsentAllows()
                     return
                 }
 
                 form.present(from: viewController, completionHandler: { dismissError in
-                    self.startAdsIfConsentObtained()
+                    self.startAdsIfConsentAllows()
                 })
             })
     }
@@ -296,8 +305,9 @@ struct MainView: View {
             ?? windows.first?.rootViewController
     }
 
-    private func startAdsIfConsentObtained() {
-        guard ConsentInformation.shared.consentStatus == ConsentStatus.obtained else { return }
+    private func startAdsIfConsentAllows() {
+        let consentStatus = ConsentInformation.shared.consentStatus
+        guard consentStatus == ConsentStatus.obtained || consentStatus == ConsentStatus.notRequired else { return }
 
         // App can start requesting ads.
         MobileAds.shared.start(completionHandler: nil)

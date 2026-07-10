@@ -24,7 +24,56 @@ fileprivate enum SectionShelfRenderItem: Identifiable {
 
 @available(macCatalyst 14.0, *)
 struct SectionShelfView: View {
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+
     @ObservedObject var viewModel: SectionShelfViewModel
+    @StateObject private var adStore = ShelfNativeAdStore()
+
+    private func adLayoutContext(
+        viewportHeight: CGFloat,
+        containerWidth: CGFloat,
+        columnCount: Int,
+        isLoading: Bool,
+        isEmpty: Bool
+    ) -> ShelfAdLayoutContext {
+        ShelfAdLayoutContext(
+            viewportHeight: viewportHeight,
+            containerWidth: containerWidth,
+            columnCount: columnCount,
+            isRegularWidth: horizontalSizeClass == .regular,
+            isEditing: viewModel.selectionState.isEditing,
+            isLoading: isLoading,
+            isEmpty: isEmpty,
+            capabilities: ShelfAdLayoutCapabilities(
+                nativeAvailable: ShelfAdSlot.isNativeAvailable,
+                bannerAvailable: ShelfAdSlot.isBannerAvailable
+            )
+        )
+    }
+
+    private func insertionMap(_ insertions: [ShelfAdInsertion]) -> [Int: ShelfAdInsertion] {
+        var mapped: [Int: ShelfAdInsertion] = [:]
+        for insertion in insertions {
+            switch insertion.kind {
+            case .nativeStrip(let afterSection), .adaptiveBanner(let afterSection):
+                mapped[afterSection] = insertion
+            case .nativeEndcap:
+                break
+            }
+        }
+        return mapped
+    }
+
+    private func adHeight(_ insertion: ShelfAdInsertion) -> CGFloat {
+        switch insertion.kind {
+        case .nativeStrip:
+            return ShelfLegacyMetrics.shelfNativeStripRowHeight
+        case .adaptiveBanner:
+            return ShelfLegacyMetrics.shelfAdInlineRowHeight
+        case .nativeEndcap:
+            return 0
+        }
+    }
     
     private func rowTileKind(index: Int, totalCount: Int) -> ShelfTileKind {
         if index == 0 {
@@ -41,26 +90,40 @@ struct SectionShelfView: View {
             ZStack {
                 ShelfLegacyMetrics.shelfBackgroundColor
                     .ignoresSafeArea()
-                
+
                 GeometryReader { geometry in
                     let containerWidth = geometry.size.width
-                    let viewportHeight = geometry.size.height
-                    let columnCount = ShelfLegacyLayout.columnCount(containerWidth: containerWidth)
-                    let tileWidth = ShelfLegacyLayout.tileWidth(containerWidth: containerWidth)
-                    
+                    let viewportHeight = max(1, geometry.size.height - ShelfLegacyMetrics.shelfTabBarExclusionHeight)
                     let sections = viewModel.displaySections
-                    let currentHeight = CGFloat(sections.count) * 232.0
+                    let shelfWidth = containerWidth
+                    let columnCount = ShelfLegacyLayout.columnCount(containerWidth: shelfWidth)
+                    let tileWidth = ShelfLegacyLayout.tileWidth(containerWidth: shelfWidth)
+                    let adInsertions = ShelfAdLayoutPolicy.discoverInsertions(
+                        sectionCount: sections.count,
+                        context: adLayoutContext(
+                            viewportHeight: viewportHeight,
+                            containerWidth: shelfWidth,
+                            columnCount: columnCount,
+                            isLoading: !viewModel.isInitialLoadComplete,
+                            isEmpty: sections.isEmpty
+                        )
+                    )
+                    let insertionsBySection = insertionMap(adInsertions)
+                    let totalAdHeight = adInsertions.reduce(CGFloat(0)) { $0 + adHeight($1) }
+                    let currentHeight = CGFloat(sections.count) * ShelfLegacyMetrics.shelfSectionRowHeight + totalAdHeight
                     let remainingHeight = viewportHeight - currentHeight
-                    let fillerRowCount = remainingHeight > 0 ? Int(ceil(remainingHeight / 200.0)) : 0
-                    
+                    let fillerRowCount = remainingHeight > 0 ? Int(ceil(remainingHeight / ShelfLegacyMetrics.tileHeight)) : 0
+
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(sections) { section in
+                            ForEach(sections.indices, id: \.self) { sectionIndex in
+                                let section = sections[sectionIndex]
+
                                 VStack(spacing: 0) {
                                     ShelfLegacySectionHeader(title: section.title)
-                                    
+
                                     let books = section.books
-                                    
+
                                     if books.count <= columnCount {
                                         let totalTileCount = ShelfLegacyLayout.completedTileCount(
                                             itemCount: books.count,
@@ -74,7 +137,7 @@ struct SectionShelfView: View {
                                             }
                                             return items
                                         }()
-                                        
+
                                         HStack(spacing: 0) {
                                             ForEach(0..<renderItems.count, id: \.self) { index in
                                                 let item = renderItems[index]
@@ -107,11 +170,11 @@ struct SectionShelfView: View {
                                                 }
                                             }
                                         }
-                                        .frame(height: 200)
+                                        .frame(height: ShelfLegacyMetrics.tileHeight)
                                     } else {
                                         let totalTileCount = books.count
                                         let renderItems = books.map { SectionShelfRenderItem.book($0) }
-                                        
+
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             LazyHStack(spacing: 0) {
                                                 ForEach(0..<renderItems.count, id: \.self) { index in
@@ -146,22 +209,49 @@ struct SectionShelfView: View {
                                                 }
                                             }
                                         }
-                                        .frame(height: 200)
+                                        .frame(height: ShelfLegacyMetrics.tileHeight)
+                                    }
+                                }
+
+                                if let insertion = insertionsBySection[sectionIndex] {
+                                    switch insertion.kind {
+                                    case .nativeStrip:
+                                        ShelfAdSlot(
+                                            placement: .nativeStrip(
+                                                width: shelfWidth,
+                                                slotID: insertion.slotID
+                                            ),
+                                            store: adStore
+                                        )
+                                    case .adaptiveBanner:
+                                        ShelfAdSlot(
+                                            placement: .adaptiveBanner(
+                                                width: shelfWidth,
+                                                columnCount: columnCount,
+                                                tileWidth: tileWidth,
+                                                slotID: insertion.slotID
+                                            ),
+                                            store: adStore
+                                        )
+                                    case .nativeEndcap:
+                                        EmptyView()
                                     }
                                 }
                             }
-                            
-                            ForEach(0..<fillerRowCount, id: \.self) { rowIndex in
+
+                            ForEach(0..<fillerRowCount, id: \.self) { _ in
                                 HStack(spacing: 0) {
                                     ForEach(0..<columnCount, id: \.self) { index in
                                         let kind = rowTileKind(index: index, totalCount: columnCount)
                                         ShelfLegacyFillerTile(kind: kind, width: tileWidth)
                                     }
                                 }
-                                .frame(height: 200)
+                                .frame(height: ShelfLegacyMetrics.tileHeight)
                             }
+
                         }
                     }
+                    .frame(width: shelfWidth)
                     .refreshable {
                         await viewModel.refreshShelf()
                     }
@@ -209,9 +299,9 @@ struct SectionShelfView: View {
                                     }
                                 }
                                 .font(.headline)
-                                
+
                                 Spacer()
-                                
+
                                 Button {
                                     viewModel.activeAlert = .downloadConfirm(bookIds: viewModel.selectionState.selectedBookIds)
                                 } label: {
@@ -222,9 +312,9 @@ struct SectionShelfView: View {
                                 }
                                 .font(.headline)
                                 .disabled(viewModel.selectionState.selectedBookIds.isEmpty)
-                                
+
                                 Spacer()
-                                
+
                                 Button("Clear") {
                                     withAnimation {
                                         viewModel.clearSelection()
@@ -238,9 +328,15 @@ struct SectionShelfView: View {
                                     .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: -4)
                             )
                             .transition(.move(edge: .bottom))
+                        } else {
+                            Color.clear
+                                .frame(height: ShelfLegacyMetrics.shelfTabBarExclusionHeight + 16)
                         }
                     }
                 }
+            }
+            .onDisappear {
+                adStore.clear()
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -273,7 +369,7 @@ struct SectionShelfView: View {
                         }
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !viewModel.selectionState.isEditing {
                         Button {
@@ -286,7 +382,7 @@ struct SectionShelfView: View {
                         .disabled(viewModel.isRefreshing)
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         withAnimation {
