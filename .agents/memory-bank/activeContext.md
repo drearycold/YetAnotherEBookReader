@@ -31,6 +31,13 @@ No active branch-specific workstream is currently recorded.
   default package cache. The standard `/tmp/YabrSourcePackages` cache path was
   incomplete during an earlier run and failed package resolution before
   compilation.
+- 2026-07-10: Shelf layout planning was extracted into the pure
+  `ShelfLayoutPlanner` under `Views/ShelfView`. Recent and Discover now render
+  deterministic row/section/banner/filler plans while retaining existing
+  interaction callbacks, ad policy, ad store, and safe-area behavior. Planner
+  value types are `Equatable`/`Sendable`, and Discover element IDs use
+  `section:`, `ad:`, and `filler:` namespaces; focused shelf/ad tests pass (28
+  tests), and the iOS Simulator build succeeds.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).

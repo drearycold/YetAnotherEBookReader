@@ -8,8 +8,8 @@
 import CoreGraphics
 import Foundation
 
-struct ShelfAdInsertion: Equatable, Identifiable {
-    enum Kind: Equatable {
+struct ShelfAdInsertion: Equatable, Identifiable, Sendable {
+    enum Kind: Equatable, Sendable {
         case nativeEndcap(recentRow: Int, columnSpan: Int)
         case nativeStrip(afterSection: Int)
         case adaptiveBanner(afterContentRow: Int)
@@ -21,12 +21,12 @@ struct ShelfAdInsertion: Equatable, Identifiable {
     var id: String { slotID }
 }
 
-struct ShelfAdLayoutCapabilities: Equatable {
+struct ShelfAdLayoutCapabilities: Equatable, Sendable {
     let nativeAvailable: Bool
     let bannerAvailable: Bool
 }
 
-struct ShelfAdLayoutContext: Equatable {
+struct ShelfAdLayoutContext: Equatable, Sendable {
     let viewportHeight: CGFloat
     let containerWidth: CGFloat
     let columnCount: Int

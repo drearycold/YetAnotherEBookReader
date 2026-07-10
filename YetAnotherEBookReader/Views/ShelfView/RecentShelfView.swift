@@ -13,28 +13,6 @@ struct IdentifiableString: Identifiable {
     var id: String { value }
 }
 
-fileprivate enum RecentShelfRenderItem: Identifiable {
-    case book(ShelfBookItem)
-    case filler(id: String)
-    
-    var id: String {
-        switch self {
-        case .book(let book):
-            return book.id
-        case .filler(let id):
-            return id
-        }
-    }
-}
-
-fileprivate struct RecentShelfRow: Identifiable {
-    let index: Int
-    let items: [RecentShelfRenderItem]
-    let adInsertion: ShelfAdInsertion?
-
-    var id: Int { index }
-}
-
 @available(macCatalyst 14.0, *)
 struct RecentShelfView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -42,103 +20,17 @@ struct RecentShelfView: View {
     @ObservedObject var viewModel: RecentShelfViewModel
     @StateObject private var adStore = ShelfNativeAdStore()
 
-    private func adLayoutContext(
-        viewportHeight: CGFloat,
-        containerWidth: CGFloat,
-        columnCount: Int,
-        isLoading: Bool,
-        isEmpty: Bool
-    ) -> ShelfAdLayoutContext {
-        ShelfAdLayoutContext(
-            viewportHeight: viewportHeight,
-            containerWidth: containerWidth,
-            columnCount: columnCount,
-            isRegularWidth: horizontalSizeClass == .regular,
-            isEditing: viewModel.selectionState.isEditing,
-            isLoading: isLoading,
-            isEmpty: isEmpty,
-            capabilities: ShelfAdLayoutCapabilities(
-                nativeAvailable: ShelfAdSlot.isNativeAvailable,
-                bannerAvailable: ShelfAdSlot.isBannerAvailable
-            )
-        )
-    }
-
-    private func rowItems(
-        from books: [ShelfBookItem],
-        columnCount: Int,
-        minimumRowCount: Int,
-        endcapInsertions: [Int: ShelfAdInsertion]
-    ) -> [RecentShelfRow] {
-        guard columnCount > 0 else { return [] }
-
-        var rows: [RecentShelfRow] = []
-        var bookIndex = 0
-        var rowIndex = 0
-
-        while bookIndex < books.count || rowIndex < minimumRowCount {
-            var rowAd = endcapInsertions[rowIndex]
-            var rowCapacity = columnCount
-
-            if case .nativeEndcap(_, let columnSpan) = rowAd?.kind {
-                rowCapacity = max(0, columnCount - columnSpan)
-                if books.count - bookIndex < rowCapacity {
-                    rowAd = nil
-                    rowCapacity = columnCount
-                }
-            }
-
-            var items: [RecentShelfRenderItem] = []
-            for columnIndex in 0..<rowCapacity {
-                if bookIndex < books.count {
-                    items.append(.book(books[bookIndex]))
-                    bookIndex += 1
-                } else {
-                    items.append(.filler(id: "filler-\(rowIndex)-\(columnIndex)"))
-                }
-            }
-
-            rows.append(RecentShelfRow(index: rowIndex, items: items, adInsertion: rowAd))
-            rowIndex += 1
-        }
-
-        return rows
-    }
-
-    private func insertionMaps(_ insertions: [ShelfAdInsertion]) -> (
-        endcapsByRow: [Int: ShelfAdInsertion],
-        bannersAfterRow: [Int: ShelfAdInsertion]
-    ) {
-        var endcaps: [Int: ShelfAdInsertion] = [:]
-        var banners: [Int: ShelfAdInsertion] = [:]
-
-        for insertion in insertions {
-            switch insertion.kind {
-            case .nativeEndcap(let recentRow, _):
-                endcaps[recentRow] = insertion
-            case .adaptiveBanner(let afterContentRow):
-                banners[afterContentRow] = insertion
-            case .nativeStrip:
-                break
-            }
-        }
-
-        return (endcaps, banners)
-    }
-
     @ViewBuilder
-    private func shelfRow(_ row: RecentShelfRow, columnCount: Int, tileWidth: CGFloat) -> some View {
+    private func shelfRow(_ row: RecentShelfRowPlan, tileWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
-            ForEach(0..<row.items.count, id: \.self) { index in
-                let item = row.items[index]
-                let kind = ShelfLegacyLayout.tileKind(index: index, columnCount: columnCount)
-                switch item {
+            ForEach(row.tiles) { tile in
+                switch tile.content {
                 case .book(let book):
                     ShelfBookCard(
                         book: book,
                         isEditing: viewModel.selectionState.isEditing,
                         isSelected: viewModel.selectionState.selectedBookIds.contains(book.id),
-                        tileKind: kind,
+                        tileKind: tile.kind,
                         tileWidth: tileWidth,
                         onTap: {
                             viewModel.tapBook(bookId: book.id)
@@ -168,11 +60,11 @@ struct RecentShelfView: View {
                         }
                     )
                 case .filler:
-                    ShelfLegacyFillerTile(kind: kind, width: tileWidth)
+                    ShelfLegacyFillerTile(kind: tile.kind, width: tileWidth)
                 }
             }
 
-            if let insertion = row.adInsertion,
+            if let insertion = row.nativeEndcap,
                case .nativeEndcap(_, let columnSpan) = insertion.kind {
                 ShelfAdSlot(
                     placement: .nativeEndcap(
@@ -185,6 +77,27 @@ struct RecentShelfView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func layoutElement(
+        _ element: RecentShelfLayoutElement,
+        geometry: ShelfLayoutGeometry
+    ) -> some View {
+        switch element {
+        case .row(let row):
+            shelfRow(row, tileWidth: geometry.tileWidth)
+        case .banner(let insertion):
+            ShelfAdSlot(
+                placement: .adaptiveBanner(
+                    width: geometry.shelfWidth,
+                    columnCount: geometry.columnCount,
+                    tileWidth: geometry.tileWidth,
+                    slotID: insertion.slotID
+                ),
+                store: adStore
+            )
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -193,53 +106,29 @@ struct RecentShelfView: View {
                     .ignoresSafeArea()
                 
                 GeometryReader { geometry in
-                    let containerWidth = geometry.size.width
-                    let viewportHeight = max(1, geometry.size.height - ShelfLegacyMetrics.shelfTabBarExclusionHeight)
-                    let books = viewModel.displayBooks
-                    let shelfWidth = containerWidth
-                    let columnCount = ShelfLegacyLayout.columnCount(containerWidth: shelfWidth)
-                    let tileWidth = ShelfLegacyLayout.tileWidth(containerWidth: shelfWidth)
-                    let minimumRowCount = max(1, Int(ceil(viewportHeight / ShelfLegacyMetrics.tileHeight)))
-                    let adInsertions = ShelfAdLayoutPolicy.recentInsertions(
-                        bookCount: books.count,
-                        context: adLayoutContext(
-                            viewportHeight: viewportHeight,
-                            containerWidth: shelfWidth,
-                            columnCount: columnCount,
-                            isLoading: viewModel.loadedBooks == nil,
-                            isEmpty: books.isEmpty
+                    let input = ShelfLayoutInput(
+                        containerSize: geometry.size,
+                        bottomExclusionHeight: ShelfLegacyMetrics.shelfTabBarExclusionHeight,
+                        widthClass: horizontalSizeClass == .regular ? .regular : .compact,
+                        isEditing: viewModel.selectionState.isEditing,
+                        isLoading: viewModel.loadedBooks == nil,
+                        adCapabilities: ShelfAdLayoutCapabilities(
+                            nativeAvailable: ShelfAdSlot.isNativeAvailable,
+                            bannerAvailable: ShelfAdSlot.isBannerAvailable
                         )
                     )
-                    let insertionMaps = insertionMaps(adInsertions)
-                    let rows = rowItems(
-                        from: books,
-                        columnCount: columnCount,
-                        minimumRowCount: minimumRowCount,
-                        endcapInsertions: insertionMaps.endcapsByRow
-                    )
+                    let plan = ShelfLayoutPlanner.recent(books: viewModel.displayBooks, input: input)
 
                     HStack(spacing: 0) {
                         ScrollView {
                             LazyVStack(spacing: 0) {
-                                ForEach(rows) { row in
-                                    shelfRow(row, columnCount: columnCount, tileWidth: tileWidth)
-
-                                    if let insertion = insertionMaps.bannersAfterRow[row.index] {
-                                        ShelfAdSlot(
-                                            placement: .adaptiveBanner(
-                                                width: shelfWidth,
-                                                columnCount: columnCount,
-                                                tileWidth: tileWidth,
-                                                slotID: insertion.slotID
-                                            ),
-                                            store: adStore
-                                        )
-                                    }
+                                ForEach(plan.elements) { element in
+                                    layoutElement(element, geometry: plan.geometry)
                                 }
 
                             }
                         }
-                        .frame(width: shelfWidth)
+                        .frame(width: plan.geometry.shelfWidth)
                         .refreshable {
                             viewModel.refreshShelf()
                         }

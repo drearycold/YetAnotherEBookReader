@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-public enum ShelfTileKind: String, Equatable {
+public enum ShelfTileKind: String, Equatable, Sendable {
     case left
     case center
     case right
