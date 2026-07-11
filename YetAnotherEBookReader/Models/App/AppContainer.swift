@@ -28,6 +28,31 @@ struct ReaderPresentationTransfer: Equatable {
 }
 
 enum UITestingMockLibraryFixture {
+    static func installEPUBFixture(
+        at destinationURL: URL,
+        sourceURL: URL? = nil,
+        bundle: Bundle = .main,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let source = sourceURL ?? bundle.url(
+            forResource: UITestingConfiguration.mockEPUBResourceName,
+            withExtension: "epub"
+        )
+        guard let source, source != destinationURL else { return false }
+
+        do {
+            let parentURL = destinationURL.deletingLastPathComponent()
+            try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.copyItem(at: source, to: destinationURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     static func makeBooks(library: CalibreLibrary) -> [CalibreBook] {
         let baseDate = Date(timeIntervalSince1970: 1_645_495_322)
         return [
@@ -588,14 +613,17 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             let mockBooks = UITestingMockLibraryFixture.makeBooks(library: library)
             guard let book = mockBooks.first else { return }
 
-            if let bookSavedUrl = getSavedUrl(book: book, format: Format.EPUB),
-               FileManager.default.fileExists(atPath: bookSavedUrl.path) == false {
-                FileManager.default.createFile(atPath: bookSavedUrl.path, contents: String("EPUB").data(using: .utf8), attributes: nil)
+            if UITestingConfiguration.isEnabled(),
+               let bookSavedURL = getSavedUrl(book: book, format: Format.EPUB) {
+                removeFolioCache(book: book, format: .EPUB)
+                if UITestingMockLibraryFixture.installEPUBFixture(at: bookSavedURL) == false {
+                    defaultLog.error("Unable to install the UI-testing EPUB fixture")
+                }
             }
 
             var position = BookDeviceReadingPosition(
                 id: self.deviceName,
-                readerName: ReaderType.YabrEPUB.rawValue,
+                readerName: UITestingConfiguration.mockReaderType.rawValue,
                 maxPage: 99,
                 lastReadPage: 1,
                 lastReadChapter: "Mock Last Chapter",
@@ -610,12 +638,19 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             self.readingPositionRepository.savePosition(position, for: book)
             mockBooks.forEach { self.bookRepository.saveBook($0) }
 
+            if UITestingConfiguration.isEnabled() {
+                self.readerPreferenceRepository.saveFolioPreferences(
+                    UITestingConfiguration.mockFolioReaderPreferences(),
+                    for: book
+                )
+            }
+
             self.bookManager.readingBook = book
 
             self.bookManager.booksInShelf[self.bookManager.readingBook!.inShelfId] = self.bookManager.readingBook
             self.bookManager.isShelfLoaded = true
 
-            if ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") {
+            if UITestingConfiguration.isEnabled() {
                 seedMockBrowseSearchCache(books: mockBooks, library: library)
                 seedMockBrowseCategoryCache(books: mockBooks, library: library)
             }
@@ -659,7 +694,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     private func makeUITestingMockLibraryIfNeeded() -> CalibreLibrary? {
-        guard ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") else { return nil }
+        guard UITestingConfiguration.isEnabled() else { return nil }
 
         let server = CalibreServer(
             uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,

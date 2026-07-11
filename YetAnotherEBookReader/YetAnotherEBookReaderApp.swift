@@ -11,10 +11,8 @@ import SwiftUI
 struct YetAnotherEBookReaderApp: App {
     private let container: AppContainer
 
-    private static let uiTestingMockLibraryArgument = "--ui-testing-mock-library"
-
     init() {
-        let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains(Self.uiTestingMockLibraryArgument)
+        let isUITestingMockLibrary = UITestingConfiguration.isEnabled()
         let containerInstance = isUITestingMockLibrary
             ? AppContainer(
                 mock: true,

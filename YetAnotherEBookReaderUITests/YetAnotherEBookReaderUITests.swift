@@ -53,6 +53,10 @@ final class YetAnotherEBookReaderUITests: XCTestCase {
         static let settingsServer = "settings.server.ui-test"
         static let closeBookDetail = "book-detail.close"
         static let bookDetailTitle = "book-detail.title"
+        static let readerFolioScreen = "reader.folio.screen"
+        static let readerFolioContent = "reader.folio.content"
+        static let readerFolioPosition = "reader.folio.position"
+        static let readerFolioClose = "reader.folio.close"
     }
 
     private let waitTimeout: TimeInterval = 10
@@ -112,6 +116,31 @@ final class YetAnotherEBookReaderUITests: XCTestCase {
 
         let serverRow = waitForIdentifier(AccessibilityID.settingsServer)
         XCTAssertTrue(serverRow.label.contains("UI Test Server"), app.debugDescription)
+    }
+
+    func testRecentMockBookOpensFolioReaderPagesAndCloses() throws {
+        launchApp()
+
+        waitForIdentifier(AccessibilityID.recentBook).tap()
+        waitForIdentifier(AccessibilityID.readerFolioScreen)
+        waitForIdentifier(AccessibilityID.readerFolioContent)
+
+        let position = waitForIdentifier(AccessibilityID.readerFolioPosition)
+        let initialPosition = position.label
+        let pageCollection = app.collectionViews[AccessibilityID.readerFolioScreen].firstMatch
+        XCTAssertTrue(
+            pageCollection.waitForExistence(timeout: waitTimeout),
+            "Expected FolioReader page collection.\n\(app.debugDescription)"
+        )
+        pageCollection.swipeLeft()
+
+        waitForCondition("FolioReader position should change after paging") {
+            position.exists && position.label != initialPosition
+        }
+
+        waitForIdentifier(AccessibilityID.readerFolioClose).tap()
+        waitForIdentifier(AccessibilityID.recentScreen)
+        waitForNonExistence(AccessibilityID.readerFolioScreen)
     }
 
     func testBrowseSearchFiltersNoResultsAndClearsToFullList() throws {
@@ -339,7 +368,7 @@ final class YetAnotherEBookReaderUITests: XCTestCase {
         if identifier == AccessibilityID.browseSelectionToolbar {
             return app.otherElements[identifier].firstMatch
         }
-        if identifier.hasPrefix("screen.") {
+        if identifier.hasPrefix("screen.") || identifier == AccessibilityID.readerFolioScreen {
             return app.descendants(matching: .any)
                 .matching(identifier: identifier)
                 .firstMatch
@@ -353,10 +382,14 @@ final class YetAnotherEBookReaderUITests: XCTestCase {
             || (identifier.hasPrefix("browse.category.") && identifier.hasSuffix(".search")) {
             return app.textFields[identifier].firstMatch
         }
+        if identifier == AccessibilityID.readerFolioContent {
+            return app.webViews[identifier].firstMatch
+        }
         if identifier == AccessibilityID.browseNoResults
             || identifier == AccessibilityID.browseBatchSheetSummary
             || identifier == AccessibilityID.browseBatchSheetFormatEPUB
-            || identifier == AccessibilityID.bookDetailTitle {
+            || identifier == AccessibilityID.bookDetailTitle
+            || identifier == AccessibilityID.readerFolioPosition {
             return app.staticTexts[identifier].firstMatch
         }
         if identifier == AccessibilityID.browseBatchSheet {
@@ -365,6 +398,7 @@ final class YetAnotherEBookReaderUITests: XCTestCase {
         if identifier.hasPrefix("browse.")
             || identifier.hasPrefix("shelf.")
             || identifier.hasPrefix("book-detail.")
+            || identifier.hasPrefix("reader.folio.")
             || identifier == AccessibilityID.settingsServer {
             return app.buttons[identifier].firstMatch
         }

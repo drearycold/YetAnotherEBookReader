@@ -104,3 +104,27 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   Two post-fix complete UI suite runs on iPhone 17 passed 10/10 each using
   `/tmp/YabrPhase3DerivedData` and `/tmp/YabrPhase3SourcePackages`; runtimes
   were about 283s and 279s. The suite contains no fixed sleep.
+
+## FolioReader UI Test Expansion (2026-07-11)
+
+- Added the self-authored `UI Test Fixture.epub` under
+  `YetAnotherEBookReader/TestFixtures/`. It contains only original project
+  content and is dedicated to the public domain under CC0 1.0; no third-party
+  book content is redistributed.
+- UI-testing mock initialization now installs the fixture into the isolated
+  `Mock Book Title` EPUB cache, selects `YabrEPUB`, and seeds horizontal paged
+  FolioReader preferences. Normal launches do not access the fixture and the
+  close control is enabled only with `--ui-testing-mock-library`.
+- `UITestingConfiguration` lives in the FolioReader configuration layer, so
+  `AppContainer.swift` remains free of a direct FolioReaderKit import.
+- Added Reader identifiers `reader.folio.screen`, `reader.folio.content`,
+  `reader.folio.position`, and `reader.folio.close`, plus a deterministic Recent
+  flow that opens the EPUB, pages once, verifies position change, closes, and
+  confirms return to Recent. The position sentinel is the only element carrying
+  `reader.folio.position`; its text changes only from FolioReader page callbacks,
+  with no transient content-offset observer.
+- Focused Folio/configuration and Browse ViewModel unit tests passed 63/63;
+  `build-for-testing` passed with isolated `/tmp/YabrPhase4ReviewDerivedData`
+  and `/tmp/YabrPhase4ReviewSourcePackages`. Two complete iPhone 17 UI suite
+  runs passed 11/11 with 0 failures (about 309s each). The UI test target
+  contains no fixed sleep, and `git diff --check` passed.

@@ -88,6 +88,8 @@
 		2ADCD83626F4B96200FBAE11 /* DSReaderHelperConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */; };
 		2ADCD85A26F4B96200FBAE11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
 		2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */; };
+		A0E4C8F82F00100100000001 /* UI Test Fixture.epub in Resources */ = {isa = PBXBuildFile; fileRef = A0E4C8F72F00100100000001 /* UI Test Fixture.epub */; };
+		A0E4C8F92F00100100000001 /* UI Test Fixture.epub in Resources */ = {isa = PBXBuildFile; fileRef = A0E4C8F72F00100100000001 /* UI Test Fixture.epub */; };
 		2AE26433274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */; };
 		2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD02675F680006E92E0 /* SettingsView.swift */; };
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
@@ -837,6 +839,7 @@
 		E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsReaderHelpView.swift; sourceTree = "<group>"; };
 		E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsFontHelpView.swift; sourceTree = "<group>"; };
 		E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDictViewEdit.swift; sourceTree = "<group>"; };
+		A0E4C8F72F00100100000001 /* UI Test Fixture.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "TestFixtures/UI Test Fixture.epub"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1140,6 +1143,7 @@
 				2ABB9151261F1A47004AA7C0 /* MainView.swift */,
 				2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */,
 				2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */,
+				A0E4C8F72F00100100000001 /* UI Test Fixture.epub */,
 				E77B8D4F29751C2A00363F39 /* YabrResources */,
 				2AC3EC2925BDBC11004A6633 /* Info.plist */,
 				2AC3EC2125BDBC11004A6633 /* Preview Content */,
@@ -1634,6 +1638,7 @@
 				2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */,
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,
 				2AAB2996271411060080B0CB /* Settings.bundle in Resources */,
+				A0E4C8F82F00100100000001 /* UI Test Fixture.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1658,6 +1663,7 @@
 				E77B8D5129751C2A00363F39 /* YabrResources in Resources */,
 				2ADCD85A26F4B96200FBAE11 /* Preview Assets.xcassets in Resources */,
 				2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */,
+				A0E4C8F92F00100100000001 /* UI Test Fixture.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

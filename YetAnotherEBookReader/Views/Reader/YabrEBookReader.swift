@@ -246,6 +246,11 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             epubReaderContainer.calibreBook = book
             epubReaderContainer.readerInfo = readerInfo
             epubReaderContainer.readerEngineDelegate = context.coordinator
+            if UITestingConfiguration.isEnabled(), let presentationID {
+                epubReaderContainer.uiTestingCloseHandler = {
+                    container.sessionManager.closeReader(id: presentationID)
+                }
+            }
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
