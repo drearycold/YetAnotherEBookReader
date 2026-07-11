@@ -37,9 +37,17 @@ struct YabrAppInfo {
     
     var gadBannerShelfUnitID: String? {
         #if DEBUG
-        yabrInfoPlist?.value(forKey: "GADBannerShelfUnitIDTest") as? String
+        adUnitID(forKey: "GADBannerShelfUnitIDTest")
         #else
-        yabrInfoPlist?.value(forKey: "GADBannerShelfUnitID") as? String
+        adUnitID(forKey: "GADBannerShelfUnitID")
+        #endif
+    }
+
+    var gadNativeShelfUnitID: String? {
+        #if DEBUG
+        adUnitID(forKey: "GADNativeShelfUnitIDTest")
+        #else
+        adUnitID(forKey: "GADNativeShelfUnitID")
         #endif
     }
     
@@ -78,5 +86,14 @@ struct YabrAppInfo {
         guard let path = Bundle.main.path(forResource: "Version", ofType: "html", inDirectory: "YabrResources")
         else { return nil }
         return try? String(contentsOfFile: path)
+    }
+
+    private func adUnitID(forKey key: String) -> String? {
+        guard let value = yabrInfoPlist?.value(forKey: key) as? String else {
+            return nil
+        }
+
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
     }
 }

@@ -13,23 +13,91 @@ struct IdentifiableString: Identifiable {
     var id: String { value }
 }
 
-fileprivate enum RecentShelfRenderItem: Identifiable {
-    case book(ShelfBookItem)
-    case filler(id: String)
-    
-    var id: String {
-        switch self {
-        case .book(let book):
-            return book.id
-        case .filler(let id):
-            return id
-        }
-    }
-}
-
 @available(macCatalyst 14.0, *)
 struct RecentShelfView: View {
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+
     @ObservedObject var viewModel: RecentShelfViewModel
+    @StateObject private var adStore = ShelfNativeAdStore()
+
+    @ViewBuilder
+    private func shelfRow(_ row: RecentShelfRowPlan, tileWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(row.tiles) { tile in
+                switch tile.content {
+                case .book(let book):
+                    ShelfBookCard(
+                        book: book,
+                        isEditing: viewModel.selectionState.isEditing,
+                        isSelected: viewModel.selectionState.selectedBookIds.contains(book.id),
+                        tileKind: tile.kind,
+                        tileWidth: tileWidth,
+                        onTap: {
+                            viewModel.tapBook(bookId: book.id)
+                        },
+                        onLongPress: {
+                            if !viewModel.selectionState.isEditing {
+                                viewModel.tapBook(bookId: book.id)
+                            }
+                        },
+                        onDetails: {
+                            viewModel.presentingBookDetailId = book.id
+                        },
+                        onRefresh: {
+                            viewModel.refreshBookFormats(bookId: book.id)
+                        },
+                        onDelete: {
+                            viewModel.deleteBook(bookId: book.id)
+                        },
+                        onGoodreads: {
+                            viewModel.goodreadsAction(bookId: book.id)
+                        },
+                        onDouban: {
+                            viewModel.doubanAction(bookId: book.id)
+                        },
+                        onHistory: {
+                            viewModel.presentingHistoryBookId = book.id
+                        }
+                    )
+                case .filler:
+                    ShelfLegacyFillerTile(kind: tile.kind, width: tileWidth)
+                }
+            }
+
+            if let insertion = row.nativeEndcap,
+               case .nativeEndcap(_, let columnSpan) = insertion.kind {
+                ShelfAdSlot(
+                    placement: .nativeEndcap(
+                        width: CGFloat(columnSpan) * tileWidth,
+                        slotID: insertion.slotID
+                    ),
+                    store: adStore
+                )
+                .frame(width: CGFloat(columnSpan) * tileWidth, height: ShelfLegacyMetrics.tileHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func layoutElement(
+        _ element: RecentShelfLayoutElement,
+        geometry: ShelfLayoutGeometry
+    ) -> some View {
+        switch element {
+        case .row(let row):
+            shelfRow(row, tileWidth: geometry.tileWidth)
+        case .banner(let insertion):
+            ShelfAdSlot(
+                placement: .adaptiveBanner(
+                    width: geometry.shelfWidth,
+                    columnCount: geometry.columnCount,
+                    tileWidth: geometry.tileWidth,
+                    slotID: insertion.slotID
+                ),
+                store: adStore
+            )
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -38,77 +106,32 @@ struct RecentShelfView: View {
                     .ignoresSafeArea()
                 
                 GeometryReader { geometry in
-                    let containerWidth = geometry.size.width
-                    let viewportHeight = geometry.size.height
-                    let columnCount = ShelfLegacyLayout.columnCount(containerWidth: containerWidth)
-                    let tileWidth = ShelfLegacyLayout.tileWidth(containerWidth: containerWidth)
-                    let totalTileCount = ShelfLegacyLayout.viewportTileCount(
-                        itemCount: viewModel.displayBooks.count,
-                        columnCount: columnCount,
-                        viewportHeight: viewportHeight
+                    let input = ShelfLayoutInput(
+                        containerSize: geometry.size,
+                        bottomExclusionHeight: ShelfLegacyMetrics.shelfTabBarExclusionHeight,
+                        widthClass: horizontalSizeClass == .regular ? .regular : .compact,
+                        isEditing: viewModel.selectionState.isEditing,
+                        isLoading: viewModel.loadedBooks == nil,
+                        adCapabilities: ShelfAdLayoutCapabilities(
+                            nativeAvailable: ShelfAdSlot.isNativeAvailable,
+                            bannerAvailable: ShelfAdSlot.isBannerAvailable
+                        )
                     )
-                    
-                    let books = viewModel.displayBooks
-                    let fillerCount = max(0, totalTileCount - books.count)
-                    
-                    let renderItems: [RecentShelfRenderItem] = {
-                        var items = books.map { RecentShelfRenderItem.book($0) }
-                        for i in 0..<fillerCount {
-                            items.append(.filler(id: "filler-\(i)"))
-                        }
-                        return items
-                    }()
-                    
-                    let gridColumns = Array(repeating: GridItem(.fixed(tileWidth), spacing: 0), count: columnCount)
-                    
-                    ScrollView {
-                        LazyVGrid(columns: gridColumns, spacing: 0) {
-                            ForEach(0..<renderItems.count, id: \.self) { index in
-                                let item = renderItems[index]
-                                let kind = ShelfLegacyLayout.tileKind(index: index, columnCount: columnCount)
-                                switch item {
-                                case .book(let book):
-                                    ShelfBookCard(
-                                        book: book,
-                                        isEditing: viewModel.selectionState.isEditing,
-                                        isSelected: viewModel.selectionState.selectedBookIds.contains(book.id),
-                                        tileKind: kind,
-                                        tileWidth: tileWidth,
-                                        onTap: {
-                                            viewModel.tapBook(bookId: book.id)
-                                        },
-                                        onLongPress: {
-                                            if !viewModel.selectionState.isEditing {
-                                                viewModel.tapBook(bookId: book.id)
-                                            }
-                                        },
-                                        onDetails: {
-                                            viewModel.presentingBookDetailId = book.id
-                                        },
-                                        onRefresh: {
-                                            viewModel.refreshBookFormats(bookId: book.id)
-                                        },
-                                        onDelete: {
-                                            viewModel.deleteBook(bookId: book.id)
-                                        },
-                                        onGoodreads: {
-                                            viewModel.goodreadsAction(bookId: book.id)
-                                        },
-                                        onDouban: {
-                                            viewModel.doubanAction(bookId: book.id)
-                                        },
-                                        onHistory: {
-                                            viewModel.presentingHistoryBookId = book.id
-                                        }
-                                    )
-                                case .filler:
-                                    ShelfLegacyFillerTile(kind: kind, width: tileWidth)
+                    let plan = ShelfLayoutPlanner.recent(books: viewModel.displayBooks, input: input)
+
+                    HStack(spacing: 0) {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(plan.elements) { element in
+                                    layoutElement(element, geometry: plan.geometry)
                                 }
+
                             }
                         }
-                    }
-                    .refreshable {
-                        viewModel.refreshShelf()
+                        .frame(width: plan.geometry.shelfWidth)
+                        .refreshable {
+                            viewModel.refreshShelf()
+                        }
                     }
                     .overlay(
                         Group {
@@ -183,9 +206,15 @@ struct RecentShelfView: View {
                                     .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: -4)
                             )
                             .transition(.move(edge: .bottom))
+                        } else {
+                            Color.clear
+                                .frame(height: ShelfLegacyMetrics.shelfTabBarExclusionHeight + 16)
                         }
                     }
                 }
+            }
+            .onDisappear {
+                adStore.clear()
             }
             .navigationTitle("Recent")
             .navigationBarTitleDisplayMode(.inline)

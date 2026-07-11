@@ -174,6 +174,7 @@
 		A074200130D4000300000008 /* LegacyReadPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */; };
 		A074200130D4000300000009 /* CalibreReadingPositionMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */; };
 		A074200130D4000300000010 /* CalibreReadingPositionMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */; };
+		E704F6522FFF7F2F00C60B08 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = E704F6512FFF7F2F00C60B08 /* GoogleMobileAds */; };
 		E70A25B72F73DEAD004F006E /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B62F73DEAD004F006E /* ReadiumNavigator */; };
 		E70A25B92F73DEAD004F006E /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B82F73DEAD004F006E /* ReadiumShared */; };
 		E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25BA2F73DEAD004F006E /* ReadiumStreamer */; };
@@ -240,8 +241,6 @@
 		E71F34EB2FDD1DD2007AB0B1 /* CalibreLibraryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */; };
 		E71F34ED2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
 		E71F34EE2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
-		E7B100072FF1000600000007 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
-		E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
 		E71F34F02FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
 		E71F34F12FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
 		E71F34F32FDE305D007AB0B1 /* ServerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */; };
@@ -372,10 +371,6 @@
 		E71F35A42FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */; };
 		E71F35A62FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
 		E71F35A72FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
-		E71F35D12FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
-		E71F35D22FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
-		E71F35D42FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
-		E71F35D52FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
 		E71F35A92FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
 		E71F35AA2FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
 		E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */; };
@@ -395,8 +390,12 @@
 		E71F35CC2FEACDCD007AB0B1 /* MockRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */; };
 		E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */; };
 		E71F35D02FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35CF2FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift */; };
+		E71F35D12FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
+		E71F35D22FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
 		E71F35D22FEBB5C7007AB0B1 /* RealmLibraryRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D12FEBB5C7007AB0B1 /* RealmLibraryRepositoryTests.swift */; };
+		E71F35D42FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
 		E71F35D42FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift */; };
+		E71F35D52FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
 		E71F35D62FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D52FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift */; };
 		E71F35D82FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D72FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift */; };
 		E71F35DA2FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D92FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift */; };
@@ -418,6 +417,12 @@
 		E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
 		E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
 		E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */; };
+		E7AD300130F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */; };
+		E7AD300230F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */; };
+		E7AD300430F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */; };
+		E7AD301130F0A00100AD0001 /* ShelfLayoutPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD301030F0A00100AD0001 /* ShelfLayoutPlanner.swift */; };
+		E7AD301230F0A00100AD0001 /* ShelfLayoutPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD301030F0A00100AD0001 /* ShelfLayoutPlanner.swift */; };
+		E7AD301430F0A00100AD0001 /* ShelfLayoutPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD301330F0A00100AD0001 /* ShelfLayoutPlannerTests.swift */; };
 		E7226E362FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
 		E7226E372FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
 		E7226E392FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
@@ -498,6 +503,8 @@
 		E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA312A77674300D5C95B /* DictWebView.swift */; };
 		E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
 		E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
+		E7B100072FF1000600000007 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
+		E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
 		E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */; };
 		E7C602042F7134560060265A /* FolioReaderKit in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602032F7134560060265A /* FolioReaderKit */; };
 		E7C6020A2F7134DC0060265A /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602092F7134DC0060265A /* SwiftUICharts */; };
@@ -667,7 +674,6 @@
 		E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerManager.swift; sourceTree = "<group>"; };
 		E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryManager.swift; sourceTree = "<group>"; };
 		E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBookManager.swift; sourceTree = "<group>"; };
-		E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagerAsyncBroadcaster.swift; sourceTree = "<group>"; };
 		E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRepository.swift; sourceTree = "<group>"; };
 		E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRepository.swift; sourceTree = "<group>"; };
 		E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryRepository.swift; sourceTree = "<group>"; };
@@ -736,8 +742,6 @@
 		E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationRealmMappers.swift; sourceTree = "<group>"; };
-		E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceValue.swift; sourceTree = "<group>"; };
-		E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinator.swift; sourceTree = "<group>"; };
 		E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinatorTests.swift; sourceTree = "<group>"; };
 		E71F35AD2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioReaderProviderBookIdTests.swift; sourceTree = "<group>"; };
@@ -750,7 +754,9 @@
 		E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRepositories.swift; sourceTree = "<group>"; };
 		E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockManagers.swift; sourceTree = "<group>"; };
 		E71F35CF2FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmServerRepositoryTests.swift; sourceTree = "<group>"; };
+		E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceValue.swift; sourceTree = "<group>"; };
 		E71F35D12FEBB5C7007AB0B1 /* RealmLibraryRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmLibraryRepositoryTests.swift; sourceTree = "<group>"; };
+		E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35D32FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmBookRepositoryTests.swift; sourceTree = "<group>"; };
 		E71F35D52FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmAnnotationRepositoryTests.swift; sourceTree = "<group>"; };
 		E71F35D72FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmReadingPositionRepositoryTests.swift; sourceTree = "<group>"; };
@@ -767,6 +773,10 @@
 		E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppContainerFactoryTests.swift; sourceTree = "<group>"; };
 		E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyle.swift; sourceTree = "<group>"; };
 		E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyleTests.swift; sourceTree = "<group>"; };
+		E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfAdLayoutPolicy.swift; sourceTree = "<group>"; };
+		E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfAdLayoutPolicyTests.swift; sourceTree = "<group>"; };
+		E7AD301030F0A00100AD0001 /* ShelfLayoutPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLayoutPlanner.swift; sourceTree = "<group>"; };
+		E7AD301330F0A00100AD0001 /* ShelfLayoutPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLayoutPlannerTests.swift; sourceTree = "<group>"; };
 		E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyTile.swift; sourceTree = "<group>"; };
 		E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyCoverView.swift; sourceTree = "<group>"; };
 		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
@@ -814,6 +824,7 @@
 		E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictViewModel.swift; sourceTree = "<group>"; };
 		E7A8EA312A77674300D5C95B /* DictWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictWebView.swift; sourceTree = "<group>"; };
 		E7AD2142293720AC00736FEF /* ShelfDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfDataManager.swift; sourceTree = "<group>"; };
+		E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagerAsyncBroadcaster.swift; sourceTree = "<group>"; };
 		E7C7779428ED324300939D63 /* YabrPDFAnnotationPageVC.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFAnnotationPageVC.swift; sourceTree = "<group>"; };
 		E7C7779728ED495700939D63 /* YabrPDFReferenceList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFReferenceList.swift; sourceTree = "<group>"; };
 		E7C7779828ED495700939D63 /* YabrPDFChapterList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFChapterList.swift; sourceTree = "<group>"; };
@@ -849,6 +860,7 @@
 				E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */,
 				E7C6021B2F7141C00060265A /* MBProgressHUD in Frameworks */,
 				E71F34A52FD902E4007AB0B1 /* Collections in Frameworks */,
+				E704F6522FFF7F2F00C60B08 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1063,6 +1075,8 @@
 				E71F35942FE8EC1F007AB0B1 /* RecentShelfView.swift */,
 				E71F35972FE8EE30007AB0B1 /* ShelfBookCard.swift */,
 				E71F359A2FE8EE7B007AB0B1 /* SectionShelfView.swift */,
+				E7AD300030F0A00100AD0001 /* ShelfAdLayoutPolicy.swift */,
+				E7AD301030F0A00100AD0001 /* ShelfLayoutPlanner.swift */,
 				E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */,
 				E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */,
 				E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */,
@@ -1186,6 +1200,8 @@
 				E71F35DD2FEBBF9C007AB0B1 /* IntegrationTests.swift */,
 				E7226E1D2FED348F009D3BB3 /* DatabaseBootstrapperTests.swift */,
 				E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */,
+				E7AD300330F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift */,
+				E7AD301330F0A00100AD0001 /* ShelfLayoutPlannerTests.swift */,
 				E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */,
 				E7226E412FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift */,
 				E7226E462FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift */,
@@ -1219,76 +1235,6 @@
 				E71F34A62FD906F1007AB0B1 /* Utils */,
 			);
 			path = Models;
-			sourceTree = "<group>";
-		};
-		E7B100012FF1000000000001 /* App */ = {
-			isa = PBXGroup;
-			children = (
-				E7226E1A2FED26E5009D3BB3 /* AppContainer.swift */,
-				E70B00072F00000000000007 /* AppContainerProtocol.swift */,
-				E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */,
-				2ABB9142261ED7E5004AA7C0 /* Constants.swift */,
-				E792C7E12F83F1EE0015E020 /* YabrAppInfo.swift */,
-			);
-			path = App;
-			sourceTree = "<group>";
-		};
-		E7B100022FF1000000000002 /* Calibre */ = {
-			isa = PBXGroup;
-			children = (
-					E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */,
-					A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */,
-					E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */,
-				E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */,
-				E71F351D2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift */,
-				E71F35232FE3B37A007AB0B1 /* CalibrePayloadModels.swift */,
-				E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */,
-				E71F35262FE3B389007AB0B1 /* CalibreSyncModels.swift */,
-				E71F35202FE3B36C007AB0B1 /* CalibreTasks.swift */,
-			);
-			path = Calibre;
-			sourceTree = "<group>";
-		};
-		E7B100032FF1000000000003 /* Domain */ = {
-			isa = PBXGroup;
-			children = (
-				A073100130D3000100000001 /* ActivityLogWriteEvent.swift */,
-				E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */,
-				6E7733BF26663D51008318C3 /* BookFiles.swift */,
-				E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */,
-					E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
-					2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
-					A074100130D4000100000001 /* PDFPreferenceValue.swift */,
-					E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */,
-				E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */,
-				E71F34A02FD8FDE4007AB0B1 /* UnifiedSearchModels.swift */,
-				2ACE265426A920E10037FCB4 /* YabrData.swift */,
-			);
-			path = Domain;
-			sourceTree = "<group>";
-		};
-		E7B100042FF1000000000004 /* Managers */ = {
-			isa = PBXGroup;
-			children = (
-				E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */,
-				E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */,
-				E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */,
-				E792C7ED2F849A2B0015E020 /* FontsManager.swift */,
-				E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */,
-				E792C7EA2F84990E0015E020 /* ReadingSessionManager.swift */,
-				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
-			);
-			path = Managers;
-			sourceTree = "<group>";
-		};
-		E7B100052FF1000000000005 /* Persistence */ = {
-			isa = PBXGroup;
-			children = (
-				E70B00042F00000000000004 /* DatabaseBootstrapper.swift */,
-				E70B00002F00000000000001 /* DatabaseMigrator.swift */,
-				E792C7F02F84A48B0015E020 /* DatabaseService.swift */,
-			);
-			path = Persistence;
 			sourceTree = "<group>";
 		};
 		6E7733BC2664E747008318C3 /* BookDetailView */ = {
@@ -1400,11 +1346,11 @@
 				E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */,
 				E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */,
 				E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */,
-					E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
-					A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */,
-					A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */,
-					A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */,
-					E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */,
+				E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
+				A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */,
+				A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */,
+				A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */,
+				E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */,
 			);
 			path = Realm;
 			sourceTree = "<group>";
@@ -1456,6 +1402,76 @@
 				E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */,
 			);
 			path = DictView;
+			sourceTree = "<group>";
+		};
+		E7B100012FF1000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				E7226E1A2FED26E5009D3BB3 /* AppContainer.swift */,
+				E70B00072F00000000000007 /* AppContainerProtocol.swift */,
+				E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */,
+				2ABB9142261ED7E5004AA7C0 /* Constants.swift */,
+				E792C7E12F83F1EE0015E020 /* YabrAppInfo.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E7B100022FF1000000000002 /* Calibre */ = {
+			isa = PBXGroup;
+			children = (
+				E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */,
+				A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */,
+				E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */,
+				E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */,
+				E71F351D2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift */,
+				E71F35232FE3B37A007AB0B1 /* CalibrePayloadModels.swift */,
+				E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */,
+				E71F35262FE3B389007AB0B1 /* CalibreSyncModels.swift */,
+				E71F35202FE3B36C007AB0B1 /* CalibreTasks.swift */,
+			);
+			path = Calibre;
+			sourceTree = "<group>";
+		};
+		E7B100032FF1000000000003 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A073100130D3000100000001 /* ActivityLogWriteEvent.swift */,
+				E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */,
+				6E7733BF26663D51008318C3 /* BookFiles.swift */,
+				E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */,
+				E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
+				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
+				A074100130D4000100000001 /* PDFPreferenceValue.swift */,
+				E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */,
+				E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */,
+				E71F34A02FD8FDE4007AB0B1 /* UnifiedSearchModels.swift */,
+				2ACE265426A920E10037FCB4 /* YabrData.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		E7B100042FF1000000000004 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */,
+				E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */,
+				E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */,
+				E792C7ED2F849A2B0015E020 /* FontsManager.swift */,
+				E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */,
+				E792C7EA2F84990E0015E020 /* ReadingSessionManager.swift */,
+				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		E7B100052FF1000000000005 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				E70B00042F00000000000004 /* DatabaseBootstrapper.swift */,
+				E70B00002F00000000000001 /* DatabaseMigrator.swift */,
+				E792C7F02F84A48B0015E020 /* DatabaseService.swift */,
+			);
+			path = Persistence;
 			sourceTree = "<group>";
 		};
 		E7C7779328ED322100939D63 /* ListViews */ = {
@@ -1594,6 +1610,7 @@
 				E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */,
 				E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */,
 				E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */,
+				E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			productRefGroup = 2AC3EC1925BDBC10004A6633 /* Products */;
 			projectDirPath = "";
@@ -1755,27 +1772,27 @@
 				E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,
 				E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
-					E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
-					A074200130D4000300000009 /* CalibreReadingPositionMappers.swift in Sources */,
-					E71F35652FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
+				E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
+				A074200130D4000300000009 /* CalibreReadingPositionMappers.swift in Sources */,
+				E71F35652FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
 				E71F34BC2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
 				E70A25CD2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,
 				E71F35332FE3B3A9007AB0B1 /* Array+Chunks.swift in Sources */,
 				E71F35772FE8C6BD007AB0B1 /* BookFormatRow.swift in Sources */,
-					E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
-					A074200130D4000300000003 /* PDFPreferenceAdapter.swift in Sources */,
-					2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
+				E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
+				A074200130D4000300000003 /* PDFPreferenceAdapter.swift in Sources */,
+				2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
 				2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */,
 				E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */,
-					E71F35452FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
-					A074200130D4000300000007 /* LegacyReadPositionRealmMappers.swift in Sources */,
-					E71F357B2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
+				E71F35452FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
+				A074200130D4000300000007 /* LegacyReadPositionRealmMappers.swift in Sources */,
+				E71F357B2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
 				E71F34F62FDE3060007AB0B1 /* LibraryRepository.swift in Sources */,
 				E71F34C62FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
-					E71F35512FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
-					A074200130D4000300000005 /* PDFOptionsRealmMappers.swift in Sources */,
-					A074200130D4000300000001 /* PDFPreferenceValue.swift in Sources */,
-					E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */,
+				E71F35512FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
+				A074200130D4000300000005 /* PDFOptionsRealmMappers.swift in Sources */,
+				A074200130D4000300000001 /* PDFPreferenceValue.swift in Sources */,
+				E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */,
 				E71F35882FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
 				2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */,
 				E7939151261F1A47004AB011 /* SettingsViewModel.swift in Sources */,
@@ -1795,6 +1812,8 @@
 				E7226E452FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35272FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
+				E7AD300230F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */,
+				E7AD301130F0A00100AD0001 /* ShelfLayoutPlanner.swift in Sources */,
 				E71F352A2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */,
 				E71F352D2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */,
 				2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */,
@@ -1892,6 +1911,8 @@
 				E7226E2F2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift in Sources */,
 				E71F35DE2FEBBF9C007AB0B1 /* IntegrationTests.swift in Sources */,
 				E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */,
+				E7AD300430F0A00100AD0001 /* ShelfAdLayoutPolicyTests.swift in Sources */,
+				E7AD301430F0A00100AD0001 /* ShelfLayoutPlannerTests.swift in Sources */,
 				E7226E472FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift in Sources */,
 				E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */,
 				E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */,
@@ -2048,9 +2069,9 @@
 				E70A25CE2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,
 				E71F34BD2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
 				E71F35662FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
-					E71F35252FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
-					A074200130D4000300000010 /* CalibreReadingPositionMappers.swift in Sources */,
-					2ADCD7D426F4B96200FBAE11 /* SwiftUI_Ad_Banner.swift in Sources */,
+				E71F35252FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
+				A074200130D4000300000010 /* CalibreReadingPositionMappers.swift in Sources */,
+				2ADCD7D426F4B96200FBAE11 /* SwiftUI_Ad_Banner.swift in Sources */,
 				2ADCD7DA26F4B96200FBAE11 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
 				E71F35782FE8C6BD007AB0B1 /* BookFormatRow.swift in Sources */,
 				2ADCD7E026F4B96200FBAE11 /* PDFPageWithBackground.swift in Sources */,
@@ -2058,16 +2079,16 @@
 				2ADCD7E426F4B96200FBAE11 /* WebViewUIVC.swift in Sources */,
 				E71F34F72FDE3060007AB0B1 /* LibraryRepository.swift in Sources */,
 				E71F357A2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
-					E71F35442FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
-					A074200130D4000300000008 /* LegacyReadPositionRealmMappers.swift in Sources */,
-					E71F34C52FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
+				E71F35442FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
+				A074200130D4000300000008 /* LegacyReadPositionRealmMappers.swift in Sources */,
+				E71F34C52FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
 				2ADCD7E626F4B96200FBAE11 /* Utils.swift in Sources */,
 				A073200130D3000300000002 /* ActivityLogWriteEvent.swift in Sources */,
-					A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */,
-					E71F35502FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
-					A074200130D4000300000006 /* PDFOptionsRealmMappers.swift in Sources */,
-					A074200130D4000300000002 /* PDFPreferenceValue.swift in Sources */,
-					E71F35892FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
+				A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */,
+				E71F35502FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
+				A074200130D4000300000006 /* PDFOptionsRealmMappers.swift in Sources */,
+				A074200130D4000300000002 /* PDFPreferenceValue.swift in Sources */,
+				E71F35892FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
 				2ADCD7E726F4B96200FBAE11 /* YabrPDFViewController.swift in Sources */,
 				E71F349F2FD8FDD0007AB0B1 /* RealmSearchCacheStore.swift in Sources */,
 				2ADCD7E826F4B96200FBAE11 /* ReadingPositionViewModel.swift in Sources */,
@@ -2078,12 +2099,14 @@
 				2ADCD7ED26F4B96200FBAE11 /* EpubFolioReaderContainer.swift in Sources */,
 				E71F35102FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
-					E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
-					E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
-					A074200130D4000300000004 /* PDFPreferenceAdapter.swift in Sources */,
-					E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
+				E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
+				E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
+				A074200130D4000300000004 /* PDFPreferenceAdapter.swift in Sources */,
+				E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
 				E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
+				E7AD300130F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */,
+				E7AD301230F0A00100AD0001 /* ShelfLayoutPlanner.swift in Sources */,
 				E71F35832FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,
 				E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E71F351E2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift in Sources */,
@@ -2772,6 +2795,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.6.0;
+			};
+		};
 		E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-collections.git";
@@ -2815,6 +2846,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		E704F6512FFF7F2F00C60B08 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		E70A25B62F73DEAD004F006E /* ReadiumNavigator */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;

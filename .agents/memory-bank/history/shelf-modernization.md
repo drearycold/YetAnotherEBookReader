@@ -6,6 +6,26 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **Shelf Ad Placement And Pure Layout Planning (2026-07-10, complete):**
+  Restored the Google Mobile Ads shelf integration with viewport-aware
+  placement: Recent uses regular-width native end-caps when the row remains
+  content-led, while compact or unavailable-native layouts use inline adaptive
+  banners; Discover places native strips between sections with the same compact
+  fallback. The old iPad side rail was removed. Native ads are scoped to each
+  shelf/scene through `ShelfNativeAdStore`, which uses an 8-entry LRU, a
+  55-minute loaded TTL, a 60-second failure cooldown, current-loader callback
+  validation, and cleanup on shelf destruction. Native strip content applies
+  28pt gutters, and fallback banners use the current available width. Recent
+  and Discover reserve bottom space with real `safeAreaInset` exclusion.
+  `ShelfLayoutPlanner` then extracted column calculation, row packing, filler,
+  ad insertion, and content-height planning into pure Foundation/CoreGraphics
+  value types. Recent and Discover render deterministic plans without changing
+  existing book interaction behavior. Discover element IDs are namespaced as
+  `section:`, `ad:`, and `filler:` to prevent collisions with server-controlled
+  section IDs. Focused shelf/ad tests pass (28 tests), `git diff --check`
+  passes, and the iOS Simulator build succeeds. Committed as `d50042f1`
+  (`refactor: extract shelf layout planner`).
+
 - **Recent Shelf Reader Presentation Regression Fix (2026-07-03, complete):** Fixed a regression where tapping a readable Recent shelf cover set the session reader presentation flag but did not immediately open the reader until another `MainViewModel` published change, such as tab switching. Root cause was the `AppContainer` observable removal: `ReadingSessionManager` state changes no longer reached `MainView` through container `objectWillChange`, while `MainView.fullScreenCover` was bound to a non-published computed property. `MainViewModel` now owns a published reader presentation flag, mirrors `ReadingSessionManager.presentingReaderSnapshots()`, and syncs dismissals back to the session manager. Added regression coverage for Recent shelf tap presentation and dismissal synchronization. Validation: focused `MainViewModelTests` and `RecentShelfViewModelTests` passed (18 tests); `git diff --check` passed; standard iOS Simulator build passed.
 - **AppContainer Legacy Subject Bridge Removal (2026-07-02, complete):** Removed the remaining app-wide `PassthroughSubject` bridges from `AppContainer` / `AppContainerProtocol`; a later cleanup also removed `AppContainer`'s SwiftUI `ObservableObject` / `@Published` compatibility. `publishBookImport`, `publishDismissAll`, `publishBookReaderActivity`, `publishProbeLibraryLastModifiedRequest`, and `publishCalibreUpdate` now emit only through async streams; `calibreUpdates()` uses the shared `ManagerAsyncBroadcaster`. Removed legacy Recent/Discover shelf subject forwarding and simplified shelf snapshot test helpers to snapshot-only publishing. Extracted `ManagerAsyncBroadcaster` from `ShelfDataManager.swift` into `Models/Managers/ManagerAsyncBroadcaster.swift` and registered it in both app targets. Migrated remaining direct subject tests to async streams or removed legacy bridge assertions. Validation: `rg "PassthroughSubject|CurrentValueSubject" YetAnotherEBookReader` passed with no matches; `git diff --check` passed; focused `CalibreBookManagerTests`, `CalibreLibraryManagerTests`, `V2MigrationDependencyTests`, `RecentShelfViewModelTests`, `SectionShelfViewModelTests`, and `ShelfDisplayModelsTests` passed (84 tests); standard iOS Simulator build passed.
 - **Network Cleanup Finalization (2026-07-02, complete):** Completed the final `Network/` cleanup pass after the Combine bridge removals. Deleted remaining deprecated fire-and-forget wrappers from `DSReaderHelperConnector` and completion/Int metadata wrappers from `CalibreServerService+Metadata`, renamed `BookDownloadManager.startDownloadNew` to the final `startDownload` Result-returning API, removed the old Bool `startDownload` overload, and renamed `getMetadataNew(task:)` to `getMetadataData(task:)`. The download progress delegate no longer reads `activeDownloads` from the URLSession callback queue before hopping to the main actor. Also stabilized the previously intermittent `V2MigrationDependencyTests.testShelfDataModelPendingInitialCategoryKeepsInitialLoadIncomplete` by making `YabrShelfDataModel.seedCategoriesForTesting` cancel the initialization snapshot task and synchronize the outer initial-load projection with the seeded actor state. Validation: `Network/` scan is empty for Combine/deprecated/old `New` symbols; `git diff --check` passed; focused `CalibreServerServiceTests`, `DSReaderHelperConnectorTests`, `BookDownloadManagerTests`, `BookDetailViewModelTests`, and `V2MigrationDependencyTests` passed (132 tests).

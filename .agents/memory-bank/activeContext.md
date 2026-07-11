@@ -2,34 +2,21 @@
 
 ## Current Focus
 
-Current branch: `codex/folio-reader-integration`.
-
-Current search cleanup: Library book list manual sync now rebuilds the current
-search page and forces metadata refresh for loaded books, so refreshed
-`format_metadata` updates `CalibreBook.formats`. After a manual sync, subsequent
-load-more operations keep forcing metadata refresh for newly loaded books without
-rebuilding the first page again.
-
-Latest local commit at cleanup time:
-
-```text
-26d65322 polish welcome empty shelf onboarding
-```
+No active branch-specific workstream is currently recorded.
 
 ## Current Branch Notes
 
-- Recent reader workspace and FolioReader integration work is archived in
-  [Reader Modernization](history/reader-modernization.md) under
-  **Reader Workspace / FolioReader Integration Branch Archive (2026-07-09, complete)**.
+- No active branch-specific workstream is currently recorded.
+- PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
+  FolioReader integration, reader tab hot-mounting, and persistent active reader
+  restore are archived in [Reader Modernization](history/reader-modernization.md).
+- The manual sync metadata refresh cleanup from the same merged branch is
+  archived in [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md).
 - Keep this file as a short handoff entrypoint. Add only current, unresolved, or
   high-risk context here; move completed project records into the matching
   history file before merge.
 - If a task changes architecture, validation status, known risks, or handoff
   expectations, update this file or the relevant history file before finishing.
-- Latest validation for manual sync metadata refresh (2026-07-09):
-  `git diff --check`, focused `UnifiedSearchServiceTests`,
-  `UnifiedSearchIntegrationTests`, `V2MigrationDependencyTests`, and standard
-  iOS Simulator build all passed.
 
 ## History Index
 

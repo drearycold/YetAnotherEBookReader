@@ -249,11 +249,11 @@ struct MainView: View {
 
     private func showConsentInformation() {
         #if canImport(GoogleMobileAds)
-        let parameters = UMPRequestParameters()
+        let parameters = RequestParameters()
         // false means users are not under age.
-        parameters.tagForUnderAgeOfConsent = false
+        parameters.isTaggedForUnderAgeOfConsent = false
 
-        UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(
+        ConsentInformation.shared.requestConsentInfoUpdate(
             with: parameters,
             completionHandler: { error in
                 if error != nil {
@@ -261,9 +261,11 @@ struct MainView: View {
                 } else {
                     // The consent information state was updated.
                     // You are now ready to check if a form is available.
-                    let formStatus = UMPConsentInformation.sharedInstance.formStatus
-                    if formStatus == UMPFormStatus.available {
+                    let formStatus = ConsentInformation.shared.formStatus
+                    if formStatus == FormStatus.available {
                         loadForm()
+                    } else {
+                        startAdsIfConsentAllows()
                     }
                 }
             })
@@ -272,22 +274,43 @@ struct MainView: View {
 
     #if canImport(GoogleMobileAds)
     private func loadForm() {
-        UMPConsentForm.load(
-            completionHandler: { form, loadError in
-                if loadError != nil {
-                    // Handle the error
-                } else {
-                    // Present the form
-                    if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.required {
-                        form?.present(from: UIApplication.shared.windows.first!.rootViewController! as UIViewController, completionHandler: { dimissError in
-                            if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.obtained {
-                                // App can start requesting ads.
-                                GADMobileAds.sharedInstance().start(completionHandler: nil)
-                            }
-                        })
-                    }
+        ConsentForm.load(
+            with: { form, loadError in
+                guard loadError == nil else {
+                    self.startAdsIfConsentAllows()
+                    return
                 }
+                guard ConsentInformation.shared.consentStatus == ConsentStatus.required else {
+                    self.startAdsIfConsentAllows()
+                    return
+                }
+                guard let form = form,
+                      let viewController = self.consentPresentationViewController else {
+                    self.startAdsIfConsentAllows()
+                    return
+                }
+
+                form.present(from: viewController, completionHandler: { dismissError in
+                    self.startAdsIfConsentAllows()
+                })
             })
+    }
+
+    private var consentPresentationViewController: UIViewController? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+
+        return windows.first { $0.isKeyWindow }?.rootViewController
+            ?? windows.first?.rootViewController
+    }
+
+    private func startAdsIfConsentAllows() {
+        let consentStatus = ConsentInformation.shared.consentStatus
+        guard consentStatus == ConsentStatus.obtained || consentStatus == ConsentStatus.notRequired else { return }
+
+        // App can start requesting ads.
+        MobileAds.shared.start(completionHandler: nil)
     }
     #endif
 }

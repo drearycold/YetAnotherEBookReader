@@ -50,15 +50,15 @@ struct SupportInfoView: View {
                         HStack {
                             Text("Status")
                             Spacer()
-                            Text("\(UMPConsentInformation.sharedInstance.consentStatus.rawValue)")
+                            Text("\(ConsentInformation.shared.consentStatus.rawValue)")
                             Text("/")
-                            Text("\(UMPConsentInformation.sharedInstance.formStatus.rawValue)")
+                            Text("\(ConsentInformation.shared.formStatus.rawValue)")
                         }
                         Button {
-                            UMPConsentInformation.sharedInstance.reset()
+                            ConsentInformation.shared.reset()
                         } label: {
                             Text("Reset Tracking Consent")
-                        }.disabled(UMPConsentInformation.sharedInstance.consentStatus != UMPConsentStatus.obtained)
+                        }.disabled(ConsentInformation.shared.consentStatus != ConsentStatus.obtained)
                     }
                 } label: {
                     Text("Reset Tracking Consent")
