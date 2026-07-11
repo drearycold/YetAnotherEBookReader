@@ -128,3 +128,24 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   and `/tmp/YabrPhase4ReviewSourcePackages`. Two complete iPhone 17 UI suite
   runs passed 11/11 with 0 failures (about 309s each). The UI test target
   contains no fixed sleep, and `git diff --check` passed.
+
+## UI Test Performance Consolidation (2026-07-11)
+
+- Consolidated the 11 UI scenarios into five independently launched XCTest
+  journeys while retaining all 11 named `XCTContext` activities. Shared helpers
+  now reuse element queries, fast-path already-satisfied waits, record journey
+  and activity timings, and deterministically restore Browse search, sorting,
+  batch-selection, and category-filter state between activities.
+- Added `UITestPerformance.xctestplan` and the dedicated
+  `YetAnotherEBookReader-UI-Performance` scheme so parallel experimentation is
+  isolated from the default development scheme. The plan contains only the UI
+  test target and marks it parallelizable.
+- `build-for-testing` passed. Sequential and performance-plan runs passed all
+  five journeys and all 11 activities without fixed sleeps or state leakage.
+  `git diff --check` passed.
+- Xcode 26.5/CoreSimulator parallel scheduling remains unstable: one
+  `test-without-building` run created Clone 1 and Clone 2, while subsequent runs
+  fell back to Clone 1 only. Recorded wall-clock times were roughly 382s, 322s,
+  and 356s, so the requested 180-second target was not met. This performance
+  deviation was explicitly accepted; treat stable two-clone scheduling as a
+  toolchain/environment follow-up rather than a completed guarantee.

@@ -605,6 +605,7 @@
 		2AC3EC3925BDBC11004A6633 /* YetAnotherEBookReaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YetAnotherEBookReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderUITests.swift; sourceTree = "<group>"; };
 		2AC3EC3F25BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E7F000012026071100000001 /* UITestPerformance.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = UITestPerformance.xctestplan; path = UITestPerformance.xctestplan; sourceTree = "<group>"; };
 		2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewControllerTests.swift; sourceTree = "<group>"; };
 		2ACE265426A920E10037FCB4 /* YabrData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrData.swift; sourceTree = "<group>"; };
 		2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageRequest.swift; sourceTree = "<group>"; };
@@ -1116,6 +1117,7 @@
 				2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */,
 				2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */,
 				2AC3EC3C25BDBC11004A6633 /* YetAnotherEBookReaderUITests */,
+				E7F000012026071100000001 /* UITestPerformance.xctestplan */,
 				2A0A782326E8F65300F3C753 /* YetAnotherEBookReader for macOS */,
 				E70A25B52F73DEAD004F006E /* Frameworks */,
 				2AC3EC1925BDBC10004A6633 /* Products */,

@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "8F5A3B0C-1F7E-4D4A-9A1B-2C3D4E5F6A70",
+      "name" : "Performance",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:YetAnotherEBookReader.xcodeproj",
+      "identifier" : "2AC3EC1725BDBC10004A6633",
+      "name" : "YetAnotherEBookReader"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:YetAnotherEBookReader.xcodeproj",
+        "identifier" : "2AC3EC3825BDBC11004A6633",
+        "name" : "YetAnotherEBookReaderUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
