@@ -71,8 +71,13 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func updateServerList() {
+        let includeUITestLocalServer = ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library")
         serverList = container.serverManager.calibreServers
-            .filter { $1.isLocal == false && $1.id != serverListDelete?.id && $1.removed == false }
+            .filter {
+                ($1.isLocal == false || (includeUITestLocalServer && $1.name == "UI Test Server"))
+                    && $1.id != serverListDelete?.id
+                    && $1.removed == false
+            }
             .map { $0.value }
         sortServerList()
     }

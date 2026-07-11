@@ -24,6 +24,7 @@ struct LibraryInfoBookListHeader: View {
                 }
 
                 TextField("Search Title & Authors", text: $listViewModel.searchString)
+                    .accessibilityIdentifier("browse.search.field")
                     .onAppear {
                         listViewModel.syncDraftFromCriteria(libraryInfoViewModel.searchString)
                     }
@@ -40,6 +41,7 @@ struct LibraryInfoBookListHeader: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
                     }
+                    .accessibilityIdentifier("browse.search.clear")
                 }
 
                 let categoryMenuItems = libraryInfoViewModel.availableCategoryMenuItems
@@ -61,11 +63,13 @@ struct LibraryInfoBookListHeader: View {
                                         Text("\(categoryItem.itemsCount)")
                                     }
                                 }
+                                .accessibilityIdentifier("browse.category.menu.\(LibraryInfoAccessibilityID.slug(categoryItem.name))")
                             }
                         } label: {
                             Image(systemName: "line.3.horizontal.decrease.circle")
                                 .foregroundColor(.accentColor)
                         }
+                        .accessibilityIdentifier("browse.category.menu")
                     }
                 }
                 .padding(.trailing, 4)
@@ -85,6 +89,7 @@ struct LibraryInfoBookListHeader: View {
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color.secondary.opacity(0.12)))
                         .foregroundColor(.secondary)
+                        .accessibilityIdentifier("browse.filter.clear")
 
                         ForEach(filterItems) { filterItem in
                             HStack(spacing: 4) {
@@ -101,11 +106,14 @@ struct LibraryInfoBookListHeader: View {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.caption)
                                 }
+                                .accessibilityIdentifier("browse.filter.remove.\(LibraryInfoAccessibilityID.slug(filterItem.key)).\(LibraryInfoAccessibilityID.slug(filterItem.value))")
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(Capsule().fill(Color.accentColor.opacity(0.12)))
                             .foregroundColor(.accentColor)
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("browse.filter.chip.\(LibraryInfoAccessibilityID.slug(filterItem.key)).\(LibraryInfoAccessibilityID.slug(filterItem.value))")
                         }
                     }
                 }

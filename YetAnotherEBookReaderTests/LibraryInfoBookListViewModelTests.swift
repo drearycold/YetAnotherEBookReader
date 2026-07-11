@@ -46,6 +46,68 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertFalse(listViewModel.searchHistoryPresenting)
     }
 
+    func testUITestingMockLibraryFixtureHasThreeDistinctOfflineBooks() {
+        let server = CalibreServer(
+            uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            name: "UI Test Server",
+            baseUrl: ".",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let library = CalibreLibrary(server: server, key: "ui-test", name: "UI Test Library")
+
+        let books = UITestingMockLibraryFixture.makeBooks(library: library)
+
+        XCTAssertEqual(books.map(\.id), [1, 2, 3])
+        XCTAssertEqual(books.map(\.title), ["Mock Book Title", "Alpha Browse Book", "Beta Browse Book"])
+        XCTAssertEqual(books.map(\.authors), [["Mock Author"], ["Alpha Author"], ["Beta Author"]])
+        XCTAssertEqual(books.map(\.tags), [["Mock Tag"], ["Alpha Tag"], ["Beta Tag"]])
+        XCTAssertEqual(books.map(\.series), ["Mock Series", "Alpha Series", "Beta Series"])
+        XCTAssertEqual(books.map(\.inShelf), [true, false, false])
+        XCTAssertEqual(books.map { $0.formats[Format.EPUB.rawValue]?.serverSize }, [1_024_000, 2_048_000, 3_072_000])
+        XCTAssertEqual(Set(books.map(\.lastModified)).count, 3)
+        XCTAssertTrue(books.allSatisfy { !$0.needsMetadataRefresh })
+    }
+
+    func testUITestingMockLibraryFixtureHasOfflineCategoryResultsMatchingBooks() {
+        let server = CalibreServer(
+            uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            name: "UI Test Server",
+            baseUrl: ".",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        var library = CalibreLibrary(server: server, key: "ui-test", name: "UI Test Library")
+        library.lastModified = Date(timeIntervalSince1970: 1_645_495_322)
+
+        let books = UITestingMockLibraryFixture.makeBooks(library: library)
+        let results = UITestingMockLibraryFixture.makeCategoryResults(library: library, books: books)
+
+        XCTAssertEqual(results.map(\.categoryName), ["Authors", "Tags", "Series"])
+        XCTAssertTrue(results.allSatisfy { $0.libraryId == library.id })
+        XCTAssertTrue(results.allSatisfy { $0.generation == library.lastModified })
+        XCTAssertTrue(results.allSatisfy { $0.totalNumber == books.count })
+        XCTAssertTrue(results.allSatisfy { $0.items.count == books.count })
+        XCTAssertTrue(results.allSatisfy { $0.items.allSatisfy { $0.count == 1 } })
+
+        XCTAssertEqual(results[0].items.map(\.name), books.map { $0.authors[0] })
+        XCTAssertEqual(results[1].items.map(\.name), books.map { $0.tags[0] })
+        XCTAssertEqual(results[2].items.map(\.name), books.map(\.series))
+
+        for (result, categoryPath) in zip(results, ["authors", "tags", "series"]) {
+            XCTAssertEqual(
+                result.items.map(\.url),
+                books.map { "/ajax/category/\(categoryPath)/\($0.id)" }
+            )
+        }
+    }
+
     func testBrowseBookRowsUseDirectNavigationLinkInsteadOfSelectionDrivenNavigation() throws {
         let source = try String(contentsOf: sourceFileURL(
             "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListContent.swift"

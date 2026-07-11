@@ -285,6 +285,7 @@ struct RecentShelfView: View {
                                 Button("Close") {
                                     viewModel.presentingBookDetailId = nil
                                 }
+                                .accessibilityIdentifier("book-detail.close")
                             }
                         }
                 }

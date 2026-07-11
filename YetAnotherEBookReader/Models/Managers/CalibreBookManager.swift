@@ -226,7 +226,8 @@ class CalibreBookManager {
             }
         }
 
-        if NSClassFromString("XCTestCase") != nil {
+        let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library")
+        if NSClassFromString("XCTestCase") != nil || isUITestingMockLibrary {
             work()
         } else {
             DispatchQueue.global(qos: .userInitiated).async(execute: work)

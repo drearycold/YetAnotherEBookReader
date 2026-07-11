@@ -27,6 +27,7 @@ struct BookDetailView: View {
         ScrollView {
             if let calibreBook = _viewModel.calibreBook {
                 Text(calibreBook.title)
+                    .accessibilityIdentifier("book-detail.title")
                 BookDetailContentView(viewModel: _viewModel, book: calibreBook, isCompat: sizeClass == .compact)
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                     .navigationTitle(Text(calibreBook.title))
@@ -49,6 +50,7 @@ struct BookDetailView: View {
                 _viewModel.fetchMetadata(book: calibreBook)
             }
         }
+        .accessibilityIdentifier("screen.book-detail")
     }
 }
 

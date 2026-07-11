@@ -34,6 +34,7 @@ struct MainView: View {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
                         .yabrAppChrome(.wood, isActive: viewModel.activeTab == 0)
+                        .accessibilityIdentifier("screen.recent")
                         .tabItem {
                             Image(systemName: "doc.text.fill")
                             Text("Recent")
@@ -46,6 +47,7 @@ struct MainView: View {
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
                         .yabrAppChrome(.wood, isActive: viewModel.activeTab == 1)
+                        .accessibilityIdentifier("screen.discover")
                         .tabItem {
                             Image(systemName: "books.vertical.fill")
                             Text("Discover")
@@ -55,6 +57,7 @@ struct MainView: View {
                     LibraryInfoView()
                         .environment(\.horizontalSizeClass, originalSizeClass)
                         .yabrAppChrome(.system, isActive: viewModel.activeTab == 2)
+                        .accessibilityIdentifier("screen.browse")
                         .tabItem {
                             Image(systemName: "building.columns.fill")
                             Text("Browse")
@@ -67,6 +70,7 @@ struct MainView: View {
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.horizontalSizeClass, originalSizeClass)
                     .yabrAppChrome(.system, isActive: viewModel.activeTab == 3)
+                    .accessibilityIdentifier("screen.settings")
                     .tabItem {
                         Image(systemName: "gearshape.fill")
                         Text("Settings")

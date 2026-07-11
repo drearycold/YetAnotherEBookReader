@@ -41,6 +41,8 @@ struct LibraryInfoBookListView: View {
         .onAppear {
             listViewModel.bindDownloadSnapshots(container: container)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("screen.browse.book-list")
     }
     
     @ViewBuilder

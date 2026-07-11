@@ -27,6 +27,136 @@ struct ReaderPresentationTransfer: Equatable {
     let targetWorkspaceID: UUID
 }
 
+enum UITestingMockLibraryFixture {
+    static func makeBooks(library: CalibreLibrary) -> [CalibreBook] {
+        let baseDate = Date(timeIntervalSince1970: 1_645_495_322)
+        return [
+            makeBook(
+                id: 1,
+                library: library,
+                title: "Mock Book Title",
+                author: "Mock Author",
+                tag: "Mock Tag",
+                series: "Mock Series",
+                lastModified: baseDate,
+                epubSize: 1_024_000,
+                inShelf: true,
+                cached: true
+            ),
+            makeBook(
+                id: 2,
+                library: library,
+                title: "Alpha Browse Book",
+                author: "Alpha Author",
+                tag: "Alpha Tag",
+                series: "Alpha Series",
+                lastModified: baseDate.addingTimeInterval(60),
+                epubSize: 2_048_000,
+                inShelf: false,
+                cached: false
+            ),
+            makeBook(
+                id: 3,
+                library: library,
+                title: "Beta Browse Book",
+                author: "Beta Author",
+                tag: "Beta Tag",
+                series: "Beta Series",
+                lastModified: baseDate.addingTimeInterval(120),
+                epubSize: 3_072_000,
+                inShelf: false,
+                cached: false
+            )
+        ]
+    }
+
+    static func makeCategoryResults(
+        library: CalibreLibrary,
+        books: [CalibreBook]
+    ) -> [LibraryCategoryResult] {
+        [
+            makeCategoryResult(
+                library: library,
+                categoryName: "Authors",
+                books: books,
+                value: { $0.authors.first ?? "" }
+            ),
+            makeCategoryResult(
+                library: library,
+                categoryName: "Tags",
+                books: books,
+                value: { $0.tags.first ?? "" }
+            ),
+            makeCategoryResult(
+                library: library,
+                categoryName: "Series",
+                books: books,
+                value: { $0.series }
+            )
+        ]
+    }
+
+    private static func makeCategoryResult(
+        library: CalibreLibrary,
+        categoryName: String,
+        books: [CalibreBook],
+        value: (CalibreBook) -> String
+    ) -> LibraryCategoryResult {
+        let items = books.map { book in
+            LibraryCategoryItem(
+                name: value(book),
+                averageRating: Double(book.rating) / 2,
+                count: 1,
+                url: "/ajax/category/\(categoryName.lowercased())/\(book.id)"
+            )
+        }
+
+        return LibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: categoryName,
+            items: items,
+            generation: library.lastModified,
+            totalNumber: books.count
+        )
+    }
+
+    private static func makeBook(
+        id: Int32,
+        library: CalibreLibrary,
+        title: String,
+        author: String,
+        tag: String,
+        series: String,
+        lastModified: Date,
+        epubSize: UInt64,
+        inShelf: Bool,
+        cached: Bool
+    ) -> CalibreBook {
+        var book = CalibreBook(id: id, library: library)
+        book.title = title
+        book.authors = [author]
+        book.tags = [tag]
+        book.series = series
+        book.seriesIndex = Double(id)
+        book.lastModified = lastModified
+        book.lastSynced = lastModified
+        book.lastUpdated = lastModified
+        book.timestamp = lastModified
+        book.inShelf = inShelf
+        book.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "\(title).epub",
+            serverSize: epubSize,
+            serverMTime: lastModified,
+            cached: cached,
+            cacheSize: cached ? epubSize : 0,
+            cacheMTime: cached ? lastModified : .distantPast,
+            manifest: nil
+        )
+        return book
+    }
+}
+
 enum ReaderSceneActivity {
     static let activityType = "com.drearycold.dsreader.reader"
     private static let presentationIDKey = "presentationID"
@@ -455,11 +585,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
                 return
             }
 
-            var book = CalibreBook(id: 1, library: library)
+            let mockBooks = UITestingMockLibraryFixture.makeBooks(library: library)
+            guard let book = mockBooks.first else { return }
 
-            book.title = "Mock Book Title"
-
-            book.formats[Format.EPUB.rawValue] = .init(filename: book.title + ".epub", serverSize: 1024000, serverMTime: Date(timeIntervalSince1970: 1645495322), cached: true, cacheSize: 1024000, cacheMTime: Date(timeIntervalSince1970: 1645495322), manifest: nil)
             if let bookSavedUrl = getSavedUrl(book: book, format: Format.EPUB),
                FileManager.default.fileExists(atPath: bookSavedUrl.path) == false {
                 FileManager.default.createFile(atPath: bookSavedUrl.path, contents: String("EPUB").data(using: .utf8), attributes: nil)
@@ -480,21 +608,27 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             position.epoch = 1645495322
 
             self.readingPositionRepository.savePosition(position, for: book)
+            mockBooks.forEach { self.bookRepository.saveBook($0) }
 
             self.bookManager.readingBook = book
 
             self.bookManager.booksInShelf[self.bookManager.readingBook!.inShelfId] = self.bookManager.readingBook
+            self.bookManager.isShelfLoaded = true
 
             if ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") {
-                seedMockBrowseSearchCache(book: book, library: library)
+                seedMockBrowseSearchCache(books: mockBooks, library: library)
+                seedMockBrowseCategoryCache(books: mockBooks, library: library)
             }
 
             cleanCalibreActivities(startDatetime: Date())
             logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookId: 1, libraryId: library.id)
+            Task { @MainActor [weak self] in
+                self?.publishCalibreUpdate(.shelf)
+            }
         }
     }
 
-    private func seedMockBrowseSearchCache(book: CalibreBook, library: CalibreLibrary) {
+    private func seedMockBrowseSearchCache(books: [CalibreBook], library: CalibreLibrary) {
         let targetSource = library.server.isLocal
             ? URL(fileURLWithPath: "/realm").absoluteString
             : library.server.baseUrl.replacingOccurrences(of: ".", with: "_")
@@ -507,11 +641,21 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             sourceUrl: targetSource,
             result: LibrarySourceSearchResult(
                 generation: library.lastModified,
-                totalNumber: 1,
-                bookIds: [book.id],
-                books: [book]
+                totalNumber: books.count,
+                bookIds: books.map(\.id),
+                books: books
             )
         )
+    }
+
+    private func seedMockBrowseCategoryCache(books: [CalibreBook], library: CalibreLibrary) {
+        for result in UITestingMockLibraryFixture.makeCategoryResults(library: library, books: books) {
+            try? categoryCacheRepository.saveLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: result.categoryName,
+                result: result
+            )
+        }
     }
 
     private func makeUITestingMockLibraryIfNeeded() -> CalibreLibrary? {

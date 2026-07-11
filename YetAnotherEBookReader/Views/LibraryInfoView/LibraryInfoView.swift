@@ -60,6 +60,7 @@ struct LibraryInfoView: View {
             .environmentObject(viewModel)
             .environmentObject(unifiedSearchViewModel)
         }   //NavigationView
+        .accessibilityIdentifier("screen.browse")
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
         .onAppear {
@@ -133,6 +134,7 @@ struct LibraryInfoView: View {
                     }
                 }
                 .isDetailLink(false)
+                .accessibilityIdentifier(library.name == "UI Test Library" ? "browse.library.ui-test" : "browse.library.\(library.id)")
             }
         } header: {
             Text("By Library")
