@@ -6,38 +6,7 @@ No active branch-specific workstream is currently recorded.
 
 ## Current Branch Notes
 
-- 2026-07-10: `codex/restore-google-admob-integration` is restoring shelf
-  AdMob placement. Current unmerged work uses `ShelfAdLayoutPolicy` to insert
-  ads at roughly one per effective viewport, never denser than one per screen.
-  Recent uses regular-width native end-caps occupying the last three shelf
-  columns in a normal 200pt book row when there are enough books to keep the
-  row content-led; compact width, narrow split view, or missing native inventory
-  falls back to inline adaptive banners. Discover keeps ads between sections:
-  regular width uses a 200pt horizontal native strip, while compact/missing
-  native falls back to an adaptive banner row. The old wide iPad side rail is no
-  longer part of the shelf layout.
-  Review follow-up now keeps native cache state in per-shelf `ShelfNativeAdStore`
-  instances with an 8-entry LRU, 55-minute loaded TTL, and 60-second failure
-  cooldown. Native callbacks verify the current `AdLoader`; native strip content
-  uses container width minus 56pt for the 28pt side gutters; native failures use
-  an inline adaptive banner capped at 60pt. Recent and Discover use real bottom
-  `safeAreaInset` exclusion and no longer retain poster/sidebar layout branches.
-  Focused shelf tests now cover store isolation, expiry, retry cooldown, and LRU
-  eviction. `Info.plist` already contains app id
-  `ca-app-pub-2603711004804215~7977491314`; `YabrInfo.plist` now stores native
-  shelf unit `ca-app-pub-2603711004804215/1060349074` and keeps DEBUG on the
-  Google test native unit. Latest validation passed `git diff --check`,
-  `ShelfAdLayoutPolicyTests` (11 tests), and iOS Simulator build using Xcode's
-  default package cache. The standard `/tmp/YabrSourcePackages` cache path was
-  incomplete during an earlier run and failed package resolution before
-  compilation.
-- 2026-07-10: Shelf layout planning was extracted into the pure
-  `ShelfLayoutPlanner` under `Views/ShelfView`. Recent and Discover now render
-  deterministic row/section/banner/filler plans while retaining existing
-  interaction callbacks, ad policy, ad store, and safe-area behavior. Planner
-  value types are `Equatable`/`Sendable`, and Discover element IDs use
-  `section:`, `ad:`, and `filler:` namespaces; focused shelf/ad tests pass (28
-  tests), and the iOS Simulator build succeeds.
+- No active branch-specific workstream is currently recorded.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).
