@@ -39,6 +39,9 @@ No active branch-specific workstream is currently recorded.
   reduction, AppContainer introduction, protocol migration, and final deletion.
 - [Legacy Completed Tasks And Milestones](history/legacy-completed-milestones.md):
   Older completed checklists and cross-cutting historical context.
+- [UI Test Modernization](history/ui-test-modernization.md): offline mock
+  fixtures, Browse/search/category coverage, FolioReader flow, journey
+  consolidation, and performance-plan results.
 
 ## Active Constraints
 
@@ -59,93 +62,11 @@ xcrun simctl shutdown all
 xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
 ```
 
-## Latest UI Test Verification (2026-07-11)
+## Current UI Test Note (2026-07-12)
 
-- Expanded `YetAnotherEBookReaderUITests` to cover launch/tab navigation,
-  Recent mock-book details, Browse reopen behavior, and Settings mock-server
-  visibility.
-- The `--ui-testing-mock-library` path now skips local Documents-library
-  scanning, synchronously seeds/persists the fixed mock book, and publishes the
-  shelf update so UI tests do not depend on simulator user data.
-- Verified with iPhone 17 Simulator using isolated `/tmp` DerivedData and SPM
-  cache: `build-for-testing` passed and
-  `-only-testing:YetAnotherEBookReaderUITests` passed all 4 tests.
-
-## Browse UI Test Expansion (2026-07-11)
-
-- Expanded the isolated mock library to three persisted Realm books with
-  distinct title/author/tag/series metadata, fixed modification dates, and
-  EPUB sizes. Only `Mock Book Title` is in Recent; Alpha and Beta are
-  Browse-only.
-- Added stable Browse accessibility identifiers for search, sorting, batch
-  selection, book rows, and the format confirmation popover. Added search,
-  title sort, and batch selection/confirmation UI coverage, plus fixture
-  assertions in `LibraryInfoBookListViewModelTests`.
-- `build-for-testing` passed. Two final complete UI suite runs on iPhone 17
-  passed 7/7 each with isolated `/tmp/YabrPhase2DerivedData` and
-  `/tmp/YabrPhase2SourcePackages`. Runtime was about 236s and 292s; the
-  requested 90-second target remains unmet because each UI test launches a
-  fresh app and simulator/XCTest startup dominates the run.
-
-## Browse Category UI Test Expansion (2026-07-11)
-
-- Extended the offline UI-test fixture with three persisted category caches:
-  Authors, Tags, and Series. Each contains Mock, Alpha, and Beta entries with
-  count, URL, and generation values derived from the three fixed mock books;
-  initialization writes these caches directly and does not invoke category
-  refresh or network sync.
-- Added stable normalized accessibility identifiers for category entry points,
-  category pages/search/clear controls/items, header category menus and Done,
-  and filter chips/removal/clear controls.
-- Added root Authors filtering, Series category search/clear, and header Tags
-  multi-select/remove/clear UI coverage. Added fixture assertions for category
-  metadata and cache generation.
-- `build-for-testing` passed. Focused Browse/category unit tests passed 53/53.
-  Two post-fix complete UI suite runs on iPhone 17 passed 10/10 each using
-  `/tmp/YabrPhase3DerivedData` and `/tmp/YabrPhase3SourcePackages`; runtimes
-  were about 283s and 279s. The suite contains no fixed sleep.
-
-## FolioReader UI Test Expansion (2026-07-11)
-
-- Added the self-authored `UI Test Fixture.epub` under
-  `YetAnotherEBookReader/TestFixtures/`. It contains only original project
-  content and is dedicated to the public domain under CC0 1.0; no third-party
-  book content is redistributed.
-- UI-testing mock initialization now installs the fixture into the isolated
-  `Mock Book Title` EPUB cache, selects `YabrEPUB`, and seeds horizontal paged
-  FolioReader preferences. Normal launches do not access the fixture and the
-  close control is enabled only with `--ui-testing-mock-library`.
-- `UITestingConfiguration` lives in the FolioReader configuration layer, so
-  `AppContainer.swift` remains free of a direct FolioReaderKit import.
-- Added Reader identifiers `reader.folio.screen`, `reader.folio.content`,
-  `reader.folio.position`, and `reader.folio.close`, plus a deterministic Recent
-  flow that opens the EPUB, pages once, verifies position change, closes, and
-  confirms return to Recent. The position sentinel is the only element carrying
-  `reader.folio.position`; its text changes only from FolioReader page callbacks,
-  with no transient content-offset observer.
-- Focused Folio/configuration and Browse ViewModel unit tests passed 63/63;
-  `build-for-testing` passed with isolated `/tmp/YabrPhase4ReviewDerivedData`
-  and `/tmp/YabrPhase4ReviewSourcePackages`. Two complete iPhone 17 UI suite
-  runs passed 11/11 with 0 failures (about 309s each). The UI test target
-  contains no fixed sleep, and `git diff --check` passed.
-
-## UI Test Performance Consolidation (2026-07-11)
-
-- Consolidated the 11 UI scenarios into five independently launched XCTest
-  journeys while retaining all 11 named `XCTContext` activities. Shared helpers
-  now reuse element queries, fast-path already-satisfied waits, record journey
-  and activity timings, and deterministically restore Browse search, sorting,
-  batch-selection, and category-filter state between activities.
-- Added `UITestPerformance.xctestplan` and the dedicated
-  `YetAnotherEBookReader-UI-Performance` scheme so parallel experimentation is
-  isolated from the default development scheme. The plan contains only the UI
-  test target and marks it parallelizable.
-- `build-for-testing` passed. Sequential and performance-plan runs passed all
-  five journeys and all 11 activities without fixed sleeps or state leakage.
-  `git diff --check` passed.
-- Xcode 26.5/CoreSimulator parallel scheduling remains unstable: one
-  `test-without-building` run created Clone 1 and Clone 2, while subsequent runs
-  fell back to Clone 1 only. Recorded wall-clock times were roughly 382s, 322s,
-  and 356s, so the requested 180-second target was not met. This performance
-  deviation was explicitly accepted; treat stable two-clone scheduling as a
-  toolchain/environment follow-up rather than a completed guarantee.
+- The offline UI suite currently contains five journeys and 11 named
+  activities; full history and verification are archived in
+  [UI Test Modernization](history/ui-test-modernization.md).
+- Stable two-clone scheduling remains unresolved on Xcode 26.5/CoreSimulator.
+  Use the dedicated performance scheme/plan for experiments and do not treat
+  the accepted 180-second deviation as a guaranteed performance baseline.
