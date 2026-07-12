@@ -643,8 +643,6 @@ class ReadingPositionViewModelTests: XCTestCase {
     
     func testDetailViewModelReadSelectedFormatOpensReaderPresentation() throws {
         let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
-        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
-
         mockBook.formats[Format.EPUB.rawValue] = FormatInfo(
             selected: true,
             filename: "position-test.epub",
@@ -655,14 +653,16 @@ class ReadingPositionViewModelTests: XCTestCase {
             cacheMTime: Date(),
             manifest: nil
         )
-        if let savedURL = getSavedUrl(book: mockBook, format: .EPUB) {
-            try FileManager.default.createDirectory(
-                at: savedURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-            FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8))
-        }
+        listViewModel.book = mockBook
+        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
+
+        let savedURL = try XCTUnwrap(getSavedUrl(book: mockBook, format: .EPUB))
+        try FileManager.default.createDirectory(
+            at: savedURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        XCTAssertTrue(FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8)))
 
         detailVM.readSelectedFormat()
 
