@@ -10,6 +10,8 @@ import UIKit
 import FolioReaderKit
 
 public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
+    var pageDidAppearHandler: ((FolioReaderPage) -> Void)?
+    var pageItemChangedHandler: ((Int) -> Void)?
     
     public init() {
         
@@ -24,6 +26,14 @@ public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
         let modified = regex.stringByReplacingMatches(in: htmlContent, options: [], range: NSMakeRange(0, htmlContent.count), withTemplate: "").replacingOccurrences(of: "<body ", with: "<body style=\"text-align: justify !important; display: block !important; \" ")
         // print(modified)
         return modified
+    }
+
+    @objc public func pageDidAppear(_ page: FolioReaderPage) {
+        pageDidAppearHandler?(page)
+    }
+
+    @objc public func pageItemChanged(_ pageNumber: Int) {
+        pageItemChangedHandler?(pageNumber)
     }
 }
 

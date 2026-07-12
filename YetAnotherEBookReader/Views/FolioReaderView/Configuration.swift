@@ -9,15 +9,43 @@ import Foundation
 import UIKit
 import FolioReaderKit
 
+enum UITestingConfiguration {
+    static let mockLibraryArgument = "--ui-testing-mock-library"
+    static let mockReaderType = ReaderType.YabrEPUB
+    static let mockFolioReaderScrollDirection = FolioReaderScrollDirection.horizontalWithPagedContent
+    static let mockEPUBResourceName = "UI Test Fixture"
+
+    static func isEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        arguments.contains(mockLibraryArgument)
+    }
+
+    static func folioReaderCloseButtonEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        isEnabled(arguments: arguments)
+    }
+
+    static func mockFolioReaderPreferences() -> FolioReaderPreferenceValue {
+        var preferences = FolioReaderPreferenceValue.fallbackDefaults
+        preferences.currentScrollDirection = mockFolioReaderScrollDirection.rawValue
+        return preferences
+    }
+}
+
 extension EpubFolioReaderContainer {
-    static func Configuration(bookURL: URL) -> FolioReaderConfig {
+    static func Configuration(
+        bookURL: URL,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> FolioReaderConfig {
+        let isUITestingMockLibrary = UITestingConfiguration.isEnabled(arguments: arguments)
         let config = FolioReaderConfig(withIdentifier: bookURL.deletingPathExtension().lastPathComponent)
         config.shouldHideNavigationOnTap = true
-        config.canChangeScrollDirection = true
+        config.canChangeScrollDirection = !isUITestingMockLibrary
+        if isUITestingMockLibrary {
+            config.scrollDirection = UITestingConfiguration.mockFolioReaderScrollDirection
+        }
         config.allowSharing = true
         config.enableTTS = false
         config.displayTitle = UITraitCollection.current.horizontalSizeClass == .regular
-        config.showCloseButton = false
+        config.showCloseButton = UITestingConfiguration.folioReaderCloseButtonEnabled(arguments: arguments)
         config.forceBottomMenuTabBar = true
         config.reserveSafeAreaInsidePageFrame = false
         config.reservePageIndicatorInsidePageFrame = false

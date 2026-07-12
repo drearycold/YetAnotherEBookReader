@@ -48,6 +48,8 @@ struct LibraryInfoCategoryItemsView: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).items")
             } else if categoryViewModel.isLoading {
                 ProgressView("Loading items...")
             } else {
@@ -65,11 +67,13 @@ struct LibraryInfoCategoryItemsView: View {
                 } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
+                .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).refresh")
 
                 if preservesLibraryScope {
                     Button("Done") {
                         applyHeaderCategorySelection()
                     }
+                    .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).done")
                 }
             }
         }
@@ -91,6 +95,7 @@ struct LibraryInfoCategoryItemsView: View {
                         Image(systemName: "checkmark")
                     }
                 }
+                .accessibilityIdentifier(LibraryInfoAccessibilityID.categoryItem(categoryName, itemName: categoryItem.name))
             }
         } else {
             NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
@@ -103,6 +108,7 @@ struct LibraryInfoCategoryItemsView: View {
                 Text(categoryItem.name)
             }
             .isDetailLink(false)
+            .accessibilityIdentifier(LibraryInfoAccessibilityID.categoryItem(categoryName, itemName: categoryItem.name))
         }
     }
     

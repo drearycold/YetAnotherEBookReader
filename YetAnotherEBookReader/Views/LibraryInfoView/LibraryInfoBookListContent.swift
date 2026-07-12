@@ -20,11 +20,14 @@ struct LibraryInfoBookListContent: View {
 
             List {
                 #if DEBUG
-                debugView()
+                if !ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") {
+                    debugView()
+                }
                 #endif
                 
                 if books.isEmpty {
                     Text(libraryInfoViewModel.getLibraryLoadingCount(container: container, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
+                        .accessibilityIdentifier("browse.no-results")
                 } else {
                     let sections = listViewModel.buildSections(books: books, sectionedBy: libraryInfoViewModel.sectionedBy)
                     ForEach(sections) { section in
@@ -44,7 +47,9 @@ struct LibraryInfoBookListContent: View {
                     }
                 }
                 #if DEBUG
-                debugView()
+                if !ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") {
+                    debugView()
+                }
                 #endif
             }
             .onAppear {
@@ -96,6 +101,7 @@ struct LibraryInfoBookListContent: View {
                 listViewModel.selectAllBatchDownloadBooks(books: books)
             }
             .font(.headline)
+            .accessibilityIdentifier("browse.selection.select-all")
 
             Spacer()
 
@@ -109,6 +115,7 @@ struct LibraryInfoBookListContent: View {
             }
             .font(.headline)
             .disabled(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+            .accessibilityIdentifier("browse.selection.download")
 
             Spacer()
 
@@ -117,6 +124,7 @@ struct LibraryInfoBookListContent: View {
             }
             .font(.headline)
             .disabled(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+            .accessibilityIdentifier("browse.selection.clear")
 
             Spacer()
 
@@ -124,12 +132,15 @@ struct LibraryInfoBookListContent: View {
                 listViewModel.cancelBatchSelectionMode()
             }
             .font(.headline)
+            .accessibilityIdentifier("browse.selection.cancel")
         }
         .padding()
         .background(
             Color(.secondarySystemGroupedBackground)
                 .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: -4)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("browse.selection.toolbar")
     }
     
     @ViewBuilder
@@ -149,6 +160,7 @@ struct LibraryInfoBookListContent: View {
                     }
                 }
                 .isDetailLink(true)
+                .accessibilityIdentifier(browseBookAccessibilityIdentifier(for: book))
                 .contextMenu {
                     LibraryInfoBookContextMenu(
                         book: book,
@@ -162,6 +174,7 @@ struct LibraryInfoBookListContent: View {
                 LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                     onRowAppear(index: index)
                 }
+                .accessibilityIdentifier(browseBookAccessibilityIdentifier(for: book))
                 .contextMenu {
                     LibraryInfoBookContextMenu(
                         book: book,
@@ -193,6 +206,11 @@ struct LibraryInfoBookListContent: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(browseBookAccessibilityIdentifier(for: book))
+    }
+
+    private func browseBookAccessibilityIdentifier(for book: CalibreBook) -> String {
+        book.id == 1 ? "browse.book.mock" : "browse.book.\(book.id)"
     }
     
     private func onRowAppear(index: Int) {

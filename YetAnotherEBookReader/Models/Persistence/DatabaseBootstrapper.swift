@@ -66,9 +66,24 @@ final class DatabaseBootstrapper {
 
         container.serverManager.populateServers()
         container.libraryManager.populateLibraries()
+        let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library")
         container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
-            container?.libraryManager.populateLocalLibraryBooks {
-                guard let container = container else { return }
+            guard let container = container else { return }
+
+            if isUITestingMockLibrary {
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        container.publishCalibreUpdate(.shelf)
+                    }
+                } else {
+                    Task { @MainActor in
+                        container.publishCalibreUpdate(.shelf)
+                    }
+                }
+                return
+            }
+
+            container.libraryManager.populateLocalLibraryBooks {
                 if Thread.isMainThread {
                     MainActor.assumeIsolated {
                         container.publishCalibreUpdate(.shelf)

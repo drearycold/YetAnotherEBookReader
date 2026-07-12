@@ -15,6 +15,7 @@ struct LibraryInfoBookListDownloadButton: View {
         } label: {
             Image(systemName: "square.and.arrow.down.on.square")
         }
+        .accessibilityIdentifier("browse.batch.mode")
         .disabled(viewModel.isSearchLoading)
     }
 }
@@ -48,6 +49,7 @@ struct LibraryInfoBookListSortMenu: View {
                         Text(sort.rawValue)
                     }
                 }
+                .accessibilityIdentifier("browse.sort.\(sort.rawValue.lowercased())")
             }
             
             if let result = viewModel.unifiedSearchResult,
@@ -75,5 +77,6 @@ struct LibraryInfoBookListSortMenu: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
+        .accessibilityIdentifier("browse.sort.menu")
     }
 }

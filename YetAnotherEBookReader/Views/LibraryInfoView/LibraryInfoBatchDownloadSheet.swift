@@ -33,10 +33,13 @@ struct LibraryInfoBatchDownloadSheet: View {
                             Text(
                                 ByteCountFormatter.string(fromByteCount: selectFormatInfo.totalSize, countStyle: .file)
                             )
-                        }.tag(format)
+                        }
+                        .tag(format)
+                        .accessibilityIdentifier("browse.batch.sheet.format.\(format.lowercased())")
                     }
                 }
             }
+            .accessibilityIdentifier("browse.batch.sheet")
             .navigationTitle(Text("Formats to Download"))
             .environment(\.editMode, $editMode)
             .onChange(of: selected, perform: { newValue in
@@ -67,6 +70,7 @@ struct LibraryInfoBatchDownloadSheet: View {
                     }) {
                         Text("Cancel")
                     }
+                    .accessibilityIdentifier("browse.batch.sheet.cancel")
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -79,6 +83,7 @@ struct LibraryInfoBatchDownloadSheet: View {
                     }) {
                         Text("Download")
                     }
+                    .accessibilityIdentifier("browse.batch.sheet.download")
                 }
             }
         }
@@ -88,7 +93,9 @@ struct LibraryInfoBatchDownloadSheet: View {
             } else {
                 Text("Will add \(selectedFormatBooks.count) book to shelf.")
             }
-        }.padding()
+        }
+        .padding()
+        .accessibilityIdentifier("browse.batch.sheet.summary")
     }
 }
 

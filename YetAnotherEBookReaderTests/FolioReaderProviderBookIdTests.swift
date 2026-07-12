@@ -71,6 +71,51 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertFalse(config.showCloseButton)
     }
 
+    func testUITestingConfigurationEnablesFolioCloseAndHorizontalPagingOnlyForMockLaunches() {
+        let normalConfig = EpubFolioReaderContainer.Configuration(
+            bookURL: readerInfo.url,
+            arguments: []
+        )
+        let uiTestingConfig = EpubFolioReaderContainer.Configuration(
+            bookURL: readerInfo.url,
+            arguments: [UITestingConfiguration.mockLibraryArgument]
+        )
+
+        XCTAssertFalse(normalConfig.showCloseButton)
+        XCTAssertTrue(normalConfig.canChangeScrollDirection)
+        XCTAssertTrue(uiTestingConfig.showCloseButton)
+        XCTAssertFalse(uiTestingConfig.canChangeScrollDirection)
+        XCTAssertEqual(
+            uiTestingConfig.scrollDirection,
+            UITestingConfiguration.mockFolioReaderScrollDirection
+        )
+        XCTAssertEqual(UITestingConfiguration.mockReaderType, .YabrEPUB)
+        XCTAssertEqual(UITestingConfiguration.mockEPUBResourceName, "UI Test Fixture")
+        XCTAssertEqual(
+            UITestingConfiguration.mockFolioReaderPreferences().currentScrollDirection,
+            UITestingConfiguration.mockFolioReaderScrollDirection.rawValue
+        )
+    }
+
+    func testUITestingEPUBFixtureCopiesToTheIsolatedBookCacheLocation() throws {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
+            .appendingPathComponent("FolioReaderFixtureTests-\(UUID().uuidString)", isDirectory: true)
+        let sourceURL = directory.appendingPathComponent("source.epub")
+        let destinationURL = directory.appendingPathComponent("cache/book.epub")
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("valid epub fixture bytes".utf8).write(to: sourceURL)
+        defer { try? fileManager.removeItem(at: directory) }
+
+        XCTAssertTrue(
+            UITestingMockLibraryFixture.installEPUBFixture(
+                at: destinationURL,
+                sourceURL: sourceURL
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: destinationURL), Data("valid epub fixture bytes".utf8))
+    }
+
     func testDSReaderFolioConfigurationForcesBottomMenuTabBar() {
         let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
 

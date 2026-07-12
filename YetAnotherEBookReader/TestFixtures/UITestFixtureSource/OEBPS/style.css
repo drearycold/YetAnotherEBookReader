@@ -1,0 +1,13 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.45;
+    margin: 5%;
+}
+
+h1 {
+    margin-bottom: 1.5em;
+}
+
+p {
+    margin: 0 0 1em;
+}

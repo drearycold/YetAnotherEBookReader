@@ -7,6 +7,26 @@
 
 import SwiftUI
 
+enum LibraryInfoAccessibilityID {
+    static func slug(_ value: String) -> String {
+        let normalized = value.lowercased().map { character in
+            character.isLetter || character.isNumber ? String(character) : "-"
+        }.joined()
+
+        return normalized
+            .split(separator: "-")
+            .joined(separator: "-")
+    }
+
+    static func category(_ categoryName: String) -> String {
+        "browse.category.\(slug(categoryName))"
+    }
+
+    static func categoryItem(_ categoryName: String, itemName: String) -> String {
+        "\(category(categoryName)).item.\(slug(itemName))"
+    }
+}
+
 struct LibraryInfoCategoryListView: View {
     @Environment(\.appContainer) var container
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
@@ -31,6 +51,7 @@ struct LibraryInfoCategoryListView: View {
                     #endif
                 }
                 .isDetailLink(false)
+                .accessibilityIdentifier(LibraryInfoAccessibilityID.category(summary.categoryName))
             }
         } header: {
             Text("Browse by Category")
@@ -59,6 +80,7 @@ struct CategoryDetailView: View {
                     filterReloadTask?.cancel()
                     triggerMerge()
                 })
+                .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).search")
                 .keyboardType(.webSearch)
                 .padding([.leading, .trailing], 24)
                 .onChange(of: viewModel.categoryFilterString) { newValue in
@@ -77,6 +99,7 @@ struct CategoryDetailView: View {
                             .foregroundColor(.gray)
                     }
                     .disabled(viewModel.categoryFilterString.isEmpty)
+                    .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).clear")
                     
                 }.padding([.leading, .trailing], 4)
             }
@@ -93,6 +116,8 @@ struct CategoryDetailView: View {
                 .environmentObject(unifiedSearchViewModel)
         }
         .navigationTitle("Category: \(categoryName)")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("\(LibraryInfoAccessibilityID.category(categoryName)).page")
         .onAppear {
             viewModel.categoryFilterString = ""
             viewModel.categoryFilter = ""

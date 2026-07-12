@@ -64,6 +64,7 @@ struct SettingsView: View {
                         serverRowBuilder(server: server, state: state)
                     }
                     .isDetailLink(false)
+                    .accessibilityIdentifier(server.name == "UI Test Server" ? "settings.server.ui-test" : "settings.server.\(server.id)")
                 }
                 .onDelete(perform: { indexSet in
                     guard let index = indexSet.first else { return }
@@ -112,6 +113,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .accessibilityIdentifier("screen.settings")
         .toolbar {
             ToolbarItem {
                 Button(action:{

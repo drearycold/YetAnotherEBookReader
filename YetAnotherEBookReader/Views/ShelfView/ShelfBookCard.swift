@@ -57,6 +57,10 @@ struct ShelfBookCard: View {
         ShelfLegacyTile(kind: tileKind, width: tileWidth) {
             ShelfLegacyCoverView(bookId: book.id, coverURL: book.coverURL, fallbackTitle: book.title)
                 .contentShape(Rectangle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(book.title)
+                .accessibilityIdentifier(book.title == "Mock Book Title" ? "shelf.book.mock" : "shelf.book.\(book.id)")
+                .accessibilityAddTraits(.isButton)
                 .onTapGesture {
                     onTap()
                 }
@@ -122,6 +126,7 @@ struct ShelfBookCard: View {
                                     Menu {
                                         Button(action: onDetails) {
                                             Label("Details", systemImage: "info.circle")
+                                                .accessibilityIdentifier(book.title == "Mock Book Title" ? "shelf.book.details.mock" : "shelf.book.details.\(book.id)")
                                         }
                                         
                                         Button(action: onRefresh) {
@@ -166,6 +171,7 @@ struct ShelfBookCard: View {
                                     .padding(.trailing, -16) // overlaps right edge by 16pt (from constraints)
                                     .padding(.bottom, 4)
                                     .accessibilityLabel("Options")
+                                    .accessibilityIdentifier(book.title == "Mock Book Title" ? "shelf.book.options.mock" : "shelf.book.options.\(book.id)")
                                     .accessibilityHint("Shows actions menu")
                                 }
                             }

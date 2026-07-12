@@ -39,6 +39,9 @@ No active branch-specific workstream is currently recorded.
   reduction, AppContainer introduction, protocol migration, and final deletion.
 - [Legacy Completed Tasks And Milestones](history/legacy-completed-milestones.md):
   Older completed checklists and cross-cutting historical context.
+- [UI Test Modernization](history/ui-test-modernization.md): offline mock
+  fixtures, Browse/search/category coverage, FolioReader flow, journey
+  consolidation, and performance-plan results.
 
 ## Active Constraints
 
@@ -58,3 +61,12 @@ xcrun simctl shutdown all
 ```bash
 xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
 ```
+
+## Current UI Test Note (2026-07-12)
+
+- The offline UI suite currently contains five journeys and 11 named
+  activities; full history and verification are archived in
+  [UI Test Modernization](history/ui-test-modernization.md).
+- Stable two-clone scheduling remains unresolved on Xcode 26.5/CoreSimulator.
+  Use the dedicated performance scheme/plan for experiments and do not treat
+  the accepted 180-second deviation as a guaranteed performance baseline.
