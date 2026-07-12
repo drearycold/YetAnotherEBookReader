@@ -20,7 +20,6 @@ class CalibreServerManager {
     private let serverInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServerInfo]>()
     private let helperConfigRequestBroadcaster = ManagerAsyncBroadcaster<String>()
     private var syncServerHelperConfigTask: Task<Void, Never>?
-
     var calibreServers = [String: CalibreServer]() {
         didSet {
             serverBroadcaster.send(calibreServers)
@@ -103,7 +102,7 @@ class CalibreServerManager {
             else { return }
             
             tempServers[calibreServer.id] = calibreServer
-            
+
             if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
                 configureCredentials(for: calibreServer.baseUrl, server: calibreServer)
                 configureCredentials(for: calibreServer.publicUrl, server: calibreServer)
@@ -157,7 +156,7 @@ class CalibreServerManager {
             logger.error("Failed to save DSReaderHelper: \(error.localizedDescription)")
         }
     }
-    
+
     func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
         calibreServers.filter {
             $0.value.isLocal == false
@@ -334,9 +333,11 @@ class CalibreServerManager {
                   config.dsreader_helper_prefs != nil else {
                 return
             }
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
-            dsreaderHelper.configurationData = task.data
+            var dsreaderHelper = dsreaderHelperServer
+            dsreaderHelper.port = task.port
+            dsreaderHelper.updateConfigurationDataPreservingAdvancedQA(task.data)
             updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
+            publishStateChange()
         } catch {
             logger.error("Failed to sync server helper configuration: \(error.localizedDescription)")
         }

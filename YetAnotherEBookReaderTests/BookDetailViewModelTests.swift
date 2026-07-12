@@ -210,11 +210,7 @@ class BookDetailViewModelTests: XCTestCase {
             servicePort: 8080,
             goodreadsSyncEnabled: true,
             dictViewerEnabled: false,
-            dictViewerLibraryName: "",
-            readingPositionColumnAllLibrary: false,
-            readingPositionColumnName: "",
-            readingPositionColumnPrefix: "",
-            readingPositionColumnUserSeparated: false
+            dictViewerLibraryName: ""
         )
         let dsPrefs = CalibreDSReaderHelperPrefs(plugin_prefs: .init(Options: options))
         

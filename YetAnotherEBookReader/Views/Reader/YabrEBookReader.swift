@@ -226,7 +226,12 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             let dictViewer = container.getCustomDictViewerNew(library: book.library)
             _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
-            readerConfiguration.enableMDictViewer = dictViewer.0
+            FolioAdvancedQAMenuConfiguration.apply(
+                to: readerConfiguration,
+                isAvailable: container.serverManager.queryServerDSReaderHelper(
+                    server: book.library.server
+                )?.isAdvancedQAReady == true
+            )
             readerConfiguration.userFontDescriptors = container.fontsManager.userFontInfos.mapValues { $0.descriptor }
             
 //            readerConfiguration.hideBars = true

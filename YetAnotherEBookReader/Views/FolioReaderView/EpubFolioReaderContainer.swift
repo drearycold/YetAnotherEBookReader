@@ -53,7 +53,12 @@ class EpubFolioReaderContainer: FolioReaderContainer {
     func open(bookReadingPosition: BookDeviceReadingPosition) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
-        self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
+        guard let calibreBook else { return }
+        self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(
+            readerConfig: self.readerConfig,
+            book: calibreBook,
+            resolverProvider: { [weak self] in self?.folioReader.makeReferenceResolver() }
+        )
         self.folioReader.delegate = self
         
         let position = bookReadingPosition.toFolioReaderReadPosition()

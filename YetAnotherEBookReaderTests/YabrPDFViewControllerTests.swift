@@ -132,16 +132,50 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(menuItems.first?.title, "HighlightA")
     }
 
-    func testBuildDefaultMenuItemsWithDictViewerIncludesDictionaryAction() {
+    func testBuildDefaultMenuItemsWithAdvancedQAReadyIncludesReaderQAAction() {
         let controller = SpyYabrPDFViewController()
         let dictViewer = UINavigationController(rootViewController: UIViewController())
-        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil, dictViewer: ("MDict", dictViewer))
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(
+            pdfURL: nil,
+            dictViewer: ("MDict", dictViewer),
+            advancedQAAvailable: true
+        )
 
         let menuItems = controller.buildDefaultMenuItems()
 
         XCTAssertEqual(menuItems.count, 2)
         XCTAssertEqual(menuItems[0].title, "HighlightA")
-        XCTAssertTrue(menuItems[1].title.contains("MDict"))
+        XCTAssertTrue(menuItems[1].title.contains("Reader QA"))
+    }
+
+    func testBuildDefaultMenuItemsHidesReaderQAWhenNotReadyDespiteDictionaryController() {
+        let controller = SpyYabrPDFViewController()
+        let dictViewer = UINavigationController(rootViewController: UIViewController())
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(
+            pdfURL: nil,
+            dictViewer: ("MDict", dictViewer),
+            advancedQAAvailable: false
+        )
+
+        XCTAssertEqual(controller.buildDefaultMenuItems().map(\.title), ["HighlightA"])
+    }
+
+    func testSelectionOverlayUsesAdvancedQAReadiness() {
+        let unavailable = SpyYabrPDFViewController()
+        unavailable.yabrPDFMetaSource = MockYabrPDFMetaSource(
+            pdfURL: nil,
+            advancedQAAvailable: false
+        )
+        unavailable.configureSelectionOverlay()
+        XCTAssertTrue(unavailable.annotationView.dictViewerButton.isHidden)
+
+        let ready = SpyYabrPDFViewController()
+        ready.yabrPDFMetaSource = MockYabrPDFMetaSource(
+            pdfURL: nil,
+            advancedQAAvailable: true
+        )
+        ready.configureSelectionOverlay()
+        XCTAssertFalse(ready.annotationView.dictViewerButton.isHidden)
     }
 
     func testHandleScaleChangeUpdatesLastScale() throws {
@@ -299,6 +333,7 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
     private let author: String
     private let key: String
     private let dictViewerValue: (String, UINavigationController)?
+    private let advancedQAAvailable: Bool
     private(set) var optionsValue: PDFPreferenceValue
     private(set) var updateCallCount = 0
 
@@ -308,6 +343,7 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
         author: String = "Test Author",
         key: String = "test-key",
         dictViewer: (String, UINavigationController)? = nil,
+        advancedQAAvailable: Bool = false,
         options: PDFPreferenceValue = PDFPreferenceValue()
     ) {
         self.pdfURLValue = pdfURL
@@ -315,6 +351,7 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
         self.author = author
         self.key = key
         self.dictViewerValue = dictViewer
+        self.advancedQAAvailable = advancedQAAvailable
         self.optionsValue = options
     }
 
@@ -360,6 +397,10 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
 
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)? {
         dictViewerValue
+    }
+
+    func yabrPDFAdvancedQAIsAvailable(_ view: YabrPDFView?) -> Bool {
+        advancedQAAvailable
     }
 
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {

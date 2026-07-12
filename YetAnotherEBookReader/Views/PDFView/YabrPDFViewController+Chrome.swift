@@ -70,6 +70,8 @@ extension YabrPDFViewController {
         self.annotationView.underlineButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
         self.annotationView.highlightButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
         self.annotationView.dictViewerButton.addTarget(nil, action: #selector(dictViewerAction(_:)), for: .primaryActionTriggered)
+        self.annotationView.dictViewerButton.isHidden =
+            yabrPDFMetaSource?.yabrPDFAdvancedQAIsAvailable(pdfView) != true
 
         NotificationCenter.default.addObserver(forName: .PDFViewSelectionChanged, object: pdfView, queue: nil) { [self] _ in
             guard let selection = pdfView.currentSelection,
@@ -93,7 +95,8 @@ extension YabrPDFViewController {
             let buttonSize = CGFloat(48)
             let padding = CGFloat(32)
 
-            let annotationViewSize = CGSize(width: buttonSize, height: CGFloat(annotationView.arrangedSubviews.count) * buttonSize)
+            let visibleButtonCount = annotationView.arrangedSubviews.filter { !$0.isHidden }.count
+            let annotationViewSize = CGSize(width: buttonSize, height: CGFloat(visibleButtonCount) * buttonSize)
 
             var annotationViewPosition = CGPoint(
                 x: selectionInView.maxX + padding / 2.0,
@@ -105,7 +108,7 @@ extension YabrPDFViewController {
             }
 
             if annotationViewPosition.y + annotationViewSize.height + padding > pdfView.frame.height {
-                annotationViewPosition.y = selectionInView.minY - CGFloat(annotationView.arrangedSubviews.count) * buttonSize - padding * 2.0
+                annotationViewPosition.y = selectionInView.minY - CGFloat(visibleButtonCount) * buttonSize - padding * 2.0
             }
 
             annotationView.frame = .init(origin: annotationViewPosition, size: annotationViewSize)

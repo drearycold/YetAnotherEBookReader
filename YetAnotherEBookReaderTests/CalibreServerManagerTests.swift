@@ -117,6 +117,37 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertEqual(retrieved?.port, 9090)
     }
 
+    func testAdvancedQAStatusPersistsAcrossManagerRecreation() throws {
+        let server = CalibreServer(uuid: UUID(), name: "QA Server", baseUrl: "http://localhost/qa",
+                                   hasPublicUrl: false, publicUrl: "", hasAuth: false,
+                                   username: "", password: "")
+        let status = AdvancedQAStatus(
+            enabled: true,
+            state: "ready",
+            retrievalScopes: .init(version: 1, defaultKind: "current_book", items: []),
+            libraries: [.init(libraryId: "lib1", displayName: "Library 1")]
+        )
+        try serverRepository.saveServer(server)
+        serverManager.calibreServers[server.id] = server
+        serverManager.updateServerDSReaderHelper(
+            serverId: server.id,
+            dsreaderHelper: .init(port: 8081, configurationData: Data(#"{"unknown_plugin_field":{"keep":true}}"#.utf8))
+        )
+        var helper = try XCTUnwrap(serverRepository.getDSReaderHelper(for: server.id))
+        helper.setAdvancedQAState(status: status, availability: .ready)
+        serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: helper)
+
+        let restored = CalibreServerManager(container: container, databaseService: databaseService,
+                                            serverRepository: serverRepository)
+        restored.populateServers()
+        let restoredHelper = try XCTUnwrap(restored.queryServerDSReaderHelper(server: server))
+        XCTAssertEqual(restoredHelper.advancedQAAvailability, .ready)
+        XCTAssertEqual(restoredHelper.advancedQAStatus, status)
+        let data = try XCTUnwrap(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNotNil(json["unknown_plugin_field"])
+    }
+
     func testReachabilityHelpers() throws {
         let server = CalibreServer(uuid: UUID(), name: "Reach Server", baseUrl: "http://localhost/reach", hasPublicUrl: true, publicUrl: "http://public/reach", hasAuth: false, username: "", password: "")
         
@@ -307,6 +338,12 @@ final class CalibreServerManagerTests: XCTestCase {
     func testSyncServerHelperConfigSubjectUpdatesConfiguration() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Helper Server", baseUrl: "http://helper-one", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         try installServerForHelperSync(server)
+        var persistedHelper = try XCTUnwrap(serverManager.queryServerDSReaderHelper(server: server))
+        persistedHelper.setAdvancedQAState(
+            status: .init(enabled: true, state: "ready"),
+            availability: .ready
+        )
+        serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: persistedHelper)
 
         let payload = try makeDSReaderHelperConfigurationData(servicePort: 7777)
         MockURLProtocol.requestHandler = { request in
@@ -322,10 +359,11 @@ final class CalibreServerManagerTests: XCTestCase {
         await Task.yield()
         serverManager.requestServerHelperConfigSync(serverId: server.id)
 
-        let helper = try await waitForHelperConfiguration(serverId: server.id)
+        let helper = try await waitForHelperConfiguration(serverId: server.id, servicePort: 7777)
         XCTAssertEqual(helper?.port, 8080)
-        XCTAssertEqual(helper?.configurationData, payload)
         XCTAssertEqual(helper?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7777)
+        XCTAssertEqual(helper?.advancedQAAvailability, .ready)
+        XCTAssertEqual(helper?.advancedQAStatus?.state, "ready")
     }
 
     func testSyncServerHelperConfigSubjectIgnoresRequestFailure() async throws {
@@ -348,7 +386,8 @@ final class CalibreServerManagerTests: XCTestCase {
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
         XCTAssertNotNil(helper)
-        XCTAssertNil(helper?.configurationData)
+        XCTAssertEqual(helper?.advancedQAAvailability, .unknown)
+        XCTAssertNil(helper?.configuration?.dsreader_helper_prefs)
     }
 
     func testSyncServerHelperConfigSubjectIgnoresConfigurationWithoutDSReaderPrefs() async throws {
@@ -403,8 +442,8 @@ final class CalibreServerManagerTests: XCTestCase {
         serverManager.requestServerHelperConfigSync(serverId: serverOne.id)
         serverManager.requestServerHelperConfigSync(serverId: serverTwo.id)
 
-        let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id)
-        let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id)
+        let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id, servicePort: 7101)
+        let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id, servicePort: 7202)
         XCTAssertEqual(helperOne?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7101)
         XCTAssertEqual(helperTwo?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7202)
     }
@@ -449,10 +488,13 @@ final class CalibreServerManagerTests: XCTestCase {
         return try JSONEncoder().encode(config)
     }
 
-    private func waitForHelperConfiguration(serverId: String) async throws -> CalibreServerDSReaderHelper? {
+    private func waitForHelperConfiguration(
+        serverId: String,
+        servicePort: Int
+    ) async throws -> CalibreServerDSReaderHelper? {
         for _ in 0..<20 {
             if let helper = serverRepository.getDSReaderHelper(for: serverId),
-               helper.configurationData != nil {
+               helper.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort == servicePort {
                 return helper
             }
             try await Task.sleep(nanoseconds: 50_000_000)

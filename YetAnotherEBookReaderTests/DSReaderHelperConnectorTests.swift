@@ -68,6 +68,165 @@ final class DSReaderHelperConnectorTests: XCTestCase {
         XCTAssertNotNil(session)
     }
 
+    func testAdvancedQAEndpointUsesV2RouteAndHelperPort() throws {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        let connector = DSReaderHelperConnector(
+            calibreServerService: service,
+            server: server,
+            dsreaderHelperServer: dsreaderHelperServer,
+            goodreadsSync: nil
+        )
+
+        let endpoint = try XCTUnwrap(connector.endpointAdvancedQA()?.url)
+        XCTAssertEqual(endpoint.port, 8081)
+        XCTAssertEqual(endpoint.path, "/dshelper/2/qa/query")
+
+        let statusEndpoint = try XCTUnwrap(connector.endpointAdvancedQAStatus()?.url)
+        XCTAssertEqual(statusEndpoint.port, 8081)
+        XCTAssertEqual(statusEndpoint.path, "/dshelper/2/qa/status")
+
+        let jobsEndpoint = try XCTUnwrap(connector.endpointAdvancedQASyncJobs(page: 2, pageSize: 999,
+                                                                              status: "error",
+                                                                              libraryId: "lib 1")?.url)
+        XCTAssertEqual(jobsEndpoint.path, "/dshelper/2/qa/sync-jobs")
+        XCTAssertEqual(URLComponents(url: jobsEndpoint, resolvingAgainstBaseURL: false)?.queryItems,
+                       [.init(name: "page", value: "2"), .init(name: "page_size", value: "100"),
+                        .init(name: "status", value: "error"), .init(name: "library_id", value: "lib 1")])
+
+        let detailEndpoint = try XCTUnwrap(connector.endpointAdvancedQASyncJob(jobId: 7, page: 3,
+                                                                               pageSize: 999)?.url)
+        XCTAssertEqual(detailEndpoint.path, "/dshelper/2/qa/sync-job/7")
+        XCTAssertTrue(detailEndpoint.query?.contains("page_size=500") == true)
+    }
+
+    func testAdvancedQAStatusDecodesSyncSummaryWithoutLegacyBooks() async throws {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            let json = #"{"enabled":false,"state":"disabled","libraries":[{"library_id":"lib1","display_name":"Library 1","sync":{"job_id":9,"status":"queued","total_books":3,"processed_books":1,"indexed_books":1,"error_count":0,"books":[{"book_id":1}]}}]}"#
+            return (response, Data(json.utf8))
+        }
+
+        let status = try await connector.queryAdvancedQAStatus()
+        XCTAssertEqual(status.libraries.first?.sync?.jobId, 9)
+        XCTAssertEqual(status.libraries.first?.sync?.processedBooks, 1)
+    }
+
+    func testAdvancedQASyncJobsAndDetailDecodePagination() async throws {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            if request.url?.path.contains("/sync-job/") == true {
+                return (response, Data(#"{"job":{"job_id":5,"library_id":"lib1","status":"error","total_books":2,"processed_books":2},"books":[{"book_id":4,"format":"EPUB","external_id":"doc-4","status":"error","error":"bad book"}],"pagination":{"page":1,"page_size":100,"total":1,"has_next":false}}"#.utf8))
+            }
+            return (response, Data(#"{"items":[{"job_id":5,"library_id":"lib1","display_name":"Library 1","status":"error","total_books":2,"processed_books":2}],"pagination":{"page":1,"page_size":50,"total":1,"has_next":false}}"#.utf8))
+        }
+
+        let jobs = try await connector.queryAdvancedQASyncJobs()
+        XCTAssertEqual(jobs.items.first?.jobId, 5)
+        XCTAssertFalse(jobs.pagination.hasNext)
+        let detail = try await connector.queryAdvancedQASyncJob(jobId: 5)
+        XCTAssertEqual(detail.books.first?.externalId, "doc-4")
+        XCTAssertEqual(detail.books.first?.error, "bad book")
+    }
+
+    func testAdvancedQAStatusControlsAvailability() async throws {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/dshelper/2/qa/status")
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            return (response, Data(#"{"enabled":true,"state":"ready","retrieval_scopes":{"version":1,"default":"current_book","items":[]}}"#.utf8))
+        }
+
+        let status = try await connector.queryAdvancedQAStatus()
+        XCTAssertTrue(status.isReady)
+        var helper = dsreaderHelperServer!
+        helper.setAdvancedQAState(status: status, availability: .ready)
+        XCTAssertTrue(helper.isAdvancedQAReady)
+        XCTAssertEqual(helper.advancedQAStatus?.retrievalScopes?.defaultKind, "current_book")
+
+        helper.setAdvancedQAState(status: .init(enabled: true, state: "unavailable"),
+                                  availability: .unavailable)
+        XCTAssertFalse(helper.isAdvancedQAReady)
+        helper.setAdvancedQAState(status: .init(enabled: false, state: "disabled"),
+                                  availability: .disabled)
+        XCTAssertFalse(helper.isAdvancedQAReady)
+    }
+
+    func testMissingAdvancedQAStatusEndpointMeansUnsupportedLegacyPlugin() async {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 404,
+                                           httpVersion: nil, headerFields: nil)!
+            return (response, Data())
+        }
+
+        let availability = await connector.detectAdvancedQAAvailability()
+        XCTAssertEqual(availability, .unsupported)
+    }
+
+    func testAdvancedQAUsesDeployedWireContractAndMapsResponse() async throws {
+        dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8081)
+        var testBook = CalibreBook(id: 42, library: library)
+        testBook.title = "Book"
+        let context = AdvancedQAContextBuilder.folio(
+            book: testBook,
+            selection: "term",
+            location: .init(page: 3, href: "chapter.xhtml", cfi: "epubcfi(/6/2)")
+        )
+        let payload = AdvancedQARequest(query: "Explain", mode: .explain,
+                                        responseLanguage: "zh-Hans",
+                                        readerContext: context, referenceCandidates: [],
+                                        retrievalScope: .init(kind: "selected_books", bookIds: [7, 8]))
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            let body = try XCTUnwrap(Self.bodyData(from: request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertNil(json["reader_context"])
+            XCTAssertEqual((json["book"] as? [String: Any])?["library_id"] as? String, "lib1")
+            XCTAssertEqual((json["book"] as? [String: Any])?["book_id"] as? Int, 42)
+            XCTAssertEqual((json["position"] as? [String: Any])?["spine_index"] as? Int, 2)
+            XCTAssertEqual(json["mode"] as? String, "explain")
+            XCTAssertEqual(json["response_language"] as? String, "zh-Hans")
+            XCTAssertEqual((json["retrieval_scope"] as? [String: Any])?["kind"] as? String, "selected_books")
+            XCTAssertEqual((json["retrieval_scope"] as? [String: Any])?["book_ids"] as? [Int], [7, 8])
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            return (response, Data(#"{"answer":"Mapped answer","effective_scope":{},"evidence":[{"source":"reference","title":"Chapter","text":"Evidence"}],"contexts":[],"citations":[],"warnings":[],"backend":{}}"#.utf8))
+        }
+
+        let response = try await connector.queryAdvancedQA(payload)
+        XCTAssertEqual(response.answer.text, "Mapped answer")
+        XCTAssertEqual(response.evidence.first?.content, "Evidence")
+    }
+
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
+
     func testUrlSessionAccessibleFromBackgroundThreadWithoutBlocking() {
         let connector = DSReaderHelperConnector(
             calibreServerService: service,

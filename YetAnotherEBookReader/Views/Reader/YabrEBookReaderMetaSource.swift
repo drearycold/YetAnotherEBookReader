@@ -101,6 +101,37 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)? {
         return (dictViewerItem, dictViewerNav)
     }
+
+    func yabrPDFAdvancedQAIsAvailable(_ view: YabrPDFView?) -> Bool {
+        AppContainer.shared?.serverManager.queryServerDSReaderHelper(
+            server: book.library.server
+        )?.isAdvancedQAReady == true
+    }
+
+    @MainActor func yabrPDFAdvancedQA(_ view: YabrPDFView?, selection: String) -> UINavigationController? {
+        guard let connector = AdvancedQAConnectorFactory.connector(for: book) else { return nil }
+        let pageIndex = view?.currentPage?.pageRef?.pageNumber
+        let page = pageIndex
+        let outline = pageIndex.flatMap { yabrPDFOutline(view, for: $0)?.label }
+        let visible = view?.currentPage?.string
+        let progress: Double? = page.flatMap { page -> Double? in
+            guard let count = view?.document?.pageCount, count > 0 else { return nil }
+            return Double(page) / Double(count)
+        }
+        let context = AdvancedQAContextBuilder.pdf(
+            book: book,
+            input: .init(selection: selection, page: page, chapter: outline,
+                         visibleText: visible, progress: progress)
+        )
+        let scopes = AppContainer.shared?.serverManager.queryServerDSReaderHelper(
+            server: book.library.server
+        )?.advancedQAStatus?.retrievalScopes
+        return AdvancedQAConnectorFactory.navigationController(
+            context: context,
+            retrievalScopes: scopes,
+            connector: connector
+        )
+    }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {
         return (AppContainer.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFBookmark() }

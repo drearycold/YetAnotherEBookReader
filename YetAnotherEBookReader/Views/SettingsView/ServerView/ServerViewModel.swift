@@ -49,6 +49,7 @@ class ServerViewModel: ObservableObject {
     @Published var configurationData: Data? = nil
     @Published var configuration: CalibreDSReaderHelperConfiguration? = nil
     @Published var helperStatus: String? = nil
+    @Published var advancedQAAvailability: AdvancedQAAvailability = .unknown
     @Published var configAlertItem: AlertItem? = nil
     @Published var dsreaderHelperInstructionPresenting: Bool = false
     
@@ -363,6 +364,8 @@ class ServerViewModel: ObservableObject {
         configuration = dsHelper.configuration
         self.dsreaderHelperServer = dsHelper
         portStr = dsHelper.port.description
+        advancedQAAvailability = container.serverManager.queryServerDSReaderHelper(server: server)?.advancedQAAvailability
+            ?? .unknown
     }
 
     func connectDSReader(server: CalibreServer) {
@@ -408,6 +411,9 @@ class ServerViewModel: ObservableObject {
 
                 self.configuration = updatedConfig
                 self.configurationData = updatedData
+                let detection = await connector.detectAdvancedQAStatus()
+                persistAdvancedQAStatusDetection(detection, server: server)
+                advancedQAAvailability = detection.availability
                 self.helperStatus = "Connected"
                 self.configAlertItem = AlertItem(id: "updateConfigAlert")
             } catch {
@@ -418,6 +424,9 @@ class ServerViewModel: ObservableObject {
                        config.dsreader_helper_prefs != nil {
                         self.configuration = config
                         self.configurationData = data.data
+                        let detection = await connector.detectAdvancedQAStatus()
+                        persistAdvancedQAStatusDetection(detection, server: server)
+                        advancedQAAvailability = detection.availability
                         self.helperStatus = "Connected"
                         self.configAlertItem = AlertItem(id: "updateConfigAlert")
                     } else {
@@ -425,6 +434,11 @@ class ServerViewModel: ObservableObject {
                         self.configAlertItem = AlertItem(id: "failedParseConfigAlert")
                     }
                 } catch {
+                    var helper = container.serverManager.queryServerDSReaderHelper(server: server)
+                        ?? dsreaderHelperServer
+                    helper.setAdvancedQAState(status: helper.advancedQAStatus, availability: .unavailable)
+                    container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: helper)
+                    advancedQAAvailability = .unavailable
                     self.helperStatus = "Failed to Connect"
                     self.configAlertItem = AlertItem(id: "failedConnectConfigAlert")
                 }
@@ -432,12 +446,27 @@ class ServerViewModel: ObservableObject {
         }
     }
 
+    private func persistAdvancedQAStatusDetection(_ detection: AdvancedQAStatusDetection,
+                                                  server: CalibreServer) {
+        var helper = container.serverManager.queryServerDSReaderHelper(server: server)
+            ?? dsreaderHelperServer
+        helper.setAdvancedQAState(status: detection.status, availability: detection.availability)
+        container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: helper)
+    }
+
     func updateDSReaderHelperConfig(server: CalibreServer) {
         guard let configuration = configuration else { return }
-        dsreaderHelperServer.configuration = configuration
-        dsreaderHelperServer.configurationData = configurationData
+        var helper = container.serverManager.queryServerDSReaderHelper(server: server)
+            ?? dsreaderHelperServer
+        helper.port = dsreaderHelperServer.port
+        if let configurationData {
+            helper.updateConfigurationDataPreservingAdvancedQA(configurationData)
+        } else {
+            helper.configuration = configuration
+        }
+        dsreaderHelperServer = helper
 
-        container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
+        container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: helper)
         helperStatus = nil
     }
 }

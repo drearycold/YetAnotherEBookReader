@@ -293,6 +293,8 @@
 		E71F352A2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */; };
 		E71F352B2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35292FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift */; };
 		E71F352B2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */; };
+		A9QA00010000000000000001 /* AdvancedQAModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00000000000000000001 /* AdvancedQAModels.swift */; };
+		A9QA00020000000000000001 /* AdvancedQAModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00000000000000000001 /* AdvancedQAModels.swift */; };
 		E71F352D2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F352C2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift */; };
 		E71F352D2FE3B39D007AB0B1 /* CalibreActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F352C2FE3B39D007AB0B1 /* CalibreActivityModels.swift */; };
 		E71F352E2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F352C2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift */; };
@@ -301,6 +303,7 @@
 		E71F35342FE3B3A9007AB0B1 /* Array+Chunks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35322FE3B3A9007AB0B1 /* Array+Chunks.swift */; };
 		E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */; };
 		E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */; };
+		A9QA00310000000000000001 /* AdvancedQATests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00300000000000000001 /* AdvancedQATests.swift */; };
 		E71F353B2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */; };
 		E71F353C2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */; };
 		E71F353E2FE4F307007AB0B1 /* CalibreServerRealm.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */; };
@@ -500,6 +503,10 @@
 		E7939151261F1A47004AB105 /* SupportInfoViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7939151261F1A47004AB106 /* SupportInfoViewModelTests.swift */; };
 		E7939151261F1A47004AB107 /* RecentShelfViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */; };
 		E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
+		A9QA00110000000000000001 /* AdvancedQAView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00100000000000000001 /* AdvancedQAView.swift */; };
+		A9QA00120000000000000001 /* AdvancedQAView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00100000000000000001 /* AdvancedQAView.swift */; };
+		A9QA00210000000000000001 /* AdvancedQAContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00200000000000000001 /* AdvancedQAContextBuilder.swift */; };
+		A9QA00220000000000000001 /* AdvancedQAContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9QA00200000000000000001 /* AdvancedQAContextBuilder.swift */; };
 		E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
 		E7A8EA302A75579100D5C95B /* DictViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */; };
 		E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA312A77674300D5C95B /* DictWebView.swift */; };
@@ -702,11 +709,13 @@
 		E71F35262FE3B389007AB0B1 /* CalibreSyncModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreSyncModels.swift; sourceTree = "<group>"; };
 		E71F35292FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "YabrPDFViewController+Sharing.swift"; sourceTree = "<group>"; };
 		E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrePluginModels.swift; sourceTree = "<group>"; };
+		A9QA00000000000000000001 /* AdvancedQAModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedQAModels.swift; sourceTree = "<group>"; };
 		E71F352C2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "YabrPDFViewController+Chrome.swift"; sourceTree = "<group>"; };
 		E71F352C2FE3B39D007AB0B1 /* CalibreActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreActivityModels.swift; sourceTree = "<group>"; };
 		E71F35322FE3B3A9007AB0B1 /* Array+Chunks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Chunks.swift"; sourceTree = "<group>"; };
 		E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreDataSplitTests.swift; sourceTree = "<group>"; };
 		E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSReaderHelperConnectorTests.swift; sourceTree = "<group>"; };
+		A9QA00300000000000000001 /* AdvancedQATests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedQATests.swift; sourceTree = "<group>"; };
 		E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmListExtensions.swift; sourceTree = "<group>"; };
 		E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerRealm.swift; sourceTree = "<group>"; };
 		E71F35402FE4F30B007AB0B1 /* CalibreLibraryRealm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryRealm.swift; sourceTree = "<group>"; };
@@ -823,6 +832,8 @@
 		E7939151261F1A47004AB106 /* SupportInfoViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportInfoViewModelTests.swift; sourceTree = "<group>"; };
 		E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentShelfViewModelTests.swift; sourceTree = "<group>"; };
 		E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictTabBarController.swift; sourceTree = "<group>"; };
+		A9QA00100000000000000001 /* AdvancedQAView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedQAView.swift; sourceTree = "<group>"; };
+		A9QA00200000000000000001 /* AdvancedQAContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedQAContextBuilder.swift; sourceTree = "<group>"; };
 		E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncycloView.swift; sourceTree = "<group>"; };
 		E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictViewModel.swift; sourceTree = "<group>"; };
 		E7A8EA312A77674300D5C95B /* DictWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictWebView.swift; sourceTree = "<group>"; };
@@ -1180,6 +1191,7 @@
 				A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */,
 				E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */,
 				E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */,
+				A9QA00300000000000000001 /* AdvancedQATests.swift */,
 				E71F357C2FE8CC8A007AB0B1 /* LibraryInfoBookListViewModelTests.swift */,
 				E71F358D2FE8E2C9007AB0B1 /* SectionShelfViewModelTests.swift */,
 				E71F35922FE8E881007AB0B1 /* ShelfDisplayModelsTests.swift */,
@@ -1403,6 +1415,8 @@
 				E7A8EA312A77674300D5C95B /* DictWebView.swift */,
 				E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */,
 				E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */,
+				A9QA00100000000000000001 /* AdvancedQAView.swift */,
+				A9QA00200000000000000001 /* AdvancedQAContextBuilder.swift */,
 				E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */,
 				2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */,
 				E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */,
@@ -1452,6 +1466,7 @@
 				E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */,
 				E71F34A02FD8FDE4007AB0B1 /* UnifiedSearchModels.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
+				A9QA00000000000000000001 /* AdvancedQAModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1684,6 +1699,7 @@
 				2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift in Sources */,
 				2A4787A127154E39009C8770 /* FontImportPicker.swift in Sources */,
 				E71F352A2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */,
+				A9QA00010000000000000001 /* AdvancedQAModels.swift in Sources */,
 				E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */,
 				E71F35482FE4F320007AB0B1 /* CalibreActivityLogEntry.swift in Sources */,
 				E7A8EA302A75579100D5C95B /* DictViewModel.swift in Sources */,
@@ -1841,6 +1857,8 @@
 				2A21BCE327017A9900825BBB /* Configuration.swift in Sources */,
 				E7226E212FED5410009D3BB3 /* ServerScopedRealmConfigurationProviding.swift in Sources */,
 				E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */,
+				A9QA00110000000000000001 /* AdvancedQAView.swift in Sources */,
+				A9QA00210000000000000001 /* AdvancedQAContextBuilder.swift in Sources */,
 				E71F35092FDFAD01007AB0B1 /* PDFAnnotationManager.swift in Sources */,
 				2AAB29942713CB690080B0CB /* SupportCalibreIntroView.swift in Sources */,
 				E71F353B2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */,
@@ -1937,6 +1955,7 @@
 				E7226E422FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift in Sources */,
 				E71F35D02FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift in Sources */,
 				E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */,
+				A9QA00310000000000000001 /* AdvancedQATests.swift in Sources */,
 				E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */,
 				A051200130D1000300000002 /* ReaderPreferenceRepositoryTests.swift in Sources */,
 				A062200130D2000300000001 /* ReadiumPreferenceValueTests.swift in Sources */,
@@ -1973,8 +1992,11 @@
 				E71F34C92FDBD76C007AB0B1 /* CategoryCacheRepository.swift in Sources */,
 				E7D315112BE5F8AF00A5B50A /* EncycloView.swift in Sources */,
 				E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */,
+				A9QA00120000000000000001 /* AdvancedQAView.swift in Sources */,
+				A9QA00220000000000000001 /* AdvancedQAContextBuilder.swift in Sources */,
 				E7D315132BE5F8AF00A5B50A /* MDictViewEdit.swift in Sources */,
 				E71F352B2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */,
+				A9QA00020000000000000001 /* AdvancedQAModels.swift in Sources */,
 				E7D315142BE5F8AF00A5B50A /* DictViewModel.swift in Sources */,
 				E71F35472FE4F320007AB0B1 /* CalibreActivityLogEntry.swift in Sources */,
 				E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */,

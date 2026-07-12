@@ -9,6 +9,13 @@ import Foundation
 import UIKit
 import FolioReaderKit
 
+enum FolioAdvancedQAMenuConfiguration {
+    static func apply(to configuration: FolioReaderConfig, isAvailable: Bool) {
+        configuration.enableMDictViewer = isAvailable
+        configuration.localizedMDictMenu = "Reader QA"
+    }
+}
+
 public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
     var pageDidAppearHandler: ((FolioReaderPage) -> Void)?
     var pageItemChangedHandler: ((Int) -> Void)?
@@ -39,14 +46,13 @@ public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
 
 public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
     let readerConfig: FolioReaderConfig
-//    let dictController = DictTabBarController()
     let dictNav = UINavigationController()
-    let dictTab = DictTabBarController()
     
-    init(readerConfig: FolioReaderConfig) {
+    init(readerConfig: FolioReaderConfig, book: CalibreBook, resolverProvider: @escaping () -> FolioReaderReferenceResolving?) {
         self.readerConfig = readerConfig
-        
-        dictNav.setViewControllers([dictTab], animated: false)
+        MainActor.assumeIsolated {
+            dictNav.setViewControllers([FolioAdvancedQAViewController(book: book, resolverProvider: resolverProvider)], animated: false)
+        }
         
         dictNav.navigationBar.isTranslucent = false
         dictNav.isToolbarHidden = true
@@ -70,6 +76,6 @@ public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
             .foregroundColor: textColor
         ]
         
-        dictTab.updateStyle(textColor, backgroundColor, navBackgroundColor, reader.nightMode)
+        dictNav.view.backgroundColor = backgroundColor
     }
 }

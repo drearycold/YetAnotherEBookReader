@@ -2,11 +2,63 @@
 
 ## Current Focus
 
-No active branch-specific workstream is currently recorded.
+- Advanced Reader QA v2 is implemented locally across the Yabr model/network/UI
+  boundary. The deployed DSReaderHelper wire protocol differs from the original
+  cross-project draft, so `DSReaderHelperConnector` adapts the internal
+  `ReaderSelectionContext` contract to the deployed top-level
+  `book/position/selection/retrieval_scope/external_contexts` request and maps
+  its response back into Yabr's `AdvancedQAResponse`.
 
 ## Current Branch Notes
 
-- No active branch-specific workstream is currently recorded.
+- PDF and Folio selection menus now open `AdvancedQAView`; Folio consumes the
+  UI-independent `FolioReaderReferenceResolving` API for locator/reference
+  candidates and caps reverse lookup at the selected/current page and CFI;
+  missing location fails closed without external reference evidence. PDF menu
+  and floating selection controls share the same persisted QA readiness gate.
+  Readium has a minimum-context builder but no new selection-menu
+  hook because the current Yabr Readium stack has no legacy dictionary entry to
+  replace.
+- Advanced QA availability is gated by `GET /dshelper/2/qa/status`, persisted
+  with each server's existing DSReaderHelper configuration Realm record; only `enabled == true` and
+  `state == "ready"` exposes the QA connector/menu. Configuration decoding is
+  tolerant of newer DSReaderHelper payloads that omit legacy reading-position
+  and Count Pages keys.
+- Retrieval scopes are discovered dynamically from status
+  `retrieval_scopes` contract v1 and cached with the status. `AdvancedQAView`
+  localizes capability keys with server fallback text, gates scopes by required
+  reader context, shows spoiler risk, persists the selected kind, and builds
+  related/selected-book parameters. Ready legacy status responses without the
+  capability object use an explicitly marked two-scope fallback.
+- Advanced QA status and the dynamic retrieval-scope contract are persisted in
+  `CalibreDSReaderHelperConfiguration` through the existing
+  `CalibreServerDSReaderHelperRealm.configurationData` boundary. App bootstrap
+  restores them before reader UI is used. The existing settings refresh button
+  and Helper configuration sync remain the explicit update paths; server
+  bootstrap performs no QA-specific network request. Status
+  `libraries[].sync` is decoded as a compact summary; an
+  Advanced QA details screen loads sync jobs and per-book details through the
+  paginated v2 endpoints, with a visible legacy fallback when those routes are
+  unavailable.
+- Advanced QA capability interpretation lives with the other plugin models in
+  `CalibrePluginModels.swift` (`CalibreServerDSReaderHelper` and
+  `CalibreLibraryPluginPreferences`). `CalibreServerManager` has no QA-specific
+  status dictionaries or query/update API; it only coordinates generic Helper
+  configuration persistence during bootstrap/config sync.
+- Generic Helper configuration refreshes preserve the separately detected
+  Advanced QA status fields instead of replacing the whole persisted payload.
+  Sync-job pagination and error handling live in dedicated settings ViewModels;
+  the SwiftUI views only render state and forward user actions.
+- QA requests send `mode` and the App's preferred BCP-47 response language.
+  DSReaderHelper owns mode-specific query construction so Cortex remains a
+  generic RAG backend; legacy requests without mode keep their original query.
+- Removed the obsolete `readingPositionColumn*` options from
+  `CalibreDSReaderHelperPrefs.Options`; older helper payloads containing those
+  keys remain decodable because Codable ignores unknown fields.
+- Live smoke on 2026-07-12 succeeded against Calibre
+  `192.168.11.65:8080` / DSReaderHelper `192.168.11.65:8081`; the QA response
+  included RAG contexts and citations. Focused build/tests should use
+  `/tmp/YabrDerivedData-AdvancedQA` while this work remains uncommitted.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).

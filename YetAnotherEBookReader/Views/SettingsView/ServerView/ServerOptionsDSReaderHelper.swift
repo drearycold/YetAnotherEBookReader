@@ -126,6 +126,31 @@ struct ServerOptionsDSReaderHelper: View {
                         }
                         
                     }
+
+                    NavigationLink {
+                        AdvancedQASyncStatusView(
+                            status: container.serverManager.queryServerDSReaderHelper(server: server)?.advancedQAStatus,
+                            connector: DSReaderHelperConnector(
+                                calibreServerService: container.calibreServerService,
+                                server: server,
+                                dsreaderHelperServer: viewModel.dsreaderHelperServer,
+                                goodreadsSync: nil
+                            )
+                        )
+                    } label: {
+                        HStack {
+                            Text("Advanced QA")
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(viewModel.advancedQAAvailability.title)
+                                if let detail = viewModel.advancedQAAvailability.detail {
+                                    Text(detail)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .disabled(viewModel.helperStatus != nil)
@@ -264,6 +289,209 @@ struct ServerOptionsDSReaderHelper: View {
             }
         }
     }
+}
+
+@MainActor
+private final class AdvancedQASyncStatusViewModel: ObservableObject {
+    let status: AdvancedQAStatus?
+    @Published private(set) var jobs: [AdvancedQASyncJob] = []
+    @Published private(set) var pagination: AdvancedQAPagination?
+    @Published private(set) var loading = false
+    @Published private(set) var legacyFallback = false
+    @Published private(set) var errorMessage: String?
+
+    private let connector: DSReaderHelperConnector
+
+    init(status: AdvancedQAStatus?, connector: DSReaderHelperConnector) {
+        self.status = status
+        self.connector = connector
+    }
+
+    func loadJobs(nextPage: Bool) async {
+        guard !loading else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let page = nextPage ? (pagination?.page ?? 0) + 1 : 1
+            let response = try await connector.queryAdvancedQASyncJobs(page: page)
+            jobs = nextPage ? jobs + response.items : response.items
+            pagination = response.pagination
+            legacyFallback = false
+            errorMessage = nil
+        } catch let error as CalibreAPIError {
+            if case .httpStatus(404, _) = error {
+                legacyFallback = true
+                jobs = []
+                errorMessage = nil
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct AdvancedQASyncStatusView: View {
+    @StateObject private var viewModel: AdvancedQASyncStatusViewModel
+    private let connector: DSReaderHelperConnector
+
+    init(status: AdvancedQAStatus?, connector: DSReaderHelperConnector) {
+        self.connector = connector
+        _viewModel = StateObject(wrappedValue: AdvancedQASyncStatusViewModel(
+            status: status,
+            connector: connector
+        ))
+    }
+
+    var body: some View {
+        List {
+            if let status = viewModel.status {
+                Section("Libraries") {
+                    ForEach(status.libraries) { library in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(library.displayName ?? library.libraryId)
+                            if let sync = library.sync {
+                                Text(syncSummary(sync))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let message = sync.errorMessage, !message.isEmpty {
+                                    Text(message).font(.caption2).foregroundStyle(.red)
+                                }
+                            } else {
+                                Text("No sync recorded").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section("Sync Jobs") {
+                ForEach(viewModel.jobs) { job in
+                    if let jobId = job.jobId {
+                        NavigationLink {
+                            AdvancedQASyncJobDetailView(connector: connector, jobId: jobId)
+                        } label: { jobRow(job) }
+                    } else {
+                        jobRow(job)
+                    }
+                }
+                if viewModel.pagination?.hasNext == true {
+                    Button("Load More") { Task { await viewModel.loadJobs(nextPage: true) } }
+                        .disabled(viewModel.loading)
+                }
+                if viewModel.legacyFallback {
+                    Text("Detailed job history requires a newer DSReaderHelper. Showing status summaries instead.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage).font(.caption).foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle("Advanced QA")
+        .task { await viewModel.loadJobs(nextPage: false) }
+        .refreshable { await viewModel.loadJobs(nextPage: false) }
+    }
+
+    @ViewBuilder private func jobRow(_ job: AdvancedQASyncJob) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(job.displayName ?? job.libraryId)
+            Text("\(job.status ?? "unknown") · \(job.processedBooks ?? 0)/\(job.totalBooks ?? 0) · indexed \(job.indexedBooks ?? 0)")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func syncSummary(_ sync: AdvancedQASyncSummary) -> String {
+        "\(sync.status ?? "unknown") · \(sync.processedBooks ?? 0)/\(sync.totalBooks ?? 0) · indexed \(sync.indexedBooks ?? 0)"
+    }
+
+}
+
+@MainActor
+private final class AdvancedQASyncJobDetailViewModel: ObservableObject {
+    let jobId: Int
+    @Published private(set) var detail: AdvancedQASyncJobDetailPage?
+    @Published private(set) var loading = false
+    @Published private(set) var errorMessage: String?
+
+    private let connector: DSReaderHelperConnector
+
+    init(connector: DSReaderHelperConnector, jobId: Int) {
+        self.connector = connector
+        self.jobId = jobId
+    }
+
+    func load(nextPage: Bool) async {
+        guard !loading else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let page = nextPage ? (detail?.pagination.page ?? 0) + 1 : 1
+            let response = try await connector.queryAdvancedQASyncJob(jobId: jobId, page: page)
+            if nextPage, let current = detail {
+                detail = .init(job: response.job, books: current.books + response.books,
+                               pagination: response.pagination)
+            } else {
+                detail = response
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct AdvancedQASyncJobDetailView: View {
+    @StateObject private var viewModel: AdvancedQASyncJobDetailViewModel
+
+    init(connector: DSReaderHelperConnector, jobId: Int) {
+        _viewModel = StateObject(wrappedValue: AdvancedQASyncJobDetailViewModel(
+            connector: connector,
+            jobId: jobId
+        ))
+    }
+
+    var body: some View {
+        List {
+            if let job = viewModel.detail?.job {
+                Section("Job") {
+                    detailRow("Status", job.status ?? "unknown")
+                    detailRow("Progress", "\(job.processedBooks ?? 0) / \(job.totalBooks ?? 0)")
+                    detailRow("Indexed", (job.indexedBooks ?? 0).description)
+                    detailRow("Errors", (job.errorCount ?? 0).description)
+                    if let message = job.errorMessage, !message.isEmpty { Text(message).foregroundStyle(.red) }
+                }
+            }
+            Section("Books") {
+                ForEach(viewModel.detail?.books ?? []) { book in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Book \(book.bookId)\(book.format.map { " · \($0)" } ?? "")")
+                        Text(book.status).font(.caption).foregroundStyle(.secondary)
+                        if let error = book.error, !error.isEmpty { Text(error).font(.caption2).foregroundStyle(.red) }
+                    }
+                }
+                if viewModel.detail?.pagination.hasNext == true {
+                    Button("Load More") { Task { await viewModel.load(nextPage: true) } }
+                        .disabled(viewModel.loading)
+                }
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage).font(.caption).foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle("Sync Job \(viewModel.jobId)")
+        .task { await viewModel.load(nextPage: false) }
+    }
+
+    @ViewBuilder private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }
+    }
+
 }
 
 struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {

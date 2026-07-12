@@ -293,6 +293,10 @@ protocol YabrPDFMetaSource {
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFPreferenceValue)
     
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)?
+
+    func yabrPDFAdvancedQAIsAvailable(_ view: YabrPDFView?) -> Bool
+
+    @MainActor func yabrPDFAdvancedQA(_ view: YabrPDFView?, selection: String) -> UINavigationController?
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark]
     
@@ -313,4 +317,14 @@ protocol YabrPDFMetaSource {
     func yabrPDFReferenceText(_ view: YabrPDFView?, set refText: String?)
     
     func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T
+}
+
+extension YabrPDFMetaSource {
+    func yabrPDFAdvancedQAIsAvailable(_ view: YabrPDFView?) -> Bool {
+        false
+    }
+
+    @MainActor func yabrPDFAdvancedQA(_ view: YabrPDFView?, selection: String) -> UINavigationController? {
+        nil
+    }
 }

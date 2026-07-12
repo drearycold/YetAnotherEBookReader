@@ -13,13 +13,11 @@ extension YabrPDFViewController {
 
         var menuItems = [highlightMenuItem]
 
-        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
-            let dictViewerItem = UIMenuItem(title: "MDict", image: UIImage(systemName: "character.book.closed")) { [weak self] _ in
+        if yabrPDFMetaSource?.yabrPDFAdvancedQAIsAvailable(pdfView) == true {
+            let dictViewerItem = UIMenuItem(title: "Reader QA", image: UIImage(systemName: "questionmark.bubble")) { [weak self] _ in
                 self?.dictViewerAction(self)
             }
-//            menuItems.append(UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction)))
             menuItems.append(dictViewerItem)
-            dictViewer.1.loadViewIfNeeded()
         }
 
         return menuItems
@@ -43,12 +41,8 @@ extension YabrPDFViewController {
 
     @objc func dictViewerAction(_ sender: Any?) {
         guard let selectedText = pdfView.currentSelection?.string,
-              let (_, dictViewer) = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
-
-        print("\(#function) word=\(selectedText)")
-        dictViewer.title = selectedText
-
-        present(dictViewer, animated: true)
+              let controller = yabrPDFMetaSource?.yabrPDFAdvancedQA(pdfView, selection: selectedText) else { return }
+        present(controller, animated: true)
     }
 }
 
