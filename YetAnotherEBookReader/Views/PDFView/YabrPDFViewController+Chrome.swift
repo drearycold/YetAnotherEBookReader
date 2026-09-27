@@ -325,7 +325,6 @@ extension YabrPDFViewController {
 
     private func configureNavigationItems() {
         navigationItem.setLeftBarButtonItems([
-            UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
             UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { _ in
                 let navigationController = YabrPDFNavigationPageVC()
                 navigationController.pdfViewController = self

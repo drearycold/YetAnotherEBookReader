@@ -257,17 +257,6 @@ extension YabrPDFViewController {
         updateReadingProgress()
     }
 
-    @objc func finishReading(sender: UIBarButtonItem) {
-        updatePageViewPositionHistory()
-        updateReadingProgress()
-
-        self.dismiss(animated: true) {
-            self.pdfView.document = nil
-            self.yabrPDFMetaSource = nil
-            self.tocList.removeAll()
-        }
-    }
-
     func updateReadingProgress() {
         var position = [String: Any]()
 

@@ -53,6 +53,15 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(PDFPageWithBackground.fillColor, options.fillColor)
     }
 
+    func testNavigationBarHasNoCloseButton() {
+        let controller = SpyYabrPDFViewController()
+        controller.loadViewIfNeeded()
+
+        let items = controller.navigationItem.leftBarButtonItems ?? []
+        XCTAssertFalse(items.isEmpty)
+        XCTAssertFalse(items.contains { $0.image == UIImage(systemName: "xmark.circle") }, "The reader workspace owns closing; YabrPDF must not add its own close button.")
+    }
+
     func testApplyPreferencesMapsReaderEnginePreferencesToPDFOptions() {
         let controller = SpyYabrPDFViewController()
         let preferences = ReaderEnginePreferences(themeMode: 3, scroll: true, scrollDirection: 1)
