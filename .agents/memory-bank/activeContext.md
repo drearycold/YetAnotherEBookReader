@@ -2,11 +2,31 @@
 
 ## Current Focus
 
-No active branch-specific workstream is currently recorded.
+`codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
+placement (content right of center, top offset / drift after page turns).
 
 ## Current Branch Notes
 
-- No active branch-specific workstream is currently recorded.
+- Viewport fix landed (uncommitted): `PDFPageViewportFitter` (pure, in
+  `Views/PDFView/Managers/`) computes scale + per-axis page/view anchors inside
+  the readable rect (`pdfView.bounds` minus safe area, so the top margin starts
+  below the nav bar; text is top-aligned even when PDFKit would center a page
+  shorter than the view). `YabrPDFView.applyViewport` drives the internal
+  `UIScrollView` `contentOffset`, extending `contentInset` when the anchor is
+  outside PDFKit's scrollable range. Fit and history-restore both use it; the
+  bottom-right jump, `go(to:)` compensation passes, and DEBUG page annotations
+  are gone. `marginOffset` moved from detection into the fitter.
+- Tests: `YabrPDFMarginCropTests` (window-hosted, synthetic + generated
+  book-like PDFs, real next/prev buttons) and `PDFPageViewportFitterTests`.
+  Remaining strict `XCTExpectFailure`s mark open detection bugs: short first
+  line of a page (row-density threshold drops it, text sits one line higher),
+  and the 25% scan limit (`lineNumMax / 4`) leaving narrow/chapter-opening
+  pages uncropped. Probe tests document PDFKit `go(to:)` quirks.
+- Persisted `pageOffsetX/Y` keep the visible upper-left semantics
+  (`getPagePoint` now measures `convert(bounds, to: page)`).
+  `rememberInPagePosition` is still never read by navigation code.
+- On `main`, `ReadingPositionViewModelTests.testDetailViewModelReadSelectedFormatOpensReaderPresentation`
+  already fails; commit `8437dcaf` on `codex/dsreader-advanced-qa-integration` fixes it.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).

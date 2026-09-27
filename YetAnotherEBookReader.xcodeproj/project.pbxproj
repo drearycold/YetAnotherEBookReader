@@ -51,6 +51,8 @@
 		2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
 		2AC3EC3E25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */; };
 		2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */; };
+		2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */; };
+		2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */; };
 		2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265426A920E10037FCB4 /* YabrData.swift */; };
 		2ACE265D26A97BE70037FCB4 /* ImageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */; };
 		2AD38F8726D637B70053D01D /* ReadingPositionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */; };
@@ -272,6 +274,8 @@
 		E71F35182FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */; };
 		E71F35182FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */; };
 		E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */; };
+		2AC9D74430A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */; };
+		2AC9D74530A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */; };
 		E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */; };
 		E71F351B2FE3B351007AB0B1 /* ReadingPositionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */; };
 		E71F351C2FE3B351007AB0B1 /* ReadingPositionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */; };
@@ -607,6 +611,8 @@
 		2AC3EC3F25BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E7F000012026071100000001 /* UITestPerformance.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = UITestPerformance.xctestplan; path = UITestPerformance.xctestplan; sourceTree = "<group>"; };
 		2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewControllerTests.swift; sourceTree = "<group>"; };
+		2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFMarginCropTests.swift; sourceTree = "<group>"; };
+		2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageViewportFitterTests.swift; sourceTree = "<group>"; };
 		2ACE265426A920E10037FCB4 /* YabrData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrData.swift; sourceTree = "<group>"; };
 		2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageRequest.swift; sourceTree = "<group>"; };
 		2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionDetailView.swift; sourceTree = "<group>"; };
@@ -691,6 +697,7 @@
 		E71F35112FDFAD10007AB0B1 /* YabrPDFSearchListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSearchListCell.swift; sourceTree = "<group>"; };
 		E71F35142FDFAD15007AB0B1 /* YabrPDFSearchList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSearchList.swift; sourceTree = "<group>"; };
 		E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFMarginCropController.swift; sourceTree = "<group>"; };
+		2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageViewportFitter.swift; sourceTree = "<group>"; };
 		E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreCoreModels.swift; sourceTree = "<group>"; };
 		E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionModels.swift; sourceTree = "<group>"; };
 		E71F351D2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreHighlightStyle.swift; sourceTree = "<group>"; };
@@ -1177,6 +1184,8 @@
 				E7939151261F1A47004AB106 /* SupportInfoViewModelTests.swift */,
 				E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */,
 				2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */,
+				2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */,
+				2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */,
 				A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */,
 				E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */,
 				E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */,
@@ -1331,6 +1340,7 @@
 				E71F350B2FDFAD03007AB0B1 /* PDFBookmarkManager.swift */,
 				E71F350E2FDFAD05007AB0B1 /* PDFSearchController.swift */,
 				E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */,
+				2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -1812,6 +1822,7 @@
 				E7804CD029D28B360066BD43 /* LibraryInfoBookListView.swift in Sources */,
 				E71F350F2FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35182FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
+				2AC9D74430A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */,
 				E71F35212FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
 				E71F35182FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
 				E71F35242FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
@@ -1933,6 +1944,8 @@
 				A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */,
 				E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */,
 				2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */,
+				2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */,
+				2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */,
 				E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */,
 				E7226E422FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift in Sources */,
 				E71F35D02FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift in Sources */,
@@ -2107,6 +2120,7 @@
 				2ADCD7ED26F4B96200FBAE11 /* EpubFolioReaderContainer.swift in Sources */,
 				E71F35102FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
+				2AC9D74530A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */,
 				E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
 				E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
 				A074200130D4000300000004 /* PDFPreferenceAdapter.swift in Sources */,

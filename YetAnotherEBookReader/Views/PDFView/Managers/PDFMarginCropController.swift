@@ -37,14 +37,16 @@ class PDFMarginCropController {
         visibleContentBounds[key]
     }
 
-    func visibleBounds(for page: PDFPage, key: PageVisibleContentKey, marginOffset: Double) -> CGRect {
+    /// Detected content bounds, relative to the crop box with a top-down y axis.
+    /// `marginOffset` is applied by `PDFPageViewportFitter`, not here, so the cache
+    /// stays valid when it changes.
+    func visibleBounds(for page: PDFPage, key: PageVisibleContentKey) -> CGRect {
         if visibleContentBounds[key] == nil {
             visibleContentBounds[key] = analyzeVisibleContents(
                 pdfPage: page,
                 readingDirection: key.readingDirection,
                 hMarginDetectStrength: key.hMarginDetectStrength,
-                vMarginDetectStrength: key.vMarginDetectStrength,
-                marginOffset: marginOffset
+                vMarginDetectStrength: key.vMarginDetectStrength
             )
         }
 
@@ -58,8 +60,7 @@ class PDFMarginCropController {
         document: PDFDocument?,
         readingDirection: PDFReadDirection,
         hMarginDetectStrength: Double,
-        vMarginDetectStrength: Double,
-        marginOffset: Double
+        vMarginDetectStrength: Double
     ) {
         let nextKey = PageVisibleContentKey(
             pageNumber: currentPageNumber + 1,
@@ -87,8 +88,7 @@ class PDFMarginCropController {
                         pdfPage: $0,
                         readingDirection: readingDirection,
                         hMarginDetectStrength: hMarginDetectStrength,
-                        vMarginDetectStrength: vMarginDetectStrength,
-                        marginOffset: marginOffset
+                        vMarginDetectStrength: vMarginDetectStrength
                     )
                 }
                 : nil
@@ -99,8 +99,7 @@ class PDFMarginCropController {
                         pdfPage: $0,
                         readingDirection: readingDirection,
                         hMarginDetectStrength: hMarginDetectStrength,
-                        vMarginDetectStrength: vMarginDetectStrength,
-                        marginOffset: marginOffset
+                        vMarginDetectStrength: vMarginDetectStrength
                     )
                 }
                 : nil
@@ -181,8 +180,7 @@ class PDFMarginCropController {
         pdfPage: PDFPage,
         readingDirection: PDFReadDirection,
         hMarginDetectStrength: Double,
-        vMarginDetectStrength: Double,
-        marginOffset: Double
+        vMarginDetectStrength: Double
     ) -> PageVisibleContentValue {
         let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
@@ -258,8 +256,6 @@ class PDFMarginCropController {
                     ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1),
                     hMarginDetectStrength: vMarginDetectStrength
                 )
-                leading.0 += Int(marginOffset / 100.0 * imageMediaBox.size.width)
-                trailing.0 += Int(marginOffset / 100.0 * imageMediaBox.size.width)
             case .TtB_RtL:
                 leading = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -297,8 +293,6 @@ class PDFMarginCropController {
                     ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1),
                     hMarginDetectStrength: hMarginDetectStrength
                 )
-                top.0 += Int(marginOffset / 100.0 * imageMediaBox.size.height)
-                bottom.0 += Int(marginOffset / 100.0 * imageMediaBox.size.height)
             }
         }
 

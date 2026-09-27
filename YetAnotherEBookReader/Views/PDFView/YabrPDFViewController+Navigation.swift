@@ -190,175 +190,68 @@ extension YabrPDFViewController {
 
         addBlankSubView(page: curPage)
 
-        [PDFDisplayBox.mediaBox, PDFDisplayBox.cropBox, PDFDisplayBox.trimBox, PDFDisplayBox.bleedBox, PDFDisplayBox.artBox].forEach {
-            let bounds = curPage.bounds(for: $0)
-            print("\(#function) boundsForBox box=\($0.rawValue) bounds=\(bounds)")
-        }
-        let boundsForCropBox = curPage.bounds(for: .cropBox)
-        let boundsForMediaBox = curPage.bounds(for: .mediaBox)
         let boundForVisibleContentKey = PageVisibleContentKey(
             pageNumber: curPageNum,
             readingDirection: pdfOptions.readingDirection,
             hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
             vMarginDetectStrength: pdfOptions.vMarginDetectStrength
         )
-
-        let boundForVisibleContent = marginCropController.visibleBounds(
-            for: curPage,
-            key: boundForVisibleContentKey,
-            marginOffset: pdfOptions.marginOffset
-        )
+        let boundForVisibleContent = marginCropController.visibleBounds(for: curPage, key: boundForVisibleContentKey)
 
         marginCropController.preAnalyzeAdjacentPages(
             currentPageNumber: curPageNum,
             document: pdfView.document,
             readingDirection: pdfOptions.readingDirection,
             hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength,
-            marginOffset: pdfOptions.marginOffset
+            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
         )
-        print("\(#function) pageVisibleContentBounds.count=\(marginCropController.visibleContentBounds.count)")
 
-        if let pageViewPosition = getPageViewPositionHistory(curPageNum),
+        let pageHistory = getPageViewPositionHistory(curPageNum)
+        if let pageViewPosition = pageHistory,
            pageViewPosition.scaler > 0,
-           pageViewPosition.viewSize == pdfView.frame.size {
-            let lastDest = PDFDestination(
-                page: curPage,
-                at: pageViewPosition.point
+           pageViewPosition.viewSize == pdfView.frame.size,
+           !pageViewPosition.point.x.isNaN,
+           !pageViewPosition.point.y.isNaN {
+            pdfView.applyViewport(
+                PDFPageViewportFitter.restore(
+                    scale: pageViewPosition.scaler,
+                    upperLeft: pageViewPosition.point,
+                    viewBounds: pdfView.bounds
+                ),
+                on: curPage
             )
-            lastDest.zoom = pageViewPosition.scaler
-            print("\(#function) displayMode=\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
-
-            let bottomRight = PDFDestination(
-                page: curPage,
-                at: CGPoint(x: lastDest.point.x + boundsForCropBox.width, y: lastDest.point.y + boundsForCropBox.height)
-            )
-            bottomRight.zoom = 1.0
-
-            pdfView.scaleFactor = pageViewPosition.scaler
-
-            pdfView.go(to: bottomRight)
-            pdfView.go(to: lastDest)
             return
         }
 
-        guard pdfView.scaleFactor > 0 else { return }
-
-        let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
-        let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
-        print("\(#function) curScale scaleFactor=\(pdfView.scaleFactor) visibleWidthRatio=\(visibleWidthRatio) visibleHeightRatio=\(visibleHeightRatio) boundsForCropBox=\(boundsForCropBox) boundForVisibleContent=\(boundForVisibleContent)")
-
-        let newDestX = boundForVisibleContent.minX + boundsForMediaBox.minX + 2
-        let newDestY = boundsForCropBox.height - boundForVisibleContent.minY + 2
-
-        let visibleRectInView = pdfView.convert(
-            CGRect(
-                x: newDestX,
-                y: newDestY,
-                width: boundsForCropBox.width * visibleWidthRatio,
-                height: boundsForCropBox.height * visibleHeightRatio
-            ),
-            from: curPage
-        )
-
-        print("\(#function) pdfView pdfView.frame=\(pdfView.frame)")
-        print("\(#function) initialRect visibleRectInView=\(visibleRectInView)")
-
-        let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
-        let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
-        let scaleFactor = { () -> CGFloat in
-            if pdfOptions.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
-                switch pdfOptions.selectedAutoScaler {
-                case .Width:
-                    return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
-                case .Height:
-                    return pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                default:
-                    return min(
-                        pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
-                        pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                    )
-                }
-            } else {
-                return pdfOptions.lastScale
-            }
-        }()
-        pdfView.scaleFactor = scaleFactor
-
-        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-
-        var newDestPoint = CGPoint(
-            x: newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
-            y: newDestY + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
-        )
-
-        if let pageViewPositionHistory = getPageViewPositionHistory(curPageNum) {
-            if pageViewPositionHistory.point.x.isNaN == false {
-                newDestPoint.x = pageViewPositionHistory.point.x
-            }
-            if pageViewPositionHistory.point.y.isNaN == false {
-                newDestPoint.y = pageViewPositionHistory.point.y
-            }
-            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory.point.x)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory.point.y)")
-        } else {
-            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)")
-        }
-
-        let newDest = PDFDestination(page: curPage, at: newDestPoint)
-        let initialDestPoint = pdfView.currentDestination!.point
-
-        print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        let bottomRight = PDFDestination(
-            page: curPage,
-            at: CGPoint(x: boundsForMediaBox.width, y: 0)
-        )
-
-        pdfView.go(to: bottomRight)
-        print("\(#function) BEFORE POINT BOTTOM RIGHT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        pdfView.go(to: newDest)
-
-        var afterPointX = pdfView.currentDestination!.point.x
-        var afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
-
-        print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        let newDestForCompensation = PDFDestination(
-            page: curPage,
-            at: CGPoint(
-                x: newDest.point.x - (afterPointX - newDest.point.x),
-                y: newDest.point.y - (afterPointY - newDest.point.y) - (initialDestPoint.y < 0 ? initialDestPoint.y : 0)
+        let boundsForCropBox = curPage.bounds(for: .cropBox)
+        var fit = PDFPageViewportFitter.fit(
+            PDFPageViewportFitter.Input(
+                contentBounds: PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox),
+                pageBounds: boundsForCropBox,
+                readableRect: pdfView.bounds.inset(by: pdfView.safeAreaInsets),
+                autoScaler: pdfOptions.selectedAutoScaler,
+                hMarginPercent: pdfOptions.hMarginAutoScaler,
+                vMarginPercent: pdfOptions.vMarginAutoScaler,
+                customScale: pdfOptions.lastScale,
+                readingDirection: pdfOptions.readingDirection,
+                marginOffsetPercent: pdfOptions.marginOffset
             )
         )
 
-        pdfView.go(to: bottomRight)
-        pdfView.go(to: newDestForCompensation)
-        afterPointX = pdfView.currentDestination!.point.x
-        afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
-        print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
-        print("\(#function) scaleFactor=\(pdfOptions.lastScale)")
+        // Keep the axis the reader already positioned (saved position, rotation, or
+        // an options change that only reset the other axis).
+        if let pageHistory {
+            if !pageHistory.point.x.isNaN {
+                fit.pageAnchor.x = pageHistory.point.x
+                fit.viewAnchor.x = pdfView.bounds.minX
+            }
+            if !pageHistory.point.y.isNaN {
+                fit.pageAnchor.y = pageHistory.point.y
+                fit.viewAnchor.y = pdfView.bounds.minY
+            }
+        }
 
-        #if DEBUG
-        let newDestAnnotation = PDFAnnotation(
-            bounds: .init(origin: newDest.point, size: .init(width: 4, height: 4)),
-            forType: .circle,
-            withProperties: nil
-        )
-        curPage.addAnnotation(newDestAnnotation)
-
-        let newDestForCompensationAnnotation = PDFAnnotation(
-            bounds: .init(origin: newDestForCompensation.point, size: .init(width: 4, height: 4)),
-            forType: .square,
-            withProperties: nil
-        )
-        newDestForCompensationAnnotation.color = .red
-        curPage.addAnnotation(newDestForCompensationAnnotation)
-
-        print("\(#function) newDestPoint=\(newDest.point) cropBox=\(curPage.bounds(for: .cropBox)) mediaBox=\(curPage.bounds(for: .mediaBox))")
-        #endif
+        pdfView.applyViewport(fit, on: curPage)
 
         updatePageViewPositionHistory()
         updateReadingProgress()
@@ -422,25 +315,14 @@ extension YabrPDFViewController {
     }
 
     func getPagePoint() -> (Int, PageViewPosition)? {
-        guard let curDest = pdfView.currentDestination,
-              let curDestPage = curDest.page,
-              let curPage = pdfView.page(for: .zero, nearest: true),
+        guard let curPage = pdfView.page(for: .zero, nearest: true),
               let curPageNum = curPage.pageRef?.pageNumber
         else { return nil }
 
-        var curDestPoint = curDest.point
-        if curPage != curDestPage {
-            let curDestPointInView = pdfView.convert(curDestPoint, from: curDestPage)
-            let curDestPointInCurPage = pdfView.convert(curDestPointInView, to: curPage)
-            curDestPoint = curDestPointInCurPage
-        }
-
-        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-
-        let pointUpperLeft = CGPoint(
-            x: curDestPoint.x,
-            y: curDestPoint.y + viewFrameInPDF.height
-        )
+        // Measure the visible rect directly; same upper-left semantics as the
+        // persisted pageOffsetX/Y.
+        let visibleRect = pdfView.convert(pdfView.bounds, to: curPage)
+        let pointUpperLeft = CGPoint(x: visibleRect.minX, y: visibleRect.maxY)
 
         return (
             curPageNum,

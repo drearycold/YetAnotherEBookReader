@@ -37,6 +37,11 @@ class YabrPDFView: PDFView {
     var highlights = [UUID: [HighlightValue]]()
     var highlightTapped: UUID?
     var highlightIsEditing = false
+
+    /// Content inset added on top of PDFKit's own so a viewport anchor outside the
+    /// normally scrollable range (e.g. top-aligning a page shorter than the view)
+    /// can be reached.
+    private var viewportExtraInset = UIEdgeInsets.zero
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         let could = super.canPerformAction(action, withSender: sender)
@@ -521,6 +526,82 @@ extension YabrPDFView {
         }))
         
         return menuItems
+    }
+}
+
+extension YabrPDFView {
+    var documentScrollView: UIScrollView? {
+        func find(in view: UIView) -> UIScrollView? {
+            for subview in view.subviews {
+                if let scrollView = subview as? UIScrollView { return scrollView }
+                if let found = find(in: subview) { return found }
+            }
+            return nil
+        }
+        return find(in: self)
+    }
+
+    /// Places `fit.pageAnchor` of `page` at `fit.viewAnchor` by driving the internal
+    /// scroll view directly. `go(to:)` is not used: its result depends on the safe
+    /// area and on the previous scroll position, and it resolves out-of-range
+    /// targets inconsistently.
+    func applyViewport(_ fit: PDFPageViewportFit, on page: PDFPage) {
+        scaleFactor = fit.scale
+        layoutIfNeeded()
+
+        guard let scrollView = documentScrollView else {
+            // Approximate fallback; PDFKit has always hosted pages in a scroll view.
+            go(to: PDFDestination(page: page, at: fit.pageAnchor))
+            return
+        }
+
+        resetViewportExtraInset(scrollView)
+
+        // Two passes: the second absorbs any relayout caused by the inset change.
+        for _ in 0..<2 {
+            let current = convert(fit.pageAnchor, from: page)
+            let dx = current.x - fit.viewAnchor.x
+            let dy = current.y - fit.viewAnchor.y
+            guard abs(dx) > 0.25 || abs(dy) > 0.25 else { return }
+
+            let target = CGPoint(x: scrollView.contentOffset.x + dx, y: scrollView.contentOffset.y + dy)
+            extendInsetIfNeeded(scrollView, toReach: target)
+            scrollView.setContentOffset(target, animated: false)
+            layoutIfNeeded()
+        }
+    }
+
+    private func resetViewportExtraInset(_ scrollView: UIScrollView) {
+        guard viewportExtraInset != .zero else { return }
+        var inset = scrollView.contentInset
+        inset.top -= viewportExtraInset.top
+        inset.left -= viewportExtraInset.left
+        inset.bottom -= viewportExtraInset.bottom
+        inset.right -= viewportExtraInset.right
+        scrollView.contentInset = inset
+        viewportExtraInset = .zero
+    }
+
+    private func extendInsetIfNeeded(_ scrollView: UIScrollView, toReach target: CGPoint) {
+        let adjusted = scrollView.adjustedContentInset
+        let size = scrollView.bounds.size
+        var extra = UIEdgeInsets.zero
+        extra.top = max(0, -adjusted.top - target.y)
+        extra.left = max(0, -adjusted.left - target.x)
+        extra.bottom = max(0, target.y - (scrollView.contentSize.height + adjusted.bottom - size.height))
+        extra.right = max(0, target.x - (scrollView.contentSize.width + adjusted.right - size.width))
+        guard extra != .zero else { return }
+
+        var inset = scrollView.contentInset
+        inset.top += extra.top
+        inset.left += extra.left
+        inset.bottom += extra.bottom
+        inset.right += extra.right
+        scrollView.contentInset = inset
+        viewportExtraInset.top += extra.top
+        viewportExtraInset.left += extra.left
+        viewportExtraInset.bottom += extra.bottom
+        viewportExtraInset.right += extra.right
     }
 }
 
