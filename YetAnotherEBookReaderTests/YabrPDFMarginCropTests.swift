@@ -23,8 +23,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private let viewTolerance: CGFloat = 2
 
 
-    private static let knownShortFirstLine = "Pages that open on a short paragraph tail: that line's row density is below the detect threshold, so the detected top skips to the next line and the text sits one line higher than on other pages."
-    private static let knownScanLimit = "blankBorderWidth only scans the outer quarter of each axis (lineNumMax / 4); a margin wider than 25% of the page is not found and the page falls back to uncropped."
 
     private var tempURLs: [URL] = []
     private var window: UIWindow?
@@ -68,13 +66,11 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     /// Side margins just over 25% of the page width (short lines, verse, centered figures).
     func testDetectsNarrowContentWithWideSideMargins() throws {
-        XCTExpectFailure(Self.knownScanLimit)
         try assertDetection(content: CGRect(x: 156, y: 96, width: 300, height: 600))
     }
 
     /// Chapter-opening page: text starts well below the usual top margin.
     func testDetectsChapterOpeningWithTallTopMargin() throws {
-        XCTExpectFailure(Self.knownScanLimit)
         try assertDetection(content: CGRect(x: 81, y: 96, width: 450, height: 350))
     }
 
@@ -295,20 +291,14 @@ final class YabrPDFMarginCropTests: XCTestCase {
     /// Reported case: ordinary book pages, pressing "next" repeatedly, reader hosted
     /// in a navigation controller with bars visible (as YabrEBookReader does).
     func testLandscapeForwardPagingRealisticBookPages() throws {
-        try assertForwardPagingRealisticBookPages(
-            viewSize: Self.landscape,
-            knownIssue: Self.knownShortFirstLine
-        )
+        try assertForwardPagingRealisticBookPages(viewSize: Self.landscape)
     }
 
     func testPortraitForwardPagingRealisticBookPages() throws {
-        try assertForwardPagingRealisticBookPages(
-            viewSize: Self.portrait,
-            knownIssue: Self.knownShortFirstLine
-        )
+        try assertForwardPagingRealisticBookPages(viewSize: Self.portrait)
     }
 
-    private func assertForwardPagingRealisticBookPages(viewSize: CGSize, knownIssue: String, file: StaticString = #filePath, line: UInt = #line) throws {
+    private func assertForwardPagingRealisticBookPages(viewSize: CGSize, file: StaticString = #filePath, line: UInt = #line) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let book = try BookPageGenerator.make(pageCount: 12, pageSize: Self.pageSize, in: directory)
@@ -330,6 +320,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
             let detected = harness.controller.marginCropController.cachedValue(for: key)?.bounds ?? .null
             let bodyTop = topGap(harness, pageIndex: index)
             bodyTops.append(bodyTop)
+            // The crop starts at the body (short first lines included), not at the
+            // running head 36pt above it.
+            XCTAssertEqual(detected.minY, BookPageGenerator.bodyRect.minY, accuracy: 4, "p\(index + 1) detected=\(detected)", file: file, line: line)
             rows.append(String(
                 format: "p%d%@ detTop=%.0f detH=%.0f s=%.2f bodyTopInView=%.1f",
                 index + 1, book.opensOnShortLine[index] ? "*" : " ", detected.minY, detected.height, harness.pdfView.scaleFactor, bodyTop
@@ -337,7 +330,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
         record("PDFBOOK view=\(viewSize) safeTop=\(harness.pdfView.safeAreaInsets.top) (* = page opens on a short paragraph tail)\n" + rows.joined(separator: "\n"))
 
-        XCTExpectFailure(knownIssue)
         XCTAssertLessThanOrEqual((bodyTops.max() ?? 0) - (bodyTops.min() ?? 0), viewTolerance, "bodyTops=\(bodyTops)", file: file, line: line)
     }
 

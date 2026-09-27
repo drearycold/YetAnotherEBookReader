@@ -18,10 +18,14 @@ placement (content right of center, top offset / drift after page turns).
   are gone. `marginOffset` moved from detection into the fitter.
 - Tests: `YabrPDFMarginCropTests` (window-hosted, synthetic + generated
   book-like PDFs, real next/prev buttons) and `PDFPageViewportFitterTests`.
-  Remaining strict `XCTExpectFailure`s mark open detection bugs: short first
-  line of a page (row-density threshold drops it, text sits one line higher),
-  and the 25% scan limit (`lineNumMax / 4`) leaving narrow/chapter-opening
-  pages uncropped. Probe tests document PDFKit `go(to:)` quirks.
+  Only the two PDFKit probe tests still use `XCTExpectFailure` (documenting
+  `go(to:)` quirks the fix no longer relies on).
+- Detection fix (`PDFMarginCropController.blankBorderWidth`): scans up to half
+  the page (was a quarter; `whiteLines` keeps its quarter-page window so side
+  sensitivity is unchanged), and on the line axis (top/bottom for `LtR_TtB`,
+  right/left for `TtB_RtL`) walks outward over ink within ~1.5x the first
+  inter-line gap, keeping short first lines and ascenders but not running
+  heads. Vertical-text behavior is only covered by a solid-block test.
 - Persisted `pageOffsetX/Y` keep the visible upper-left semantics
   (`getPagePoint` now measures `convert(bounds, to: page)`).
   `rememberInPagePosition` is still never read by navigation code.

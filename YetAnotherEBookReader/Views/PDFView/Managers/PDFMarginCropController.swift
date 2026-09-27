@@ -227,7 +227,8 @@ class PDFMarginCropController {
                     orientation: .up,
                     data: data,
                     ratio: boundsForMediaBox.width / boundsForCropBox.width,
-                    hMarginDetectStrength: hMarginDetectStrength
+                    hMarginDetectStrength: hMarginDetectStrength,
+                    extendsAcrossLineGaps: true
                 )
                 bottom = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -236,7 +237,8 @@ class PDFMarginCropController {
                     orientation: .down,
                     data: data,
                     ratio: boundsForMediaBox.width / boundsForCropBox.width,
-                    hMarginDetectStrength: hMarginDetectStrength
+                    hMarginDetectStrength: hMarginDetectStrength,
+                    extendsAcrossLineGaps: true
                 )
                 leading = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -264,7 +266,8 @@ class PDFMarginCropController {
                     orientation: .right,
                     data: data,
                     ratio: boundsForMediaBox.height / boundsForCropBox.height,
-                    hMarginDetectStrength: vMarginDetectStrength
+                    hMarginDetectStrength: vMarginDetectStrength,
+                    extendsAcrossLineGaps: true
                 )
                 trailing = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -273,7 +276,8 @@ class PDFMarginCropController {
                     orientation: .left,
                     data: data,
                     ratio: boundsForMediaBox.height / boundsForCropBox.height,
-                    hMarginDetectStrength: vMarginDetectStrength
+                    hMarginDetectStrength: vMarginDetectStrength,
+                    extendsAcrossLineGaps: true
                 )
                 top = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -335,6 +339,15 @@ class PDFMarginCropController {
         )
     }
 
+    /// Scans from one edge of the page image towards the center and returns the
+    /// line index where content starts, plus the number of white lines in the outer
+    /// quarter (used to scale the perpendicular pass).
+    ///
+    /// Content is the first run of 3+ lines whose ink density passes the detect
+    /// strength. With `extendsAcrossLineGaps`, the border then walks outward over
+    /// any ink separated from the body by no more than ~1.5x its first inter-line
+    /// gap, so a short first line (paragraph tail) and ascenders are kept while a
+    /// running head further out is not.
     private func blankBorderWidth(
         size: CGSize,
         padding: Int,
@@ -342,7 +355,8 @@ class PDFMarginCropController {
         orientation: CGImagePropertyOrientation,
         data: UnsafePointer<UInt8>,
         ratio: Double = 1.0,
-        hMarginDetectStrength: Double
+        hMarginDetectStrength: Double,
+        extendsAcrossLineGaps: Bool = false
     ) -> (Int, Int) {
         let lineNumMax = { () -> Int in
             switch orientation {
@@ -360,38 +374,39 @@ class PDFMarginCropController {
                 return Int(size.height)
             }
         }()
-        var border = lineNumMax / 2
         let pixelNumInRow = Int(size.width) + padding
+        let scanLimit = lineNumMax / 2
+        let whiteLineSampleLimit = lineNumMax / 4
+
+        func density(ofLine line: Int) -> Double {
+            let lineIndex: Int
+            switch orientation {
+            case .up, .upMirrored, .right, .rightMirrored:
+                lineIndex = line
+            case .down, .downMirrored, .left, .leftMirrored:
+                lineIndex = lineNumMax - line - 1
+            }
+            var nonWhiteDensity = 0.0
+            for pixelInLine in 1..<pixelNumMax {
+                let pixelIndex: Int
+                switch orientation {
+                case .up, .down, .upMirrored, .downMirrored:
+                    pixelIndex = (pixelInLine + pixelNumInRow * lineIndex) * numberOfComponents
+                case .left, .leftMirrored, .right, .rightMirrored:
+                    pixelIndex = (lineIndex + pixelNumInRow * pixelInLine) * numberOfComponents
+                }
+                nonWhiteDensity += pixelGreyLevel(pixelIndex: pixelIndex, data: data)
+            }
+            return nonWhiteDensity
+        }
+
+        var border: Int?
         var nonWhiteLineFirst = 0
         var nonWhiteLines = 0
         var whiteLines = 0
-        for line in 1..<(lineNumMax / 4) {
-            var nonWhiteDensity = 0.0
-            for pixelInLine in 1..<pixelNumMax {
-                let lineIndex = { () -> Int in
-                    switch orientation {
-                    case .up, .upMirrored, .right, .rightMirrored:
-                        return line
-                    case .down, .downMirrored, .left, .leftMirrored:
-                        return lineNumMax - line - 1
-                    }
-                }()
-
-                let pixelIndex = { () -> Int in
-                    switch orientation {
-                    case .up, .down, .upMirrored, .downMirrored:
-                        return pixelInLine + pixelNumInRow * lineIndex
-                    case .left, .leftMirrored, .right, .rightMirrored:
-                        return lineIndex + pixelNumInRow * pixelInLine
-                    }
-                }() * numberOfComponents
-
-                nonWhiteDensity += pixelGreyLevel(pixelIndex: pixelIndex, data: data)
-            }
-            if nonWhiteDensity > 0 {
-                print("nonWhiteDensity h=\(line) density=\(nonWhiteDensity) orientation=\(orientation.rawValue)")
-            }
-
+        var line = 1
+        while line < scanLimit && (border == nil || line < whiteLineSampleLimit) {
+            let nonWhiteDensity = density(ofLine: line)
             if nonWhiteDensity > 0,
                nonWhiteDensity / Double(pixelNumMax) * ratio * 20.0 > hMarginDetectStrength {
                 nonWhiteLines += 1
@@ -399,28 +414,68 @@ class PDFMarginCropController {
                     nonWhiteLineFirst = line
                 }
             } else {
-                whiteLines += 1
+                if line < whiteLineSampleLimit {
+                    whiteLines += 1
+                }
                 nonWhiteLines = 0
                 nonWhiteLineFirst = 0
             }
 
-            if nonWhiteLines > 2,
-               nonWhiteLineFirst < lineNumMax / 4,
-               border == lineNumMax / 2 {
+            if nonWhiteLines > 2, border == nil {
                 border = nonWhiteLineFirst
             }
+            line += 1
         }
 
-        if border == lineNumMax / 2 {
-            border = 1
+        var result = border ?? 1
+        if let border, extendsAcrossLineGaps {
+            result = extendBorderAcrossLineGaps(from: border, scanLimit: scanLimit, lineNumMax: lineNumMax, density: density(ofLine:))
         }
 
         switch orientation {
         case .up, .upMirrored, .right, .rightMirrored:
-            return (border, whiteLines)
+            return (result, whiteLines)
         case .down, .downMirrored, .left, .leftMirrored:
-            return (lineNumMax - border - 1, whiteLines)
+            return (lineNumMax - result - 1, whiteLines)
         }
+    }
+
+    private func extendBorderAcrossLineGaps(
+        from border: Int,
+        scanLimit: Int,
+        lineNumMax: Int,
+        density: (Int) -> Double
+    ) -> Int {
+        // A couple of dark pixels; ignores anti-aliasing dust.
+        let inkFloor = 2.0
+
+        // Measure the first inter-line gap inside the body.
+        var cursor = border
+        while cursor < scanLimit, density(cursor) >= inkFloor {
+            cursor += 1
+        }
+        var lineGap = 0
+        while cursor < scanLimit, density(cursor) < inkFloor {
+            lineGap += 1
+            cursor += 1
+        }
+        guard lineGap > 0, cursor < scanLimit, lineGap <= lineNumMax / 20 else { return border }
+
+        let maxGap = lineGap + lineGap / 2 + 1
+        var extended = border
+        var whiteRun = 0
+        var probe = border - 1
+        while probe >= 1 {
+            if density(probe) >= inkFloor {
+                extended = probe
+                whiteRun = 0
+            } else {
+                whiteRun += 1
+                if whiteRun > maxGap { break }
+            }
+            probe -= 1
+        }
+        return extended
     }
 
     private func pixelGreyLevel(pixelIndex: Int, data: UnsafePointer<UInt8>) -> Double {
