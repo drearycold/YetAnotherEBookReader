@@ -42,6 +42,53 @@ class YabrPDFView: PDFView {
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
     /// can be reached.
     private var viewportExtraInset = UIEdgeInsets.zero
+
+    /// Light theme tint (see `PDFThemePalette`), above the pages.
+    let themeOverlayView: UIView = {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        return view
+    }()
+
+    /// Opaque preview of the destination page shown briefly after a jump, while
+    /// PDFKit renders the new page's tiles. Sits below the theme overlay.
+    let jumpMaskView: UIImageView = {
+        let view = UIImageView()
+        view.isUserInteractionEnabled = false
+        view.contentMode = .scaleToFill
+        view.alpha = 0
+        return view
+    }()
+    /// Incremented each time the jump mask is shown.
+    private(set) var jumpMaskGeneration = 0
+    private var loadingCoverGeneration = -1
+
+    /// PDFKit shows a per-page placeholder layer (white background plus an
+    /// unthemed low-resolution preview) until a page's tiles render. Dark pages are
+    /// drawn inverted into the tiles, so under dark the placeholder is inverted too,
+    /// or every newly shown page flashes white (or blank while scrolling fast).
+    var invertsPagePlaceholders = false {
+        didSet {
+            guard oldValue != invertsPagePlaceholders else { return }
+            installPagePlaceholderObserver()
+            updateAllPagePlaceholders()
+        }
+    }
+    private var pagePlaceholderProvider: AnyObject?
+    private var pagePlaceholderScrollObservation: NSKeyValueObservation?
+    /// Keyed by placeholder layer; re-inverts whenever PDFKit sets new contents.
+    private var pagePlaceholderObservations: [ObjectIdentifier: PagePlaceholderObservation] = [:]
+
+    private struct PagePlaceholderObservation {
+        weak var layer: CALayer?
+        let observations: [NSKeyValueObservation]
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        arrangeOverlayViews()
+    }
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         let could = super.canPerformAction(action, withSender: sender)
@@ -530,6 +577,231 @@ extension YabrPDFView {
 }
 
 extension YabrPDFView {
+    // MARK: Theme and jump mask
+
+    func applyTheme(_ palette: PDFThemePalette) {
+        backgroundColor = UIColor(cgColor: palette.canvas)
+        if let overlay = palette.overlay {
+            themeOverlayView.backgroundColor = UIColor(red: overlay.red, green: overlay.green, blue: overlay.blue, alpha: overlay.alpha)
+            themeOverlayView.isHidden = false
+        } else {
+            themeOverlayView.backgroundColor = nil
+            themeOverlayView.isHidden = true
+        }
+        jumpMaskView.backgroundColor = palette.canvas.alpha > 0 ? UIColor(cgColor: palette.canvas) : .white
+        arrangeOverlayViews()
+    }
+
+    var isJumpMaskVisible: Bool {
+        jumpMaskView.alpha > 0
+    }
+
+    /// Covers the view with `page` rendered at the current viewport, then fades out.
+    /// Call after the viewport is applied so both land in the same frame.
+    func showJumpMask(for page: PDFPage) {
+        showJumpMask(image: viewportSnapshot(of: page))
+    }
+
+    /// A plain page-coloured cover while the reader appears, before the first page
+    /// is positioned. Replaced by the first jump mask, or faded by
+    /// `finishLoadingCover()`.
+    func showLoadingCover() {
+        jumpMaskView.image = nil
+        jumpMaskView.layer.removeAllAnimations()
+        jumpMaskView.alpha = 1
+        jumpMaskGeneration += 1
+        loadingCoverGeneration = jumpMaskGeneration
+        arrangeOverlayViews()
+    }
+
+    func finishLoadingCover() {
+        guard loadingCoverGeneration == jumpMaskGeneration, jumpMaskView.alpha > 0 else { return }
+        scheduleJumpMaskFade(generation: jumpMaskGeneration)
+    }
+
+    private func showJumpMask(image: UIImage) {
+        jumpMaskView.image = image
+        jumpMaskView.layer.removeAllAnimations()
+        jumpMaskView.alpha = 1
+        arrangeOverlayViews()
+
+        jumpMaskGeneration += 1
+        scheduleJumpMaskFade(generation: jumpMaskGeneration)
+    }
+
+    private func scheduleJumpMaskFade(generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400)) { [weak self] in
+            guard let self, self.jumpMaskGeneration == generation else { return }
+            UIView.animate(withDuration: 0.15) {
+                self.jumpMaskView.alpha = 0
+            } completion: { _ in
+                if self.jumpMaskGeneration == generation {
+                    self.jumpMaskView.image = nil
+                }
+            }
+        }
+    }
+
+    /// `page` as it appears in the view right now. Page drawing is untinted (the
+    /// theme overlay sits above the mask) except for dark, which `draw` inverts.
+    func viewportSnapshot(of page: PDFPage) -> UIImage {
+        let box = page.bounds(for: displayBox)
+        // Page space -> view space, exactly as PDFView lays the page out (scale,
+        // scroll, rotation), measured from three converted points.
+        let origin = convert(CGPoint.zero, from: page)
+        let unitX = convert(CGPoint(x: 100, y: 0), from: page)
+        let unitY = convert(CGPoint(x: 0, y: 100), from: page)
+        let pageToView = CGAffineTransform(
+            a: (unitX.x - origin.x) / 100, b: (unitX.y - origin.y) / 100,
+            c: (unitY.x - origin.x) / 100, d: (unitY.y - origin.y) / 100,
+            tx: origin.x, ty: origin.y
+        )
+        // PDFPage.draw(with:to:) draws in the box's display space (cropped and
+        // rotated); undo that to draw in page space.
+        let displayToPage = page.transform(for: displayBox).inverted()
+
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = true
+        let canvas = backgroundColor.cgColor.alpha > 0 ? backgroundColor : .white
+
+        return UIGraphicsImageRenderer(bounds: bounds, format: format).image { rendererContext in
+            canvas.setFill()
+            rendererContext.fill(bounds)
+
+            let context = rendererContext.cgContext
+            context.concatenate(pageToView)
+            context.setFillColor(gray: 1.0, alpha: 1.0)
+            context.fill(box)
+            context.concatenate(displayToPage)
+            page.draw(with: displayBox, to: context)
+        }
+    }
+
+    private func arrangeOverlayViews() {
+        for overlay in [jumpMaskView, themeOverlayView] as [UIView] {
+            if overlay.superview !== self {
+                addSubview(overlay)
+            }
+            overlay.frame = bounds
+            bringSubviewToFront(overlay)
+        }
+        for label in [doubleTapLeftLabel, doubleTapRightLabel, singleTapLeftLabel, singleTapRightLabel] where label.superview === self {
+            bringSubviewToFront(label)
+        }
+    }
+
+    // MARK: Page placeholders
+
+    /// Number of PDFKit placeholder layers updated; 0 means PDFKit's layer
+    /// structure was not recognised.
+    @discardableResult
+    func updateAllPagePlaceholders() -> Int {
+        guard let scrollView = documentScrollView else { return 0 }
+        func pageViews(in view: UIView) -> [UIView] {
+            Self.pagePlaceholderLayers(in: view).isEmpty ? view.subviews.flatMap(pageViews) : [view]
+        }
+        return pageViews(in: scrollView).reduce(0) { $0 + updatePagePlaceholder(in: $1) }
+    }
+
+    @discardableResult
+    func updatePagePlaceholder(in pageView: UIView) -> Int {
+        let layers = Self.pagePlaceholderLayers(in: pageView)
+        // PDFKit recycles page views while scrolling; drop entries for freed layers
+        // so a reused address is not mistaken for an observed layer.
+        pagePlaceholderObservations = pagePlaceholderObservations.filter { $0.value.layer != nil }
+        for layer in layers {
+            let key = ObjectIdentifier(layer)
+            guard invertsPagePlaceholders else {
+                pagePlaceholderObservations[key] = nil
+                continue
+            }
+            Self.invertPlaceholder(layer)
+            if pagePlaceholderObservations[key]?.layer !== layer {
+                // PDFKit fills the preview in later; invert it in the same
+                // transaction so the unthemed version is never displayed.
+                pagePlaceholderObservations[key] = PagePlaceholderObservation(layer: layer, observations: [
+                    layer.observe(\.contents) { layer, _ in Self.invertPlaceholder(layer) },
+                    layer.observe(\.backgroundColor) { layer, _ in Self.invertPlaceholder(layer) },
+                ])
+            }
+        }
+        return layers.count
+    }
+
+    static let invertedPlaceholderKey = "yabr.inverted"
+
+    private static func invertPlaceholder(_ layer: CALayer) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        if layer.backgroundColor.map({ $0.components?.first ?? 0 }) ?? 0 > 0.01 {
+            layer.backgroundColor = CGColor(gray: 0, alpha: 1)
+        }
+        guard let contents = layer.contents else { return }
+        guard CFGetTypeID(contents as CFTypeRef) == CGImage.typeID else {
+            // Unknown preview format: better blank than a white flash.
+            layer.contents = nil
+            return
+        }
+        let image = contents as! CGImage
+        if layer.value(forKey: invertedPlaceholderKey) as AnyObject? === image { return }
+        guard let inverted = invertedImage(image) else {
+            layer.contents = nil
+            return
+        }
+        layer.setValue(inverted, forKey: invertedPlaceholderKey)
+        layer.contents = inverted
+    }
+
+    /// Same transform as `PDFPageWithBackground.draw`: invert, then cap at 70% gray.
+    private static func invertedImage(_ image: CGImage) -> CGImage? {
+        guard let context = CGContext(
+            data: nil,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(rect)
+        context.draw(image, in: rect)
+        context.setBlendMode(.exclusion)
+        context.fill(rect)
+        context.setBlendMode(.darken)
+        context.setFillColor(gray: 0.7, alpha: 1)
+        context.fill(rect)
+        return context.makeImage()
+    }
+
+    /// `PDFPageView` > `PDFPageLayer` > `backgroundLayer` (PDFKit's layer names).
+    static func pagePlaceholderLayers(in pageView: UIView) -> [CALayer] {
+        (pageView.layer.sublayers ?? [])
+            .filter { ($0.name ?? "").hasPrefix("PDFPageLayer") }
+            .flatMap { ($0.sublayers ?? []).filter { $0.name == "backgroundLayer" } }
+    }
+
+    private func installPagePlaceholderObserver() {
+        guard invertsPagePlaceholders, pagePlaceholderProvider == nil, pagePlaceholderScrollObservation == nil else { return }
+        if #available(iOS 16.0, macCatalyst 16.0, *) {
+            // Called synchronously while a page view is set up, before it is drawn.
+            let provider = PDFPagePlaceholderOverlayProvider()
+            pagePlaceholderProvider = provider
+            pageOverlayViewProvider = provider
+        } else if let scrollView = documentScrollView {
+            // Best effort: page views appear while scrolling.
+            pagePlaceholderScrollObservation = scrollView.observe(\.contentOffset) { [weak self] _, _ in
+                guard let self, self.invertsPagePlaceholders else { return }
+                self.updateAllPagePlaceholders()
+            }
+        }
+    }
+
+    // MARK: Viewport
+
     var documentScrollView: UIScrollView? {
         func find(in view: UIView) -> UIScrollView? {
             for subview in view.subviews {
@@ -613,4 +885,25 @@ extension PDFAnnotationKey {
 struct HighlightValue {
     let selection: PDFSelection
     var annotations: [PDFAnnotation] = []
+}
+
+@available(iOS 16.0, macCatalyst 16.0, *)
+private final class PDFPagePlaceholderOverlayProvider: NSObject, PDFPageOverlayViewProvider {
+    func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
+        let overlay = UIView()
+        overlay.isUserInteractionEnabled = false
+        overlay.backgroundColor = .clear
+        return overlay
+    }
+
+    func pdfView(_ pdfView: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
+        guard let pdfView = pdfView as? YabrPDFView else { return }
+        var candidate = overlayView.superview
+        while let view = candidate, YabrPDFView.pagePlaceholderLayers(in: view).isEmpty {
+            candidate = view.superview
+        }
+        if let pageView = candidate {
+            pdfView.updatePagePlaceholder(in: pageView)
+        }
+    }
 }

@@ -32,11 +32,7 @@ extension YabrPDFViewController {
                 try FileManager.default.removeItem(at: tmpFile)
             }
             if annotated {
-                let fillColor = PDFPageWithBackground.fillColor
-                PDFPageWithBackground.fillColor = nil
-                defer {
-                    PDFPageWithBackground.fillColor = fillColor
-                }
+                // Writing serializes the document; the page theme is not rendered.
                 guard pdfView.document?.write(to: tmpFile) == true
                 else {
                     return

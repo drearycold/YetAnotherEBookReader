@@ -8,26 +8,7 @@ import PDFKit
 import UIKit
 
 class PDFMarginCropController {
-    private weak var pdfView: YabrPDFView?
-    private let blankView: UIImageView
-    private let blankActivityView: UIActivityIndicatorView
-
     private(set) var visibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
-
-    init(pdfView: YabrPDFView, blankView: UIImageView, blankActivityView: UIActivityIndicatorView) {
-        self.pdfView = pdfView
-        self.blankView = blankView
-        self.blankActivityView = blankActivityView
-    }
-
-    func configureBlankOverlay() {
-        guard let pdfView = pdfView else { return }
-
-        blankView.contentMode = .scaleAspectFill
-        blankView.addSubview(blankActivityView)
-        pdfView.addSubview(blankView)
-        blankView.layer.compositingFilter = "darkenBlendMode"
-    }
 
     func clearCache() {
         visibleContentBounds.removeAll()
@@ -112,42 +93,6 @@ class PDFMarginCropController {
                     self.visibleContentBounds[previousKey] = boundsPrevious
                 }
             }
-        }
-    }
-
-    func showBlankOverlay(page: PDFPage?, options: PDFPreferenceValue) {
-        guard let pdfView = pdfView else { return }
-
-        let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor(gray: 1.0, alpha: 1.0))
-
-        if blankView.layer.compositingFilter == nil,
-           let page = page as? PDFPageWithBackground {
-            let key = PageVisibleContentKey(
-                pageNumber: page.pageRef?.pageNumber ?? -1,
-                readingDirection: options.readingDirection,
-                hMarginDetectStrength: options.hMarginDetectStrength,
-                vMarginDetectStrength: options.vMarginDetectStrength
-            )
-            let bounds = visibleContentBounds[key]?.bounds ?? .zero
-            blankView.image = page.thumbnailWithBackground(of: pdfView.frame.size, for: .cropBox, by: bounds)
-        }
-
-        blankView.tintColor = backgroundColor
-        blankView.backgroundColor = backgroundColor
-        blankView.frame.size = pdfView.frame.size
-
-        blankActivityView.frame = CGRect(x: pdfView.frame.width / 2, y: pdfView.frame.height / 2, width: 50, height: 50)
-        blankActivityView.style = .large
-        blankActivityView.backgroundColor = .clear
-        blankActivityView.startAnimating()
-
-        hideBlankOverlay()
-    }
-
-    func hideBlankOverlay() {
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(400))) {
-            self.blankView.frame.size = .zero
-            self.blankActivityView.stopAnimating()
         }
     }
 

@@ -83,7 +83,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
 
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", style: .plain, target: self, action: #selector(dismiss))
         
-        if let fillColor = PDFPageWithBackground.fillColor {
+        if let fillColor = pdfViewController?.pdfOptions.fillColor {
             segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
         }
         

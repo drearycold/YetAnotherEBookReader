@@ -22,8 +22,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
     /// Viewport assertions are in view points.
     private let viewTolerance: CGFloat = 2
 
-
-
     private var tempURLs: [URL] = []
     private var window: UIWindow?
 
@@ -33,7 +31,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
         tempURLs.removeAll()
-        PDFPageWithBackground.fillColor = nil
     }
 
     // MARK: - Detection (PDFMarginCropController.visibleBounds)
@@ -333,6 +330,500 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertLessThanOrEqual((bodyTops.max() ?? 0) - (bodyTops.min() ?? 0), viewTolerance, "bodyTops=\(bodyTops)", file: file, line: line)
     }
 
+    // MARK: - Theme overlay and jump mask
+
+    func testThemeOverlaySitsAboveDocumentAndBelowTapLabels() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            themeMode: .serpia
+        )
+        let pdfView = harness.pdfView
+        let subviews = pdfView.subviews
+        let scrollIndex = try XCTUnwrap(subviews.firstIndex { $0 is UIScrollView })
+        let maskIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.jumpMaskView })
+        let overlayIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.themeOverlayView })
+        let labelIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.singleTapLeftLabel })
+
+        XCTAssertLessThan(scrollIndex, maskIndex)
+        XCTAssertLessThan(maskIndex, overlayIndex)
+        XCTAssertLessThan(overlayIndex, labelIndex)
+        XCTAssertFalse(pdfView.themeOverlayView.isHidden)
+        XCTAssertFalse(pdfView.themeOverlayView.isUserInteractionEnabled)
+        XCTAssertEqual(pdfView.themeOverlayView.frame, pdfView.bounds)
+    }
+
+    func testThemeSwitchRetintsWithoutMovingViewport() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.landscape,
+            themeMode: .serpia
+        )
+        let before = visibleRect(harness, pageIndex: 0)
+        let sepiaOverlay = harness.pdfView.themeOverlayView.backgroundColor
+
+        for (theme, overlayHidden, inverted) in [(PDFThemeMode.forest, false, false), (.dark, true, true), (.none, true, false)] {
+            var options = harness.controller.pdfOptions
+            options.themeMode = theme
+            harness.controller.handleOptionsChange(pdfOptions: options)
+            settle()
+
+            XCTAssertEqual(harness.pdfView.themeOverlayView.isHidden, overlayHidden, "\(theme)")
+            XCTAssertEqual(harness.controller.pageRenderTheme.drawsInverted, inverted, "\(theme)")
+            if theme == .forest {
+                XCTAssertNotEqual(harness.pdfView.themeOverlayView.backgroundColor, sepiaOverlay)
+            }
+            let after = visibleRect(harness, pageIndex: 0)
+            XCTAssertEqual(after.minX, before.minX, accuracy: 0.5, "\(theme)")
+            XCTAssertEqual(after.maxY, before.maxY, accuracy: 0.5, "\(theme)")
+            XCTAssertEqual(after.width, before.width, accuracy: 0.5, "\(theme)")
+        }
+    }
+
+    func testJumpShowsMaskButPageTurnDoesNot() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: content), count: 5),
+            viewSize: Self.portrait
+        )
+        waitForJumpMaskToClear(harness)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+
+        pressNext(harness)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible, "next page must not show the jump mask in light themes")
+
+        slide(harness, toPage: 5)
+        XCTAssertEqual(harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) }, 4)
+        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, "slider jump should show the jump mask")
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+
+        settle(0.8)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible, "jump mask should fade out")
+    }
+
+    /// Toggling dark re-attaches the document to drop cached tiles; the reader must
+    /// stay on the same page and never report another page as the reading position.
+    func testDarkToggleKeepsPageAndPosition() throws {
+        let harness = try makeJumpHarness()
+        pressNext(harness)
+        pressNext(harness)
+        let before = visibleRect(harness, pageIndex: 2)
+        let spy = PositionSpy()
+        harness.controller.readerEngineDelegate = spy
+
+        for theme in [PDFThemeMode.dark, .serpia] {
+            var options = harness.controller.pdfOptions
+            options.themeMode = theme
+            harness.controller.handleOptionsChange(pdfOptions: options)
+            settle()
+
+            XCTAssertEqual(currentPageIndex(harness), 2, "\(theme)")
+            let after = visibleRect(harness, pageIndex: 2)
+            XCTAssertEqual(after.minX, before.minX, accuracy: 0.5, "\(theme)")
+            XCTAssertEqual(after.maxY, before.maxY, accuracy: 0.5, "\(theme)")
+            XCTAssertEqual(after.width, before.width, accuracy: 0.5, "\(theme)")
+        }
+        XCTAssertFalse(spy.pageNumbers.isEmpty)
+        XCTAssertEqual(Set(spy.pageNumbers), [3], "reported pages=\(spy.pageNumbers)")
+    }
+
+    // MARK: - Jump mask entry points
+
+    func testTOCJumpShowsMask() throws {
+        guard #available(iOS 16.0, *) else { throw XCTSkip("UIAction.performWithSender needs iOS 16") }
+        let harness = try makeJumpHarness()
+        let document = try XCTUnwrap(harness.pdfView.document)
+        let root = PDFOutline()
+        for (index, pageIndex) in [0, 3].enumerated() {
+            let item = PDFOutline()
+            item.label = "Chapter \(index + 1)"
+            item.destination = PDFDestination(page: harness.page(pageIndex), at: CGPoint(x: 0, y: 792))
+            root.insertChild(item, at: index)
+        }
+        document.outlineRoot = root
+        harness.controller.buildTocList()
+        let deadline = Date().addingTimeInterval(3)
+        while (harness.controller.titleInfoButton.menu?.children.count ?? 0) < 2 && Date() < deadline {
+            settle(0.05)
+        }
+        let chapter2 = try XCTUnwrap(harness.controller.titleInfoButton.menu?.children.last as? UIAction)
+
+        try assertShowsJumpMask(harness, toPageIndex: 3) {
+            chapter2.performWithSender(nil, target: nil)
+        }
+    }
+
+    func testHistoryBackShowsMask() throws {
+        guard #available(iOS 16.0, *) else { throw XCTSkip("the history back button is iOS 16+") }
+        let harness = try makeJumpHarness()
+        harness.controller.updateHistoryMenu(curPage: harness.page(0))
+        pressNext(harness)
+        pressNext(harness)
+
+        try assertShowsJumpMask(harness, toPageIndex: 0) {
+            harness.controller.pageBackButton.sendActions(for: .primaryActionTriggered)
+        }
+    }
+
+    func testListNavigationShowsMask() throws {
+        let harness = try makeJumpHarness()
+        let metaSource = YabrEBookReaderPDFMetaSource(
+            book: TestFixtures.makeBook(),
+            readerInfo: ReaderInfo(
+                deviceName: "test-device",
+                url: URL(fileURLWithPath: "/tmp/test.pdf"),
+                missing: false,
+                format: .PDF,
+                readerType: .YabrPDF,
+                position: BookDeviceReadingPosition(readerName: ReaderType.YabrPDF.id)
+            ),
+            preferenceRepository: StubPDFPreferenceRepository()
+        )
+
+        try assertShowsJumpMask(harness, toPageIndex: 3) {
+            metaSource.yabrPDFNavigate(harness.pdfView, pageNumber: 4, offset: CGPoint(x: 0, y: 792))
+        }
+    }
+
+    func testInitialRestoreShowsMask() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+
+        XCTAssertEqual(currentPageIndex(harness), 2)
+        // Loading cover in viewWillAppear, then the restored page's mask.
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, 2)
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+    }
+
+    func testLoadingCoverFadesAfterOpening() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            themeMode: .serpia
+        )
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, 1, "cover only; opening on the first page is not a jump")
+        waitForJumpMaskToClear(harness)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+    }
+
+    /// Dark pages are drawn into PDFKit's tiles; a newly shown page is a white
+    /// placeholder until they render, so dark page turns are covered too.
+    func testDarkPageTurnShowsMask() throws {
+        let harness = try makeJumpHarness(themeMode: .dark)
+        let before = harness.pdfView.jumpMaskGeneration
+
+        pressNext(harness)
+
+        // Frozen current page before PDFKit's transition, then the new page.
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 2)
+        XCTAssertTrue(harness.pdfView.isJumpMaskVisible)
+        XCTAssertEqual(currentPageIndex(harness), 1)
+    }
+
+    /// Guards the PDFKit layer structure the dark theme depends on: each page's
+    /// placeholder (`PDFPageLayer` > `backgroundLayer`) must be found and inverted,
+    /// or dark pages flash white before their tiles render.
+    func testDarkInvertsPDFKitPagePlaceholders() throws {
+        let harness = try makeJumpHarness(themeMode: .dark)
+        pressNext(harness)
+        settle(0.5)
+
+        let pageViews = placeholderPageViews(harness.pdfView)
+        XCTAssertFalse(pageViews.isEmpty, "PDFKit page layer structure changed: no placeholder layers found")
+        XCTAssertGreaterThan(harness.pdfView.updateAllPagePlaceholders(), 0)
+        for layer in pageViews.flatMap(YabrPDFView.pagePlaceholderLayers(in:)) {
+            XCTAssertEqual(layer.backgroundColor?.components?.first ?? 1, 0, accuracy: 0.01, "placeholder background must be black")
+            if let contents = layer.contents {
+                XCTAssertTrue(layer.value(forKey: YabrPDFView.invertedPlaceholderKey) as AnyObject? === contents as AnyObject, "placeholder preview must be the inverted copy")
+            }
+        }
+    }
+
+    func testLightThemesLeavePDFKitPagePlaceholdersAlone() throws {
+        let harness = try makeJumpHarness(themeMode: .serpia)
+        pressNext(harness)
+        settle(0.5)
+
+        let layers = placeholderPageViews(harness.pdfView).flatMap(YabrPDFView.pagePlaceholderLayers(in:))
+        XCTAssertFalse(layers.isEmpty)
+        for layer in layers {
+            XCTAssertNil(layer.value(forKey: YabrPDFView.invertedPlaceholderKey))
+        }
+    }
+
+    private func placeholderPageViews(_ pdfView: YabrPDFView) -> [UIView] {
+        func find(_ view: UIView) -> [UIView] {
+            YabrPDFView.pagePlaceholderLayers(in: view).isEmpty ? view.subviews.flatMap(find) : [view]
+        }
+        return find(pdfView)
+    }
+
+    func testReturningToPageModeShowsMaskButScrollModeDoesNot() throws {
+        let harness = try makeJumpHarness()
+        pressNext(harness)
+        pressNext(harness)
+        let before = harness.pdfView.jumpMaskGeneration
+
+        var options = harness.controller.pdfOptions
+        options.pageMode = .Scroll
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before, "continuous mode shows no mask")
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+
+        let scrollModePage = currentPageIndex(harness)
+        options.pageMode = .Page
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        XCTAssertEqual(currentPageIndex(harness), scrollModePage)
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 1)
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+    }
+
+    func testContinuousModeJumpShowsNoMask() throws {
+        let harness = try makeJumpHarness()
+        var options = harness.controller.pdfOptions
+        options.pageMode = .Scroll
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        let before = harness.pdfView.jumpMaskGeneration
+
+        slide(harness, toPage: 4)
+
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before)
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+    }
+
+    func testJumpToCurrentPageIsNotMarked() throws {
+        let harness = try makeJumpHarness()
+
+        harness.controller.markJumpTarget(harness.pdfView.currentPage)
+
+        XCTAssertNil(harness.controller.pendingJumpMaskPage)
+    }
+
+    func testStaleJumpTargetIsDroppedByOrdinaryTurn() throws {
+        let harness = try makeJumpHarness()
+        let before = harness.pdfView.jumpMaskGeneration
+
+        harness.controller.markJumpTarget(harness.page(2))
+        pressNext(harness)
+        XCTAssertNil(harness.controller.pendingJumpMaskPage, "any page change consumes the pending jump")
+        pressNext(harness)
+
+        XCTAssertEqual(currentPageIndex(harness), 2)
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before, "reaching the old target by next must not show the mask")
+    }
+
+    func testSecondQuickJumpKeepsMaskForItsOwnHold() throws {
+        let harness = try makeJumpHarness()
+
+        slide(harness, toPage: 3)
+        settle(0.2)
+        slide(harness, toPage: 5)
+        settle(0.2)   // past the first jump's 400ms hold
+        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, "the first jump's timer must not hide the second mask")
+
+        settle(0.6)
+        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+    }
+
+    // MARK: - Jump mask preview geometry
+
+    func testJumpMaskPreviewWithNonZeroCropBox() throws {
+        try assertJumpMaskPreview(
+            spec: PageSpec(content: CGRect(x: 120, y: 140, width: 360, height: 520), cropBox: CGRect(x: 40, y: 60, width: 500, height: 700)),
+            theme: .none, content: 0, margin: 255
+        )
+    }
+
+    /// The snapshot must match what PDFView renders, independent of the crop fit:
+    /// the page is laid out by PDFKit itself here.
+    func testViewportSnapshotMatchesRenderedRotatedPages() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        for rotation in [90, 180, 270] {
+            let harness = try makeHarness(
+                pages: [PageSpec(content: content, rotation: rotation)],
+                viewSize: Self.portrait
+            )
+            harness.pdfView.autoScales = true
+            settle(0.5)
+            let page = harness.page(0)
+            let snapshot = harness.pdfView.viewportSnapshot(of: page)
+            let bounds = harness.pdfView.bounds
+            let inView = contentInView(harness, pageIndex: 0)
+            let pageInView = harness.pdfView.convert(page.bounds(for: .cropBox), from: page)
+            let visibleContent = inView.intersection(bounds)
+            let visiblePage = pageInView.intersection(bounds)
+            let insideContent = CGPoint(x: visibleContent.midX, y: visibleContent.midY)
+            // Inside the page but outside the text block, on whichever side has room.
+            let pageMargin = visibleContent.minY - visiblePage.minY > 8
+                ? CGPoint(x: visibleContent.midX, y: (visiblePage.minY + visibleContent.minY) / 2)
+                : CGPoint(x: visibleContent.midX, y: (visibleContent.maxY + visiblePage.maxY) / 2)
+            XCTAssertFalse(visibleContent.isEmpty, "rotation \(rotation)")
+
+            let snapshotContent = try gray(of: snapshot, at: insideContent)
+            let snapshotMargin = try gray(of: snapshot, at: pageMargin)
+            let renderedContent = try renderedColor(harness, pageIndex: 0, at: insideContent)
+            let renderedMargin = try renderedColor(harness, pageIndex: 0, at: pageMargin)
+            record("PDFMASK rotation=\(rotation) inView=\(inView) page=\(pageInView) snapshot=\(snapshotContent)/\(snapshotMargin) rendered=\(renderedContent)/\(renderedMargin)")
+
+            XCTAssertEqual(snapshotContent, 0, accuracy: 6, "rotation \(rotation) content")
+            XCTAssertEqual(snapshotMargin, 255, accuracy: 6, "rotation \(rotation) margin")
+            XCTAssertEqual(renderedContent.0, 0, accuracy: 6, "rotation \(rotation) rendered content")
+            XCTAssertEqual(renderedMargin.0, 255, accuracy: 6, "rotation \(rotation) rendered margin")
+            tearDownWindow()
+        }
+    }
+
+    /// Detection and the viewport fitter work in unrotated page space.
+    func testRotatedPageFitShowsContent() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600), rotation: 90)],
+            viewSize: Self.portrait
+        )
+        let inView = contentInView(harness, pageIndex: 0)
+        record("PDFROTATE inView=\(inView) bounds=\(harness.pdfView.bounds)")
+
+        XCTExpectFailure("Pre-existing: margin detection and PDFPageViewportFitter ignore page.rotation, so a rotated page is fitted as if unrotated and the text lands off screen.")
+        XCTAssertTrue(harness.pdfView.bounds.insetBy(dx: -2, dy: -2).contains(inView), "inView=\(inView)")
+    }
+
+    func testOverlaysFollowViewResize() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            themeMode: .serpia
+        )
+
+        window?.frame = CGRect(origin: .zero, size: Self.landscape)
+        harness.controller.view.frame = window?.bounds ?? .zero
+        settle()
+
+        XCTAssertEqual(harness.pdfView.bounds.size, Self.landscape)
+        XCTAssertEqual(harness.pdfView.themeOverlayView.frame, harness.pdfView.bounds)
+        XCTAssertEqual(harness.pdfView.jumpMaskView.frame, harness.pdfView.bounds)
+    }
+
+    // MARK: - Jump helpers
+
+    private func makeJumpHarness(initialPage: Int? = nil, themeMode: PDFThemeMode = .none) throws -> Harness {
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600)), count: 5),
+            viewSize: Self.portrait,
+            themeMode: themeMode,
+            initialPage: initialPage
+        )
+        waitForJumpMaskToClear(harness)
+        return harness
+    }
+
+    private func waitForJumpMaskToClear(_ harness: Harness) {
+        let deadline = Date().addingTimeInterval(2)
+        while harness.pdfView.isJumpMaskVisible && Date() < deadline {
+            settle(0.05)
+        }
+    }
+
+    private func currentPageIndex(_ harness: Harness) -> Int? {
+        harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) }
+    }
+
+    private func assertShowsJumpMask(_ harness: Harness, toPageIndex pageIndex: Int, file: StaticString = #filePath, line: UInt = #line, jump: () -> Void) throws {
+        let before = harness.pdfView.jumpMaskGeneration
+        jump()
+        settle()
+        XCTAssertEqual(currentPageIndex(harness), pageIndex, file: file, line: line)
+        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 1, "jump should show the mask once", file: file, line: line)
+        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, file: file, line: line)
+        XCTAssertNil(harness.controller.pendingJumpMaskPage, file: file, line: line)
+    }
+
+    /// A point inside the page's top margin, clear of the side tap-zone labels.
+    private func pageMarginPoint(_ harness: Harness, pageIndex: Int) -> CGPoint {
+        let inView = contentInView(harness, pageIndex: pageIndex)
+        return CGPoint(x: inView.midX, y: inView.minY - 6)
+    }
+
+    /// Color of the window at a PDFView point, via drawHierarchy. It redraws the
+    /// hierarchy, so it shows layout but not stale on-screen page tiles.
+    private func renderedColor(_ harness: Harness, pageIndex: Int, at point: CGPoint) throws -> (Int, Int, Int) {
+        let view = try XCTUnwrap(harness.pdfView.window)
+        let pointInWindow = harness.pdfView.convert(point, to: view)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        return try rgb(of: image, at: pointInWindow)
+    }
+
+    func testJumpMaskPreviewMatchesFinalViewport() throws {
+        try assertJumpMaskPreview(spec: PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600)), theme: .none, content: 0, margin: 255)
+    }
+
+    func testDarkJumpMaskPreviewIsInverted() throws {
+        // Dark draws the page inverted, text at 70% gray.
+        try assertJumpMaskPreview(spec: PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600)), theme: .dark, content: 178, margin: 0)
+    }
+
+    private func assertJumpMaskPreview(spec: PageSpec, theme: PDFThemeMode, content expectedContent: Int, margin expectedMargin: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+        let harness = try makeHarness(
+            pages: Array(repeating: spec, count: 3),
+            viewSize: Self.landscape,
+            themeMode: theme
+        )
+        slide(harness, toPage: 3)
+        let image = try XCTUnwrap(harness.pdfView.jumpMaskView.image, file: file, line: line)
+
+        let inView = contentInView(harness, pageIndex: 2)
+        let visibleContent = inView.intersection(harness.pdfView.bounds)
+        XCTAssertFalse(visibleContent.isEmpty, "content not visible: \(inView)", file: file, line: line)
+        let insideContent = CGPoint(x: visibleContent.midX, y: visibleContent.midY)
+        let pageMargin = CGPoint(x: inView.minX - 8, y: insideContent.y)
+        let contentGray = try gray(of: image, at: insideContent)
+        let marginGray = try gray(of: image, at: pageMargin)
+        record("PDFMASK theme=\(theme) rotation=\(spec.rotation) crop=\(String(describing: spec.cropBox)) inView=\(inView) content=\(contentGray) margin=\(marginGray)")
+
+        XCTAssertEqual(contentGray, expectedContent, accuracy: 6, "content", file: file, line: line)
+        XCTAssertEqual(marginGray, expectedMargin, accuracy: 6, "page margin", file: file, line: line)
+    }
+
+    private func slide(_ harness: Harness, toPage pageNumber: Int) {
+        let slider = harness.controller.pageSlider
+        slider.maximumValue = Float(harness.pdfView.document?.pageCount ?? 1)
+        slider.value = Float(pageNumber)
+        slider.sendActions(for: .valueChanged)
+        settle()
+    }
+
+    private func gray(of image: UIImage, at point: CGPoint) throws -> Int {
+        let (r, g, b) = try rgb(of: image, at: point)
+        return (r + g + b) / 3
+    }
+
+    /// RGB at a view point, read through a known 8-bit RGBA context.
+    private func rgb(of image: UIImage, at point: CGPoint) throws -> (Int, Int, Int) {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let x = min(max(Int(point.x * image.scale), 0), width - 1)
+        let y = min(max(Int(point.y * image.scale), 0), height - 1)
+        let offset = (y * width + x) * 4
+        return (Int(pixels[offset]), Int(pixels[offset + 1]), Int(pixels[offset + 2]))
+    }
+
     // MARK: - Options
 
     func testDarkThemeFitMatchesDefaultThemeFit() throws {
@@ -606,6 +1097,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private struct PageSpec {
         var content: CGRect
         var cropBox: CGRect?
+        var rotation: Int = 0
     }
 
     private struct Harness {
@@ -625,7 +1117,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         themeMode: PDFThemeMode = .none,
         readingDirection: PDFReadDirection = .LtR_TtB,
         pdfURL: URL? = nil,
-        inNavigationController: Bool = false
+        inNavigationController: Bool = false,
+        initialPage: Int? = nil
     ) throws -> Harness {
         let url = try pdfURL ?? makePDF(pages: pages)
         let controller = AppearanceTrackingPDFViewController()
@@ -636,6 +1129,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         for (index, spec) in pages.enumerated() {
             if let cropBox = spec.cropBox {
                 document.page(at: index)?.setBounds(cropBox, for: .cropBox)
+            }
+            if spec.rotation != 0 {
+                document.page(at: index)?.rotation = spec.rotation
             }
         }
         XCTAssertTrue(document.page(at: 0) is PDFPageWithBackground)
@@ -648,6 +1144,10 @@ final class YabrPDFMarginCropTests: XCTestCase {
             pageMode: .Page,
             readingDirection: readingDirection
         )
+        if let initialPage {
+            // Same shape as a restored reading position with no in-page offset.
+            controller.pageViewPositionHistory[initialPage] = PageViewPosition(scaler: 0, point: CGPoint(x: CGFloat.nan, y: CGFloat.nan))
+        }
 
         if inNavigationController {
             // Matches YabrEBookReader: nav bar and toolbar stay visible for PDF.
@@ -841,4 +1341,25 @@ private final class AppearanceTrackingPDFViewController: YabrPDFViewController {
         super.viewDidAppear(animated)
         didAppear = true
     }
+}
+
+private final class StubPDFPreferenceRepository: ReaderPreferenceRepositoryProtocol {
+    func loadInitialPreferences(for book: CalibreBook, readerType: ReaderType) -> ReaderEnginePreferences? { nil }
+    func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {}
+    func loadFolioPreferences(for book: CalibreBook) -> FolioReaderPreferenceValue? { nil }
+    func saveFolioPreferences(_ preferences: FolioReaderPreferenceValue, for book: CalibreBook) {}
+    func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? { nil }
+    func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook) {}
+    func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue? { nil }
+    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) {}
+}
+
+private final class PositionSpy: ReaderEngineDelegate {
+    private(set) var pageNumbers: [Int] = []
+    func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {
+        pageNumbers.append(position.pageNumber)
+    }
+    func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {}
+    func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {}
+    func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {}
 }

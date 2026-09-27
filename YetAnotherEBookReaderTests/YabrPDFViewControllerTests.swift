@@ -13,7 +13,6 @@ final class YabrPDFViewControllerTests: XCTestCase {
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
         tempURLs.removeAll()
-        PDFPageWithBackground.fillColor = nil
     }
 
     func testOpenReturnsMinusOneWhenMetaSourceHasNoURL() {
@@ -50,7 +49,8 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.open(), 0)
         XCTAssertEqual(controller.pdfOptions.themeMode, .forest)
-        XCTAssertEqual(PDFPageWithBackground.fillColor, options.fillColor)
+        XCTAssertFalse(controller.pdfView.themeOverlayView.isHidden)
+        XCTAssertFalse(controller.pageRenderTheme.drawsInverted)
     }
 
     func testNavigationBarHasNoCloseButton() {
@@ -236,7 +236,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertTrue(controller.capturedPresentedViewController is UIActivityViewController)
     }
 
-    func testSharePDFAnnotatedWritesPDFAndRestoresFillColor() throws {
+    func testSharePDFAnnotatedWritesPDF() throws {
         let pdfURL = try makePDFURL(name: "share-annotated", pageCount: 1)
         let controller = SpyYabrPDFViewController()
         controller.yabrPDFMetaSource = MockYabrPDFMetaSource(
@@ -247,14 +247,10 @@ final class YabrPDFViewControllerTests: XCTestCase {
         )
         controller.pdfView.document = PDFDocument(url: pdfURL)
 
-        let originalFillColor = CGColor(gray: 0.3, alpha: 1.0)
-        PDFPageWithBackground.fillColor = originalFillColor
-
         controller.sharePDF(annotated: true)
 
         let tmpFile = expectedSharedPDFURL(bookKey: "share-annotated-key", title: "Annotated Book", author: "Tester")
         XCTAssertTrue(FileManager.default.fileExists(atPath: tmpFile.path))
-        XCTAssertEqual(PDFPageWithBackground.fillColor, originalFillColor)
         XCTAssertTrue(controller.capturedPresentedViewController is UIActivityViewController)
     }
 

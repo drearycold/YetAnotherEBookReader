@@ -18,9 +18,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     let thumbController = UIViewController()
 
-    let blankView = UIImageView()
-    let blankActivityView = UIActivityIndicatorView()
-    
     let logger = Logger()
     
     var historyMenu = UIMenu(title: "History", children: [])
@@ -57,16 +54,19 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     }()
     lazy var bookmarkManager = PDFBookmarkManager(pdfView: pdfView, metaSource: yabrPDFMetaSource)
     lazy var searchController = PDFSearchController(pdfView: pdfView, metaSource: yabrPDFMetaSource)
-    lazy var marginCropController = PDFMarginCropController(
-        pdfView: pdfView,
-        blankView: blankView,
-        blankActivityView: blankActivityView
-    )
+    let marginCropController = PDFMarginCropController()
+
+    /// Read by `PDFPageWithBackground.draw` on PDFKit's render threads.
+    nonisolated let pageRenderTheme = PDFPageRenderTheme()
+
+    /// Page number (1-based) of a pending jump; `handlePageChange` shows the jump
+    /// mask once that page's viewport is applied.
+    var pendingJumpMaskPage: Int?
     
     @Published var pdfOptions = PDFPreferenceValue() {
         didSet {
-            PDFPageWithBackground.fillColor = pdfOptions.fillColor
-            
+            applyThemePalette()
+
             let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
             self.navigationController?.navigationBar.barTintColor = backgroundColor
             self.navigationController?.navigationBar.backgroundColor = backgroundColor
@@ -75,9 +75,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             self.tabBarController?.tabBar.barTintColor = backgroundColor
             self.tabBarController?.tabBar.backgroundColor = backgroundColor
             applyChromeTheme()
-            
-            self.pdfView.backgroundColor = backgroundColor
-            
+
             guard let curPage = self.pdfView.currentPage,
                   let curPageNum = curPage.pageRef?.pageNumber else { return }
             
@@ -116,6 +114,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
                 }
                 
                 let viewPosition = getPageViewPositionHistory(curPageNum)?.point
+                markJumpTarget(curPage)
                 if viewPosition != nil {
                     pdfView.go(to: PDFDestination(page: curPage, at: viewPosition!))
                 } else {
@@ -190,13 +189,18 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         self.annotationManager.injectAllHighlights()
         
         
-        marginCropController.configureBlankOverlay()
-        
         pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
         
         configureThumbnailPreview()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Hide PDFKit's placeholder and the unfitted first layout until the first
+        // page is positioned.
+        pdfView.showLoadingCover()
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
@@ -211,10 +215,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
         if let page = pdfView.document?.page(at: destPageIndex) {
-            if page.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                self.addBlankSubView(page: page)
-            }
             self.pdfView.goToFirstPage(self)
+            markJumpTarget(page)
             self.pdfView.go(to: page)
             
 //                if self.pdfView.currentPage?.pageRef?.pageNumber != destPageIndex {
@@ -227,6 +229,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         if destPageIndex == 0 {
             self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
+        pdfView.finishLoadingCover()
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -251,17 +254,37 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         updateChromeContainerLayout()
     }
     
-    func addBlankSubView(page: PDFPage?) {
-        marginCropController.showBlankOverlay(page: page, options: pdfOptions)
+    /// Dark page turns: PDFKit's page transition starts before `handlePageChange`
+    /// can cover it, so freeze the current page first; `handlePageChange` then
+    /// swaps in the new page.
+    func coverPageTurnIfNeeded() {
+        guard pdfOptions.themePalette.drawsInverted,
+              pdfView.displayMode == .singlePage,
+              let page = pdfView.currentPage
+        else { return }
+        pdfView.showJumpMask(for: page)
     }
-    
-    func clearBlankSubView() {
-        marginCropController.hideBlankOverlay()
+
+    /// Call before navigating to a different page by a jump (TOC, history, slider,
+    /// lists, restore). Ordinary next/prev turns do not show the mask.
+    func markJumpTarget(_ page: PDFPage?) {
+        guard let pageNumber = page?.pageRef?.pageNumber,
+              pageNumber != pdfView.currentPage?.pageRef?.pageNumber
+        else { return }
+        pendingJumpMaskPage = pageNumber
     }
-    
+
+    func applyThemePalette() {
+        let palette = pdfOptions.themePalette
+        pageRenderTheme.drawsInverted = palette.drawsInverted
+        pdfView.applyTheme(palette)
+        pdfViewAux.applyTheme(palette)
+        pdfView.invertsPagePlaceholders = palette.drawsInverted
+        pdfViewAux.invertsPagePlaceholders = palette.drawsInverted
+    }
 }
 
-extension YabrPDFViewController: PDFDocumentDelegate {
+extension YabrPDFViewController: PDFDocumentDelegate, PDFPageRenderThemeProviding {
     func classForPage() -> AnyClass {
         return PDFPageWithBackground.self
     }

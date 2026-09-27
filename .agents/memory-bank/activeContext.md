@@ -26,6 +26,35 @@ placement (content right of center, top offset / drift after page turns).
   right/left for `TtB_RtL`) walks outward over ink within ~1.5x the first
   inter-line gap, keeping short first lines and ascenders but not running
   heads. Vertical-text behavior is only covered by a solid-block test.
+- Theme (uncommitted): iOS ignores `CALayer.compositingFilter` (verified with
+  real `simctl io screenshot` captures; blend layers render opaque), so blend
+  overlays are not an option. `PDFThemePalette` drives it: sepia/forest use a
+  plain alpha overlay (`YabrPDFView.themeOverlayView`) solved so white maps
+  exactly to the theme colour (black -> ~(34,23,0) / (0,27,7)); dark stays in
+  `PDFPageWithBackground.draw`, now per-document via `PDFPageRenderTheme` on the
+  document delegate (the global `static fillColor` is gone). `blankView` was
+  replaced by `YabrPDFView.jumpMaskView`: an opaque snapshot of the target page at
+  its final viewport, shown only for jumps (`markJumpTarget` ->
+  `pendingJumpMaskPage`, consumed in single-page `handlePageChange`), never for
+  next/prev. View order: document < jump mask < theme overlay < tap labels.
+  Toggling dark re-attaches the document (`invalidateRenderedPages`): PDFKit's
+  tile cache ignores both `annotationsChanged(on:)` and a scale round-trip, which
+  left white tiles in dark and inverted tiles after leaving dark. Verify tile
+  state only with real `simctl io screenshot` captures: `drawHierarchy`
+  re-draws and does not show stale tiles.
+- Flicker ("must never flicker"): verified with `xcrun simctl io booted
+  recordVideo` + per-frame ffmpeg analysis (white/unthemed frames, A->B->A
+  blips, text-ink drops); screenshots at 2-3 fps miss 1-2 frame flashes. Dark
+  flashed white because PDFKit's per-page placeholder (`PDFPageLayer` >
+  `backgroundLayer`: white + unthemed preview, drawn without our `draw`)
+  shows before tiles render. Fixes: `YabrPDFView.invertsPagePlaceholders`
+  (iOS 16 `PDFPageOverlayViewProvider` hook + KVO on the layer's
+  contents/backgroundColor, iOS 15 best-effort via scroll KVO, untested);
+  dark page turns freeze the current page first (`coverPageTurnIfNeeded`) since
+  PDFKit's transition starts before `handlePageChange`; every dark page change
+  is masked; a loading cover hides the first layout. Overriding
+  `PDFPage.thumbnail` does not affect PDFKit's placeholder.
+  `testDarkInvertsPDFKitPagePlaceholders` fails loudly if PDFKit renames layers.
 - Persisted `pageOffsetX/Y` keep the visible upper-left semantics
   (`getPagePoint` now measures `convert(bounds, to: page)`).
   `rememberInPagePosition` is still never read by navigation code.

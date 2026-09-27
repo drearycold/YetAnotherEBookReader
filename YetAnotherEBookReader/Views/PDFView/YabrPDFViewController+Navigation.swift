@@ -25,9 +25,7 @@ extension YabrPDFViewController {
 
                         self.updateHistoryMenu(curPage: curPage)
 
-                        if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                            self.addBlankSubView(page: dest.page)
-                        }
+                        self.markJumpTarget(dest.page)
                         self.pdfView.go(to: dest)
                     })
 
@@ -97,9 +95,7 @@ extension YabrPDFViewController {
                     }
                 }
             }
-            if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                self.addBlankSubView(page: curPage)
-            }
+            self.markJumpTarget(curPage)
             if let location = location {
                 self.pdfView.go(to: location, on: curPage)
             } else {
@@ -159,6 +155,11 @@ extension YabrPDFViewController {
         self.titleInfoButton.setTitle(titleLabel, for: .normal)
 
         let curPageNum = pdfView.currentPage?.pageRef?.pageNumber ?? 1
+        // Dark pages are drawn into PDFKit's tiles and a newly shown page is a
+        // white placeholder until they render, so every dark page change is
+        // covered; light themes only cover jumps.
+        let showsJumpMask = pendingJumpMaskPage == curPageNum || pdfOptions.themePalette.drawsInverted
+        pendingJumpMaskPage = nil
         pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
 
@@ -187,8 +188,6 @@ extension YabrPDFViewController {
 
             return
         }
-
-        addBlankSubView(page: curPage)
 
         let boundForVisibleContentKey = PageVisibleContentKey(
             pageNumber: curPageNum,
@@ -220,6 +219,9 @@ extension YabrPDFViewController {
                 ),
                 on: curPage
             )
+            if showsJumpMask {
+                pdfView.showJumpMask(for: curPage)
+            }
             return
         }
 
@@ -252,6 +254,9 @@ extension YabrPDFViewController {
         }
 
         pdfView.applyViewport(fit, on: curPage)
+        if showsJumpMask {
+            pdfView.showJumpMask(for: curPage)
+        }
 
         updatePageViewPositionHistory()
         updateReadingProgress()

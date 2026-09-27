@@ -8,90 +8,61 @@
 import Foundation
 import PDFKit
 
-class PDFPageWithBackground : PDFPage {
-    static var fillColor: CGColor? = nil   //defaults to serpia
-    static let colorSpace = CGColorSpaceCreateDeviceRGB()
-    
+/// Per-document page rendering state. PDFKit renders page tiles on background
+/// threads, so access is lock-protected.
+final class PDFPageRenderTheme: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedDrawsInverted = false
+
+    var drawsInverted: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedDrawsInverted
+        }
+        set {
+            lock.lock()
+            storedDrawsInverted = newValue
+            lock.unlock()
+        }
+    }
+}
+
+/// Implemented by the `PDFDocument.delegate` that owns the pages.
+protocol PDFPageRenderThemeProviding: AnyObject {
+    var pageRenderTheme: PDFPageRenderTheme { get }
+}
+
+/// Draws the dark theme (inverted page, text at 70% gray). Light tints are an
+/// overlay on `YabrPDFView`; see `PDFThemePalette`.
+class PDFPageWithBackground: PDFPage {
+    private var drawsInverted: Bool {
+        (document?.delegate as? PDFPageRenderThemeProviding)?.pageRenderTheme.drawsInverted == true
+    }
+
     override func draw(with box: PDFDisplayBox, to context: CGContext) {
-        // Draw original content
         super.draw(with: box, to: context)
-        
-        
-        guard let fillColor = PDFPageWithBackground.fillColor,
-            let fillColorDeviceRGB = fillColor.converted(to: PDFPageWithBackground.colorSpace, intent: .defaultIntent, options: nil) else { return }
-        
-        let grayComponents = fillColor.converted(to: CGColorSpace(name: CGColorSpace.linearGray)!, intent: .defaultIntent, options: nil)?.components ?? []
-        print("\(#function) draw gray \(grayComponents)")
-        
-        let rect = self.bounds(for: box)
 
-        if grayComponents.count > 1, grayComponents[0] < 0.3 {
-            UIGraphicsPushContext(context)
-            context.saveGState()
-            
-            context.setBlendMode(.exclusion)
-            context.setFillColor(gray: 1.0 - grayComponents[0], alpha: 1.0)
-            context.fill(rect.offsetBy(dx: -rect.minX, dy: -rect.minY))
-            
-            context.setBlendMode(.darken)
-            context.setFillColor(gray: 0.7, alpha: 1.0)
-            context.fill(rect.offsetBy(dx: -rect.minX, dy: -rect.minY))
+        guard drawsInverted else { return }
 
-            context.restoreGState()
-            UIGraphicsPopContext()
-        } else {
-            UIGraphicsPushContext(context)
-            context.saveGState()
-            context.setBlendMode(.darken)
-            context.setFillColor(fillColorDeviceRGB)
-            context.fill(rect.offsetBy(dx: -rect.minX, dy: -rect.minY))
-            context.restoreGState()
-            UIGraphicsPopContext()
-        }
-        // print("context \(box.rawValue) \(context.height) \(context.width)")
+        let rect = bounds(for: box)
+        Self.invert(CGRect(origin: .zero, size: rect.size), in: context)
     }
-    
-    func thumbnailWithBackground(of size: CGSize, for box: PDFDisplayBox, by bounds: CGRect) -> UIImage {
-        let image = super.thumbnail(of: size, for: box)
-        
-        guard let fillColor = PDFPageWithBackground.fillColor,
-            let fillColorDeviceRGB = fillColor.converted(to: PDFPageWithBackground.colorSpace, intent: .defaultIntent, options: nil) else { return image }
-        
-        let grayComponents = fillColor.converted(to: CGColorSpace(name: CGColorSpace.linearGray)!, intent: .defaultIntent, options: nil)?.components ?? []
-        print("\(#function) draw gray \(grayComponents)")
-        
-        UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
-        guard let context = UIGraphicsGetCurrentContext() else { return image }
-        defer {
-            UIGraphicsEndImageContext()
-        }
 
-        let rect = CGRect(origin: .zero, size: image.size)
-        image.draw(in: rect)
+    /// Inverts to black, then caps text at 70% gray.
+    private static func invert(_ rect: CGRect, in context: CGContext) {
+        UIGraphicsPushContext(context)
+        context.saveGState()
 
-        if grayComponents.count > 1, grayComponents[0] < 0.3 {
-            context.setBlendMode(.exclusion)
-            context.setFillColor(gray: 1.0 - grayComponents[0], alpha: 1.0)
-            context.fill(rect)
-            
-            context.setBlendMode(.darken)
-            context.setFillColor(gray: 0.7, alpha: 1.0)
-            context.fill(rect)
-        } else {
-            context.setBlendMode(.darken)
-            context.setFillColor(fillColorDeviceRGB)
-            context.fill(rect)
-        }
-        guard let coloredImg = UIGraphicsGetImageFromCurrentImageContext() else { return image }
-        
-        return coloredImg
-    }
-    
-    override func thumbnail(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
-        let uiImage = super.thumbnail(of: size, for: box)
-    
-        print("\(#function) size=\(size) box=\(box.rawValue) imageSize=\(uiImage.size) imageScale=\(uiImage.scale) transform=\(super.transform(for: box))")
-        
-        return uiImage
+        context.setBlendMode(.exclusion)
+        context.setFillColor(gray: 1.0, alpha: 1.0)
+        context.fill(rect)
+
+        context.setBlendMode(.darken)
+        context.setFillColor(gray: 0.7, alpha: 1.0)
+        context.fill(rect)
+
+        context.restoreGState()
+        UIGraphicsPopContext()
     }
 }

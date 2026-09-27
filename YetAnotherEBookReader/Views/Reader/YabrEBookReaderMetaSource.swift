@@ -73,6 +73,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         if let curPage = view?.currentPage {
             view?.yabrPDFViewController?.updateHistoryMenu(curPage: curPage)
         }
+        view?.yabrPDFViewController?.markJumpTarget(destination.page)
         view?.go(to: destination)
     }
     

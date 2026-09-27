@@ -161,10 +161,9 @@ extension YabrPDFViewController {
             pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
             let nav = UINavigationController(rootViewController: pageController)
-            if let fillColor = PDFPageWithBackground.fillColor {
-                nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
-                nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
-            }
+            let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
+            nav.navigationBar.backgroundColor = fillColor
+            nav.navigationBar.barTintColor = fillColor
 
             self.present(nav, animated: true)
 
@@ -181,14 +180,14 @@ extension YabrPDFViewController {
             guard currentPageNumber != destPageNumber,
                   let destPage = self.pdfView.document?.page(at: destPageNumber - 1) else { return }
 
-            self.addBlankSubView(page: destPage)
+            self.markJumpTarget(destPage)
             self.pdfView.go(to: destPage)
         }), for: .valueChanged)
 
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
         pagePrevButton.addAction(UIAction(handler: { _ in
             self.updatePageViewPositionHistory()
-            self.addBlankSubView(page: self.pdfView.currentPage)
+            self.coverPageTurnIfNeeded()
 
             if self.pdfView.displaysRTL {
                 self.pdfView.goToNextPage(self.pagePrevButton)
@@ -200,7 +199,7 @@ extension YabrPDFViewController {
         pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
         pageNextButton.addAction(UIAction(handler: { _ in
             self.updatePageViewPositionHistory()
-            self.addBlankSubView(page: self.pdfView.currentPage)
+            self.coverPageTurnIfNeeded()
 
             if self.pdfView.displaysRTL {
                 self.pdfView.goToPreviousPage(self.pagePrevButton)
@@ -226,7 +225,6 @@ extension YabrPDFViewController {
                 else {
                     return
                 }
-                self.addBlankSubView(page: self.pdfView.currentPage)
                 historyItem.performWithSender(self, target: self.pdfView)
             })
 
@@ -332,10 +330,9 @@ extension YabrPDFViewController {
                 navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
                 let nav = UINavigationController(rootViewController: navigationController)
-                if let fillColor = PDFPageWithBackground.fillColor {
-                    nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
-                    nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
-                }
+                let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
+                nav.navigationBar.backgroundColor = fillColor
+                nav.navigationBar.barTintColor = fillColor
 
                 self.present(nav, animated: true)
             })),
@@ -346,10 +343,9 @@ extension YabrPDFViewController {
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
                 let nav = UINavigationController(rootViewController: annotationController)
-                if let fillColor = PDFPageWithBackground.fillColor {
-                    nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
-                    nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
-                }
+                let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
+                nav.navigationBar.backgroundColor = fillColor
+                nav.navigationBar.barTintColor = fillColor
 
                 self.present(nav, animated: true)
             }))
