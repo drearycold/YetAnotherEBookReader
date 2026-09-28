@@ -95,6 +95,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
                 }
             case .Scroll:
                 self.pdfView.displayMode = .singlePageContinuous
+                self.pdfView.restoreDefaultPageBreakMargins()
                 pageSlider.semanticContentAttribute = .forceLeftToRight
                 pdfView.displaysRTL = false
                 switch pdfOptions.scrollDirection {

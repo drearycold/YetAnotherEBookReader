@@ -645,6 +645,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
                 pages: [PageSpec(content: content, rotation: rotation)],
                 viewSize: Self.portrait
             )
+            // Plain PDFKit layout: drop the fit's padded page break margins first.
+            harness.pdfView.restoreDefaultPageBreakMargins()
             harness.pdfView.autoScales = true
             settle(0.5)
             let page = harness.page(0)
@@ -659,7 +661,11 @@ final class YabrPDFMarginCropTests: XCTestCase {
             let pageMargin = visibleContent.minY - visiblePage.minY > 8
                 ? CGPoint(x: visibleContent.midX, y: (visiblePage.minY + visibleContent.minY) / 2)
                 : CGPoint(x: visibleContent.midX, y: (visibleContent.maxY + visiblePage.maxY) / 2)
-            XCTAssertFalse(visibleContent.isEmpty, "rotation \(rotation)")
+            guard !visibleContent.isEmpty, !visiblePage.isEmpty else {
+                XCTFail("rotation \(rotation): content not visible, inView=\(inView) page=\(pageInView)")
+                tearDownWindow()
+                continue
+            }
 
             let snapshotContent = try gray(of: snapshot, at: insideContent)
             let snapshotMargin = try gray(of: snapshot, at: pageMargin)
@@ -755,6 +761,21 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let delete = try XCTUnwrap(children[3] as? UIAction)
         XCTAssertEqual(delete.identifier, PDFMenuManager.ActionID.deleteHighlight)
         XCTAssertTrue(delete.attributes.contains(.destructive))
+    }
+
+    /// A highlight spanning several lines anchors its menu on the line tapped.
+    func testHighlightMenuPointsAtTappedLine() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        let pdfView = harness.pdfView
+        let lineRects = (pdfView.highlights[highlightId] ?? []).flatMap(\.annotations).compactMap { annotation -> CGRect? in
+            annotation.page.map { pdfView.convert(annotation.bounds, from: $0) }
+        }
+        XCTAssertGreaterThan(lineRects.count, 1, "fixture highlight should span lines")
+
+        for rect in lineRects {
+            XCTAssertTrue(pdfView.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY)))
+            XCTAssertEqual(harness.controller.menuManager.highlightMenuRect, rect)
+        }
     }
 
     func testTappingOutsideHighlightsPresentsNoMenu() throws {

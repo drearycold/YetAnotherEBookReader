@@ -47,6 +47,8 @@ class YabrPDFView: PDFView {
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
     /// can be reached.
     private var viewportExtraInset = UIEdgeInsets.zero
+    /// PDFKit's own page break margins, before `padPageBreakMargins(for:)`.
+    private var defaultPageBreakMargins: UIEdgeInsets?
 
     /// Light theme tint (see `PDFThemePalette`), above the pages.
     let themeOverlayView: UIView = {
@@ -439,21 +441,18 @@ class YabrPDFView: PDFView {
         }
     }
 
-    /// The highlight under `location` and the view rect of its first annotation.
+    /// The highlight under `location` and the view rect of the annotation hit, so a
+    /// multi-line highlight's menu points at the line that was tapped.
     func highlight(at location: CGPoint) -> (UUID, CGRect)? {
-        let hit = highlights.first { _, values in
-            values.contains { value in
-                value.annotations.contains { annotation in
-                    guard let page = annotation.page else { return false }
-                    return annotation.bounds.contains(self.convert(location, to: page))
-                }
+        for (highlightId, values) in highlights {
+            for annotation in values.flatMap(\.annotations) {
+                guard let page = annotation.page,
+                      annotation.bounds.contains(self.convert(location, to: page))
+                else { continue }
+                return (highlightId, self.convert(annotation.bounds, from: page))
             }
         }
-        guard let (highlightId, values) = hit,
-              let annotation = values.first?.annotations.first,
-              let page = annotation.page
-        else { return nil }
-        return (highlightId, self.convert(annotation.bounds, from: page))
+        return nil
     }
 
     func copyHighlight(_ highlightId: UUID) {
@@ -739,11 +738,15 @@ extension YabrPDFView {
         return context.makeImage()
     }
 
-    /// `PDFPageView` > `PDFPageLayer` > `backgroundLayer` (PDFKit's layer names).
+    /// PDFKit's per-page placeholder: the child of `PDFPageLayer` at the
+    /// background z position, named `backgroundLayer` on iOS 26 and unnamed on
+    /// iOS 18.
     static func pagePlaceholderLayers(in pageView: UIView) -> [CALayer] {
         (pageView.layer.sublayers ?? [])
             .filter { ($0.name ?? "").hasPrefix("PDFPageLayer") }
-            .flatMap { ($0.sublayers ?? []).filter { $0.name == "backgroundLayer" } }
+            .flatMap { pageLayer in
+                (pageLayer.sublayers ?? []).filter { $0.name == "backgroundLayer" || ($0.name == nil && $0.zPosition == -900) }
+            }
     }
 
     private func installPagePlaceholderObserver() {
@@ -774,6 +777,7 @@ extension YabrPDFView {
     func applyViewport(_ fit: PDFPageViewportFit, on page: PDFPage) {
         scaleFactor = fit.scale
         layoutIfNeeded()
+        padPageBreakMargins(for: page)
 
         guard let scrollView = documentScrollView else {
             // Approximate fallback; PDFKit has always hosted pages in a scroll view.
@@ -795,6 +799,38 @@ extension YabrPDFView {
             scrollView.setContentOffset(target, animated: false)
             layoutIfNeeded()
         }
+    }
+
+    /// PDFKit centres a document smaller than the view, and on iOS 18 it does so by
+    /// moving the document view during layout, which cancels any scroll offset.
+    /// Padding each side of the page by the view's excess keeps the document at
+    /// least as large as the view, so every placement is reachable by scrolling.
+    private func padPageBreakMargins(for page: PDFPage) {
+        let base = defaultPageBreakMargins ?? pageBreakMargins
+        defaultPageBreakMargins = base
+        guard scaleFactor > 0 else { return }
+
+        let pageSize = page.bounds(for: displayBox).applying(CGAffineTransform(rotationAngle: CGFloat(page.rotation) * .pi / 180)).size
+        let extraWidth = max(0, bounds.width / scaleFactor - pageSize.width)
+        let extraHeight = max(0, bounds.height / scaleFactor - pageSize.height)
+        let margins = UIEdgeInsets(
+            top: base.top + extraHeight,
+            left: base.left + extraWidth,
+            bottom: base.bottom + extraHeight,
+            right: base.right + extraWidth
+        )
+        guard pageBreakMargins != margins else { return }
+        pageBreakMargins = margins
+        // PDFKit would otherwise relayout (and re-centre) the document later,
+        // after the scroll offset has been applied.
+        layoutDocumentView()
+        layoutIfNeeded()
+    }
+
+    /// Continuous mode lays pages out with PDFKit's own spacing.
+    func restoreDefaultPageBreakMargins() {
+        guard let base = defaultPageBreakMargins, pageBreakMargins != base else { return }
+        pageBreakMargins = base
     }
 
     private func resetViewportExtraInset(_ scrollView: UIScrollView) {

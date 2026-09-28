@@ -168,6 +168,7 @@ extension YabrPDFViewController {
         guard pdfView.frame.width > 1.0 else { return }
 
         if pdfView.displayMode != .singlePage {
+            pdfView.restoreDefaultPageBreakMargins()
             pdfView.scaleFactor = pdfOptions.lastScale
 
             if let pageViewPosition = getPageViewPositionHistory(curPageNum),

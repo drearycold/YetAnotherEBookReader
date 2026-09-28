@@ -69,11 +69,17 @@ placement (content right of center, top offset / drift after page turns).
   implement `gestureRecognizer(_:shouldBeRequiredToFailBy:)` — never call
   super there. MenuItemKit / UIMenuController / `YabrPDFAnnotationView` are gone
   from YabrPDF (FolioReaderKit still uses MenuItemKit on iOS 15).
-- Known iOS 18.5 gaps (found by running the PDF suites on iOS 18.5; 26.5 is
-  green): PDFKit's per-page placeholder layer structure differs, so the dark
-  placeholder inversion (flicker fix) finds no layers; and a width-fitted page
-  shorter than the view stays vertically centered (contentInset extension has
-  no effect), failing the portrait top-alignment tests. Needs follow-up.
+- PDFKit differs between iOS 18.5 and 26.5; run the PDF suites (and, for
+  flicker, a `recordVideo` session) on both. iOS 18 leaves `PDFPageLayer`'s
+  sublayers unnamed, so the placeholder is matched as `backgroundLayer` or the
+  unnamed child at z = -900. iOS 18 centres a document smaller than the view by
+  moving `PDFDocumentView` during layout, cancelling scroll offsets; the fit pads
+  `pageBreakMargins` (single-page only, followed by `layoutDocumentView()`) so
+  the document always covers the view, and continuous mode restores PDFKit's
+  default margins via `restoreDefaultPageBreakMargins()`.
+  The iOS 18 edit menu expands the highlight Style submenu inline and
+  horizontally, without the swatch images or the ✓ on the current style that
+  iOS 26 shows; both behave the same otherwise (verified by hand on 18.5/26.5).
 - In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
   nil`; window-hosted harnesses must recreate one before adding a window or the
   host's SwiftUI `appContainer` environment default asserts.
