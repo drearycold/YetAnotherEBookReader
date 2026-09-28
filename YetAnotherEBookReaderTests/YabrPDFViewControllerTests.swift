@@ -107,6 +107,35 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(nav.navigationBar.tintColor, .darkText)
     }
 
+    /// The status bar sits over the reader workspace's black background, not over
+    /// a reader, so the reader container keeps it light for every reader theme and
+    /// whether or not the reader shows its nav bar.
+    func testReaderNavigationControllerKeepsStatusBarLight() {
+        let controller = SpyYabrPDFViewController()
+        controller.pdfOptions = PDFPreferenceValue(themeMode: .serpia)
+        let nav = YabrEBookReaderNavigationController(
+            container: MockAppContainerFactory.makeContainer(testName: "YabrPDFViewControllerTests-statusBar"),
+            book: TestFixtures.makeBook(),
+            readerInfo: ReaderInfo(
+                deviceName: "test-device",
+                url: URL(fileURLWithPath: "/tmp/test.pdf"),
+                missing: false,
+                format: .PDF,
+                readerType: .YabrPDF,
+                position: BookDeviceReadingPosition(readerName: ReaderType.YabrPDF.id)
+            ),
+            presentationID: nil,
+            lifecycleEvents: { AsyncStream { $0.finish() } }
+        )
+        nav.viewControllers = [controller]
+
+        for hidden in [false, true] {
+            nav.setNavigationBarHidden(hidden, animated: false)
+            XCTAssertNil(nav.childForStatusBarStyle, "navigationBarHidden=\(hidden)")
+            XCTAssertEqual(nav.preferredStatusBarStyle, .lightContent, "navigationBarHidden=\(hidden)")
+        }
+    }
+
     func testPresentedSheetsUseReaderTheme() {
         let controller = SpyYabrPDFViewController()
         controller.pdfOptions = PDFPreferenceValue(themeMode: .forest)
