@@ -27,7 +27,9 @@ This file is the working guide for agents contributing to YetAnotherEBookReader
 - App: iOS 15+ and macOS 12+ via Catalyst ebook reader.
 - UI: SwiftUI for app structure/settings and UIKit for reader-heavy surfaces.
 - Readers: Readium R2 for EPUB/PDF/CBZ, FolioReaderKit for legacy EPUB, custom
-  PDFKit stack for YabrPDF.
+  PDFKit stack for YabrPDF. YabrPDF requires iOS 16 / Mac Catalyst 16 (native
+  edit menus); `ReaderInfo` resolves it to Readium PDF on older systems via
+  `ReaderType.resolved()`.
 - Persistence: RealmSwift for metadata, shelves, annotations, reading positions,
   preferences, search/category cache, and activity logs.
 - Networking: Calibre content server APIs through `CalibreServerService`,

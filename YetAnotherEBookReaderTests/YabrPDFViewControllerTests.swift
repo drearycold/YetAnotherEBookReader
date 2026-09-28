@@ -3,6 +3,7 @@ import UIKit
 import PDFKit
 @testable import YetAnotherEBookReader
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 @MainActor
 final class YabrPDFViewControllerTests: XCTestCase {
     private var tempURLs: [URL] = []
@@ -217,26 +218,34 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(callbackValues.first, model.preferences)
     }
 
-    func testBuildDefaultMenuItemsWithoutDictViewerReturnsHighlightOnly() {
+    func testSelectionMenuWithoutDictViewerOffersHighlightAndUnderline() {
         let controller = SpyYabrPDFViewController()
         controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil, dictViewer: nil)
 
-        let menuItems = controller.buildDefaultMenuItems()
+        let elements = controller.menuManager.selectionMenuElements().compactMap { $0 as? UIAction }
 
-        XCTAssertEqual(menuItems.count, 1)
-        XCTAssertEqual(menuItems.first?.title, "HighlightA")
+        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline])
+        XCTAssertEqual(elements.map(\.title), ["Highlight", "Underline"])
+        XCTAssertTrue(elements.allSatisfy { $0.image != nil })
     }
 
-    func testBuildDefaultMenuItemsWithDictViewerIncludesDictionaryAction() {
+    func testSelectionMenuWithDictViewerIncludesDictionaryAction() {
         let controller = SpyYabrPDFViewController()
         let dictViewer = UINavigationController(rootViewController: UIViewController())
         controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil, dictViewer: ("MDict", dictViewer))
 
-        let menuItems = controller.buildDefaultMenuItems()
+        let elements = controller.menuManager.selectionMenuElements().compactMap { $0 as? UIAction }
 
-        XCTAssertEqual(menuItems.count, 2)
-        XCTAssertEqual(menuItems[0].title, "HighlightA")
-        XCTAssertTrue(menuItems[1].title.contains("MDict"))
+        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.dictionary])
+        XCTAssertEqual(elements.last?.title, "MDict")
+    }
+
+    func testEditMenuInteractionIsInstalledOnPDFView() {
+        let controller = SpyYabrPDFViewController()
+        controller.loadViewIfNeeded()
+
+        let interactions = controller.pdfView.interactions.compactMap { $0 as? UIEditMenuInteraction }
+        XCTAssertTrue(interactions.contains { $0.delegate === controller.menuManager })
     }
 
     func testHandleScaleChangeUpdatesLastScale() throws {
@@ -375,6 +384,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 private final class SpyYabrPDFViewController: YabrPDFViewController {
     private(set) var capturedPresentedViewController: UIViewController?
 
@@ -384,6 +394,7 @@ private final class SpyYabrPDFViewController: YabrPDFViewController {
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
     private let pdfURLValue: URL?
     private let title: String

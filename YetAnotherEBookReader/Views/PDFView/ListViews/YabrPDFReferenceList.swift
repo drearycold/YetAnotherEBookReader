@@ -9,6 +9,7 @@
 import UIKit
 import SwiftSoup
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFReferenceList: YabrPDFTableViewController {
     fileprivate var sectionBookmarks = [Int: [PDFBookmark]]()
     

@@ -172,7 +172,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         }
 //        #endif
         
-        if readerInfo.format == Format.PDF {
+        // Before iOS 16, ReaderInfo has already resolved PDFs to Readium PDF above.
+        if readerInfo.format == Format.PDF, #available(iOS 16.0, macCatalyst 16.0, *) {
             let dictViewer = container.getCustomDictViewerNew(library: book.library)
             _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             

@@ -7,7 +7,7 @@ import PDFKit
 import SwiftUI
 import UIKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
     private enum ChromeMetrics {
         static let horizontalMargin: CGFloat = 16.0
@@ -51,70 +51,6 @@ extension YabrPDFViewController {
             pdfView.leftAnchor.constraint(equalTo: self.view.leftAnchor),
             pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
         ])
-    }
-
-    func configureSelectionOverlay() {
-        let defaultMenuItems = buildDefaultMenuItems()
-        UIMenuController.shared.menuItems = defaultMenuItems
-        UIMenuController.shared.update()
-
-        UIMenuController.installTo(responder: self.pdfView)
-
-        guard #available(iOS 16.0, *) else { return }
-
-        self.annotationView.isHidden = true
-        self.view.addSubview(self.annotationView)
-
-        self.annotationView.underlineButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
-        self.annotationView.highlightButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
-        self.annotationView.dictViewerButton.addTarget(nil, action: #selector(dictViewerAction(_:)), for: .primaryActionTriggered)
-
-        NotificationCenter.default.addObserver(forName: .PDFViewSelectionChanged, object: pdfView, queue: nil) { [self] _ in
-            guard let selection = pdfView.currentSelection,
-                  let selectionString = selection.string,
-                  selectionString.count > 0
-            else {
-                annotationView.isHidden = true
-                return
-            }
-
-            guard let selectionLastLine = selection.selectionsByLine().last,
-                  let selectionLastLinePage = selectionLastLine.pages.last
-            else {
-                annotationView.isHidden = true
-                return
-            }
-
-            let selectionBound = selectionLastLine.bounds(for: selectionLastLinePage)
-            let selectionInView = pdfView.convert(selectionBound, from: selectionLastLinePage)
-
-            let buttonSize = CGFloat(48)
-            let padding = CGFloat(32)
-
-            let annotationViewSize = CGSize(width: buttonSize, height: CGFloat(annotationView.arrangedSubviews.count) * buttonSize)
-
-            var annotationViewPosition = CGPoint(
-                x: selectionInView.maxX + padding / 2.0,
-                y: selectionInView.maxY + padding / 2.0
-            )
-
-            if annotationViewPosition.x + annotationViewSize.width + padding > pdfView.frame.width {
-                annotationViewPosition.x = pdfView.frame.width - buttonSize - padding
-            }
-
-            if annotationViewPosition.y + annotationViewSize.height + padding > pdfView.frame.height {
-                annotationViewPosition.y = selectionInView.minY - CGFloat(annotationView.arrangedSubviews.count) * buttonSize - padding * 2.0
-            }
-
-            annotationView.frame = .init(origin: annotationViewPosition, size: annotationViewSize)
-
-            annotationView.backgroundColor = pdfOptions.isDark(
-                UIColor.black.withAlphaComponent(0.9),
-                UIColor.white.withAlphaComponent(0.9)
-            )
-
-            annotationView.isHidden = false
-        }
     }
 
     func configureThumbnailPreview() {
@@ -211,20 +147,18 @@ extension YabrPDFViewController {
         stackView.axis = .horizontal
         stackView.spacing = 16.0
 
-        if #available(iOS 16.0, *) {
-            pageBackButton.isHidden = true
-            stackView.addArrangedSubview(pageBackButton)
+        pageBackButton.isHidden = true
+        stackView.addArrangedSubview(pageBackButton)
 
-            let pageBackAction = UIAction(handler: { _ in
-                guard let historyItem = self.historyMenu.children.last as? UIAction
-                else {
-                    return
-                }
-                historyItem.performWithSender(self, target: self.pdfView)
-            })
+        let pageBackAction = UIAction(handler: { _ in
+            guard let historyItem = self.historyMenu.children.last as? UIAction
+            else {
+                return
+            }
+            historyItem.performWithSender(self, target: self.pdfView)
+        })
 
-            pageBackButton.addAction(pageBackAction, for: .primaryActionTriggered)
-        }
+        pageBackButton.addAction(pageBackAction, for: .primaryActionTriggered)
 
         pageAuxButton.setImage(UIImage(systemName: "square.split.bottomrightquarter"), for: .normal)
         pageAuxButton.addAction(.init(handler: { [self] _ in

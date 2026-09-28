@@ -163,7 +163,8 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                 }
             }
         case .YabrPDF:
-            guard let yabrPDF: YabrPDFViewController = findChildViewController() else {
+            guard #available(iOS 16.0, macCatalyst 16.0, *),
+                  let yabrPDF: YabrPDFViewController = findChildViewController() else {
                 endCurrentSessionAtLatestPosition()
                 return
             }

@@ -6,7 +6,7 @@
 import PDFKit
 import UIKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
     func sharePDF(annotated: Bool) {
         let provider = YabrPDFSharingProvider(placeholderItem: "")

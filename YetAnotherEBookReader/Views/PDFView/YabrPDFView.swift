@@ -9,6 +9,7 @@ import Foundation
 
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFView: PDFView {
     let doubleTapLeftLabel = UILabel()
     let doubleTapRightLabel = UILabel()
@@ -23,6 +24,10 @@ class YabrPDFView: PDFView {
     var doubleTapGestureRecognizer: UITapGestureRecognizer?
     var singleTapGestureRecognizer: UITapGestureRecognizer?
     var highlightTapGestureRecognizer: UITapGestureRecognizer?
+    /// Only begins on a highlight; PDFKit's taps wait for it to fail, so tapping a
+    /// highlight shows the app's persisted menu instead of PDFKit's markup menu
+    /// (whose Remove / colour / Add Note would bypass the app's storage).
+    var highlightMenuTapGestureRecognizer: UITapGestureRecognizer?
 
     var yabrPDFViewController: YabrPDFViewController? {
         delegate?.pdfViewParentViewController?() as? YabrPDFViewController
@@ -35,8 +40,8 @@ class YabrPDFView: PDFView {
     var pagePrevButton: UIButton?
     
     var highlights = [UUID: [HighlightValue]]()
+    /// Highlight whose edit menu is showing.
     var highlightTapped: UUID?
-    var highlightIsEditing = false
 
     /// Content inset added on top of PDFKit's own so a viewport anchor outside the
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
@@ -75,8 +80,7 @@ class YabrPDFView: PDFView {
             updateAllPagePlaceholders()
         }
     }
-    private var pagePlaceholderProvider: AnyObject?
-    private var pagePlaceholderScrollObservation: NSKeyValueObservation?
+    private var pagePlaceholderProvider: PDFPagePlaceholderOverlayProvider?
     /// Keyed by placeholder layer; re-inverts whenever PDFKit sets new contents.
     private var pagePlaceholderObservations: [ObjectIdentifier: PagePlaceholderObservation] = [:]
 
@@ -91,41 +95,35 @@ class YabrPDFView: PDFView {
     }
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        let could = super.canPerformAction(action, withSender: sender)
-        print("\(#function) \(could) \(action.description)")
-        
-        self.interactions.forEach { interaction in
-            print("\(#function) \(interaction)")
-        }
-        
-        if action.description == "selectAll:" {
+        // Selecting a whole PDF is slow and never what a reader wants.
+        if action == #selector(UIResponderStandardEditActions.selectAll(_:)) {
             return false
         }
-        if self.highlightTapped != nil {
-            if action.description == "copy:" && highlightIsEditing {
-                return false
-            }
-            if action.description == "deleteHighlightAction"  {
-                return true
-            }
-            if action.description == "_translate:" {
-                return false
-            }
-            if action.description == "_lookup:" {
-                return false
-            }
-            if action.description == "_define:" {
-                return false
-            }
-        } else {
-//            if action == #selector(highlightAction(_:)) {
-//                return true
-//            }
-        }
-        
-        return could
+        return super.canPerformAction(action, withSender: sender)
     }
-    
+
+    /// Adds the reader actions to the system text-selection edit menu.
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard builder.system == .context, let menu = selectionContextMenu() else { return }
+        if builder.menu(for: .standardEdit) != nil {
+            builder.insertSibling(menu, afterMenu: .standardEdit)
+        } else {
+            builder.insertChild(menu, atStartOfMenu: .root)
+        }
+    }
+
+    /// The reader actions for the current text selection, or `nil` when there is no
+    /// selection or a highlight's own menu is showing.
+    func selectionContextMenu() -> UIMenu? {
+        guard highlightTapped == nil,
+              let text = currentSelection?.string, !text.isEmpty,
+              let elements = yabrPDFViewController?.menuManager.selectionMenuElements(),
+              !elements.isEmpty
+        else { return nil }
+        return UIMenu(options: .displayInline, children: elements)
+    }
+
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer == singleTapGestureRecognizer || gestureRecognizer == doubleTapGestureRecognizer {
             if otherGestureRecognizer is UILongPressGestureRecognizer { return false }
@@ -143,6 +141,24 @@ class YabrPDFView: PDFView {
         return super.gestureRecognizer(gestureRecognizer, shouldRecognizeSimultaneouslyWith: otherGestureRecognizer)
     }
     
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === highlightMenuTapGestureRecognizer {
+            return highlight(at: gestureRecognizer.location(in: self)) != nil
+        }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+
+    override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === highlightMenuTapGestureRecognizer {
+            return otherGestureRecognizer is UITapGestureRecognizer
+                && otherGestureRecognizer !== highlightTapGestureRecognizer
+                && otherGestureRecognizer.view?.isDescendant(of: self) == true
+        }
+        // PDFView declares but does not implement this optional delegate method, so
+        // calling super crashes; `false` is UIKit's default when it is absent.
+        return false
+    }
+
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         let location = touch.location(in: self)
         if singleTapGestureRecognizer == gestureRecognizer {
@@ -215,6 +231,12 @@ class YabrPDFView: PDFView {
         highlightTapGestureRecognizer.delaysTouchesEnded = true
         addGestureRecognizer(highlightTapGestureRecognizer)
         self.highlightTapGestureRecognizer = highlightTapGestureRecognizer
+
+        let highlightMenuTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(highlightMenuTappedGesture(sender:)))
+        highlightMenuTapGestureRecognizer.numberOfTapsRequired = 1
+        highlightMenuTapGestureRecognizer.delegate = self
+        addGestureRecognizer(highlightMenuTapGestureRecognizer)
+        self.highlightMenuTapGestureRecognizer = highlightMenuTapGestureRecognizer
     }
     
     func pageTapPreview(hMarginAutoScaler: Double) {
@@ -358,129 +380,96 @@ class YabrPDFView: PDFView {
     }
     
     @objc private func highlightTappedGesture(sender: UITapGestureRecognizer) {
+        guard sender.state == .ended else { return }
+        let location = sender.location(in: self)
+        // Taps on a highlight belong to `highlightMenuTapGestureRecognizer`.
+        guard highlight(at: location) == nil else { return }
+        handleTap(at: location)
+    }
+
+    @objc private func highlightMenuTappedGesture(sender: UITapGestureRecognizer) {
+        guard sender.state == .ended else { return }
+        handleHighlightTap(at: sender.location(in: self))
+    }
+
+    /// Shows the edit menu of the highlight at `location`; returns whether one was hit.
+    @discardableResult
+    func handleHighlightTap(at location: CGPoint) -> Bool {
+        guard let (highlightId, rect) = highlight(at: location) else { return false }
+        yabrPDFViewController?.menuManager.presentHighlightMenu(for: highlightId, rect: rect)
+        return true
+    }
+
+    /// A tap off any highlight: dismisses the highlight menu, clears the selection,
+    /// and follows link annotations.
+    func handleTap(at tapLocation: CGPoint) {
         self.highlightTapped = nil
-        self.highlightIsEditing = false
-        
-        print("\(#function) highlighted=\(highlightedSelections?.count)")
-        
-        if sender.state == .ended {
-            let tapLocation = sender.location(in: self)
-            
-            let aoi = self.areaOfInterest(for: tapLocation)
-            print("\(#function) aoi=\(aoi)")
-            
-            guard aoi.contains(.annotationArea) else {
-                self.currentSelection = nil
+        yabrPDFViewController?.menuManager.dismissHighlightMenu()
+
+        let aoi = self.areaOfInterest(for: tapLocation)
+        guard aoi.contains(.annotationArea) else {
+            self.currentSelection = nil
+            return
+        }
+
+        if self.currentSelection != nil {
+            self.clearSelection()
+        }
+
+        self.visiblePages.forEach { visiblePage in
+            guard let annotation = visiblePage.annotation(at: self.convert(tapLocation, to: visiblePage)),
+                  let typeString = annotation.type,
+                  let annotationAction = annotation.action
+            else {
                 return
             }
-            
-            let tappedHighlightValues = highlights.reduce(into: [HighlightValue]()) { partialResult, entry in
-                entry.value.forEach { highlightValue in
-                    if highlightValue.annotations.filter ({
-                        guard let page = $0.page else { return false }
-                        let pageLocation = self.convert(tapLocation, to: page)
-                        return $0.bounds.contains(pageLocation)
-                    }).isEmpty == false {
-                        partialResult.append(highlightValue)
-                    }
+
+            switch typeString {
+            case "Link":
+                if let currentPage = currentPage {
+                    self.yabrPDFViewController?.updateHistoryMenu(
+                        curPage: currentPage,
+                        location: self.convert(.zero, to: currentPage)
+                    )
                 }
-            }
-            
-            print("\(#function) tappedHighlightValues=\(tappedHighlightValues)")
-            
-            if let tappedHighlightValue = tappedHighlightValues.first,
-               let tappedAnnotation = tappedHighlightValue.annotations.first,
-               let tappedUUIDString = tappedAnnotation.value(forAnnotationKey: .highlightId) as? String,
-               let tappedUUID = UUID(uuidString: tappedUUIDString),
-               let tappedHighlightValue = highlights[tappedUUID],
-               let tappedAnnotationFirst = tappedHighlightValue.first?.annotations.first,
-               let page = tappedAnnotationFirst.page {
-                self.highlightTapped = tappedUUID
-                UIMenuController.shared.menuItems = buildHighlightMenuItems()
-                UIMenuController.shared.showMenu(from: self, rect: self.convert(tappedAnnotationFirst.bounds, from: page))
-            } else if UIMenuController.shared.isMenuVisible {
-                UIMenuController.shared.hideMenu()
-            } else if self.currentSelection != nil {
-                self.clearSelection()
-            }
-            
-            self.visiblePages.forEach { visiblePage in
-                guard let annotation = visiblePage.annotation(at: self.convert(tapLocation, to: visiblePage)),
-                      let typeString = annotation.type,
-                      let annotationAction = annotation.action
-                else {
-                    return
-                }
-                
-                print("\(#function) \(typeString) \(annotation.bounds)")
-                
-                switch typeString {
-                case "Link":
-                    if let currentPage = currentPage {
-                        self.yabrPDFViewController?.updateHistoryMenu(
-                            curPage: currentPage,
-                            location: self.convert(.zero, to: currentPage)//annotation.bounds
-                        )
-                    }
-                    self.perform(annotationAction)
-                default:
-                    break
-                }
+                self.perform(annotationAction)
+            default:
+                break
             }
         }
     }
-    
-    @objc override func copy(_ sender: Any?) {
-        if let highlightTapped = highlightTapped,
-           let highlightValueArray = highlights[highlightTapped] {
-            UIPasteboard.general.string = highlightValueArray.compactMap { $0.selection.string }.joined(separator: " ")
-            self.highlightTapped = nil
-        } else {
-            super.copy(sender)
-        }
-    }
-    
-    @objc func selectHighlightAction() {
-        guard let highlightTapped = highlightTapped,
-              let highlightValueArray = highlights[highlightTapped] else {
-            return
-        }
 
-        let tappedSelection = PDFSelection(document: self.document!)
-        tappedSelection.add(highlightValueArray.map { $0.selection})
-        self.setCurrentSelection(tappedSelection, animate: false)
-        
-        if let page = tappedSelection.pages.first {
-            UIMenuController.shared.hideMenu()
-            UIMenuController.shared.showMenu(from: self, rect: self.convert(tappedSelection.bounds(for: page), from: page))
+    /// The highlight under `location` and the view rect of its first annotation.
+    func highlight(at location: CGPoint) -> (UUID, CGRect)? {
+        let hit = highlights.first { _, values in
+            values.contains { value in
+                value.annotations.contains { annotation in
+                    guard let page = annotation.page else { return false }
+                    return annotation.bounds.contains(self.convert(location, to: page))
+                }
+            }
         }
+        guard let (highlightId, values) = hit,
+              let annotation = values.first?.annotations.first,
+              let page = annotation.page
+        else { return nil }
+        return (highlightId, self.convert(annotation.bounds, from: page))
     }
-    
-    @objc func modifyHighlightAction(_ sender: Any?) {
-        guard let highlightTapped = highlightTapped,
-              let highlightValueArray = highlights[highlightTapped] else {
-            return
-        }
 
-        if let selection = highlightValueArray.first?.selection,
-            let page = selection.pages.first {
-            UIMenuController.shared.hideMenu()
-            UIMenuController.shared.menuItems = buildHighlightModifyMenuItems()
-            highlightIsEditing = true
-            UIMenuController.shared.showMenu(from: self, rect: self.convert(selection.bounds(for: page), from: page))
-        }
+    func copyHighlight(_ highlightId: UUID) {
+        guard let values = highlights[highlightId] else { return }
+        UIPasteboard.general.string = values.compactMap { $0.selection.string }.joined(separator: " ")
     }
-    
-    @objc func deleteHighlightAction(_ sender: Any?) {
-        guard let highlightTapped = highlightTapped
-        else {
-            return
-        }
 
-        self.yabrPDFViewController?.annotationManager.removeHighlight(uuid: highlightTapped)
+    func selectHighlight(_ highlightId: UUID) {
+        guard let values = highlights[highlightId], let document = self.document else { return }
+        let selection = PDFSelection(document: document)
+        selection.add(values.map { $0.selection })
+        self.setCurrentSelection(selection, animate: false)
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension BookHighlightStyle {
     var pdfAnnotationSubtype: (PDFAnnotationSubtype, UIColor) {
         switch self {
@@ -499,6 +488,7 @@ extension BookHighlightStyle {
 }
 
 // MARK: Highlights
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFView {
     func injectHighlight(highlight: PDFHighlight) {
         highlight.pos.forEach { highlightPageLocation in
@@ -545,37 +535,9 @@ extension YabrPDFView {
         }
     }
     
-    func buildHighlightMenuItems() -> [UIMenuItem] {
-        var menuItems = [UIMenuItem]()
-        
-        menuItems.append(UIMenuItem(title: "Select", action: #selector(selectHighlightAction)))
-//        menuItems.append(UIMenuItem(title: "Modify", action: #selector(modifyHighlightAction)))
-        menuItems.append(UIMenuItem(title: "Delete", action: #selector(deleteHighlightAction)))
-        
-        return menuItems
-    }
-    
-    func buildHighlightModifyMenuItems() -> [UIMenuItem] {
-        guard let highlightTapped = self.highlightTapped else { return [] }
-        
-        var menuItems = BookHighlightStyle.allCases.map { style in
-            UIMenuItem(
-                title: style.description,
-                image: nil,
-                action: { _ in
-                    self.modifyHighlightStyle(highlightId: highlightTapped, type: style)
-                }
-            )
-        }
-        
-        menuItems.append(UIMenuItem(title: "Delete", image: nil, action: { _ in
-            self.yabrPDFViewController?.annotationManager.removeHighlight(uuid: highlightTapped)
-        }))
-        
-        return menuItems
-    }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFView {
     // MARK: Theme and jump mask
 
@@ -785,19 +747,11 @@ extension YabrPDFView {
     }
 
     private func installPagePlaceholderObserver() {
-        guard invertsPagePlaceholders, pagePlaceholderProvider == nil, pagePlaceholderScrollObservation == nil else { return }
-        if #available(iOS 16.0, macCatalyst 16.0, *) {
-            // Called synchronously while a page view is set up, before it is drawn.
-            let provider = PDFPagePlaceholderOverlayProvider()
-            pagePlaceholderProvider = provider
-            pageOverlayViewProvider = provider
-        } else if let scrollView = documentScrollView {
-            // Best effort: page views appear while scrolling.
-            pagePlaceholderScrollObservation = scrollView.observe(\.contentOffset) { [weak self] _, _ in
-                guard let self, self.invertsPagePlaceholders else { return }
-                self.updateAllPagePlaceholders()
-            }
-        }
+        guard invertsPagePlaceholders, pagePlaceholderProvider == nil else { return }
+        // Called synchronously while a page view is set up, before it is drawn.
+        let provider = PDFPagePlaceholderOverlayProvider()
+        pagePlaceholderProvider = provider
+        pageOverlayViewProvider = provider
     }
 
     // MARK: Viewport
@@ -877,18 +831,20 @@ extension YabrPDFView {
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension PDFAnnotationKey {
     
     public static let highlightId: PDFAnnotationKey = .init(rawValue: "/HID")
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 struct HighlightValue {
     let selection: PDFSelection
     var annotations: [PDFAnnotation] = []
 }
 
 @available(iOS 16.0, macCatalyst 16.0, *)
-private final class PDFPagePlaceholderOverlayProvider: NSObject, PDFPageOverlayViewProvider {
+final class PDFPagePlaceholderOverlayProvider: NSObject, PDFPageOverlayViewProvider {
     func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
         let overlay = UIView()
         overlay.isUserInteractionEnabled = false

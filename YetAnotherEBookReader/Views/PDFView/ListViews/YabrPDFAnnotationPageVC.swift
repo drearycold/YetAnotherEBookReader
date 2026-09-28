@@ -11,6 +11,7 @@ import UIKit
 internal let kReuseCellIdentifier = "io.github.drearycold.DSReader.Cell.ReuseIdentifier"
 internal let kReuseHeaderFooterIdentifier = "io.github.drearycold.DSReader.Cell.ReuseHeaderFooterIdentifier"
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFAnnotationPageVC: UIPageViewController {
     weak var pdfViewController: YabrPDFViewController?
     var yabrPDFView: YabrPDFView?
@@ -147,6 +148,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
 
 // MARK: UIPageViewControllerDelegate
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFAnnotationPageVC: UIPageViewControllerDelegate {
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -160,6 +162,7 @@ extension YabrPDFAnnotationPageVC: UIPageViewControllerDelegate {
 
 // MARK: UIPageViewControllerDataSource
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFAnnotationPageVC: UIPageViewControllerDataSource {
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {

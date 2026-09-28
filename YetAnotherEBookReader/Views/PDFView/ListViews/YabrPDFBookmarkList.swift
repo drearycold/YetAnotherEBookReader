@@ -9,6 +9,7 @@
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFBookmarkList: YabrPDFTableViewController {
     fileprivate var sectionBookmarks = [Int: [PDFBookmark]]()   //Page to Bookmark
 

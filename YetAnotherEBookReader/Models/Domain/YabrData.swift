@@ -63,6 +63,36 @@ enum ReaderType: String, CaseIterable, Identifiable, Codable {
             return .CBZ
         }
     }
+
+    /// YabrPDF relies on iOS 16 APIs (edit menus); older systems read PDFs in
+    /// Readium PDF.
+    static var isYabrPDFAvailable: Bool {
+        if #available(iOS 16.0, macCatalyst 16.0, *) {
+            return true
+        }
+        return false
+    }
+
+    /// The reader to actually use on this system.
+    func resolved(yabrPDFAvailable: Bool = Self.isYabrPDFAvailable) -> ReaderType {
+        self == .YabrPDF && !yabrPDFAvailable ? .ReadiumPDF : self
+    }
+
+    /// Readers offered for `format`, preferred first.
+    static func readers(for format: Format, yabrPDFAvailable: Bool = Self.isYabrPDFAvailable) -> [ReaderType] {
+        let readers: [ReaderType]
+        switch format {
+        case .EPUB:
+            readers = [.YabrEPUB, .ReadiumEPUB]
+        case .PDF:
+            readers = [.YabrPDF, .ReadiumPDF]
+        case .CBZ:
+            readers = [.ReadiumCBZ]
+        case .UNKNOWN:
+            readers = []
+        }
+        return readers.filter { $0.resolved(yabrPDFAvailable: yabrPDFAvailable) == $0 }
+    }
 }
 
 struct ReaderInfo {
@@ -72,6 +102,17 @@ struct ReaderInfo {
     let format: Format
     let readerType: ReaderType
     let position: BookDeviceReadingPosition
+
+    /// Every reader launch goes through here, so a reader unavailable on this
+    /// system (YabrPDF before iOS 16) is swapped for its fallback in one place.
+    init(deviceName: String, url: URL, missing: Bool, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
+        self.deviceName = deviceName
+        self.url = url
+        self.missing = missing
+        self.format = format
+        self.readerType = readerType.resolved()
+        self.position = position
+    }
 }
 
 struct FontInfo {

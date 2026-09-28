@@ -6,6 +6,7 @@
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class PDFBookmarkManager {
     private weak var pdfView: YabrPDFView?
     private var yabrPDFMetaSource: YabrPDFMetaSource?

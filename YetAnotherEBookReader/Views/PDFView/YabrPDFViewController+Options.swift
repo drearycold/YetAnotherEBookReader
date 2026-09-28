@@ -6,7 +6,7 @@
 import PDFKit
 import UIKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
     func handleOptionsChange(pdfOptions: PDFPreferenceValue) {
         let oldOptions = self.pdfOptions
@@ -72,7 +72,7 @@ extension YabrPDFViewController {
     }
 }
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController: ReaderEngineController {
     func applyPreferences(_ preferences: ReaderEnginePreferences) {
         var newOptions = pdfOptions

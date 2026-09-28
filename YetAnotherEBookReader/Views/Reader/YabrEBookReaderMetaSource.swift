@@ -9,6 +9,7 @@ import Foundation
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo

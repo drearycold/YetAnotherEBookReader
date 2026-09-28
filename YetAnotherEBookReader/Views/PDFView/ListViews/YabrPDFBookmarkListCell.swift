@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFBookmarkListCell: UITableViewCell {
     let dateLabel = UILabel()
     let titleLabel = UILabel()

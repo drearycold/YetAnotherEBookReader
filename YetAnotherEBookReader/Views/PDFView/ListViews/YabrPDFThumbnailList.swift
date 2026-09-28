@@ -9,6 +9,7 @@
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFThumbnailList: UICollectionViewController {
     var yabrPDFView: YabrPDFView? {
         (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFView

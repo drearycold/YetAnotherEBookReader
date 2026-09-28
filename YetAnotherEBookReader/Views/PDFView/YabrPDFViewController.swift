@@ -11,7 +11,7 @@ import PDFKit
 import OSLog
 import SwiftUI
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, ObservableObject {
     let pdfView = YabrPDFView()
     let pdfViewAux = YabrPDFView()
@@ -35,8 +35,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let pageBackButton = UIButton()
     let pageAuxButton = UIButton()
     
-    let annotationView = YabrPDFAnnotationView()
-    
     let shareBarButtonItem = UIBarButtonItem()
     
     let titleInfoButton = UIButton()
@@ -54,6 +52,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     }()
     lazy var bookmarkManager = PDFBookmarkManager(pdfView: pdfView, metaSource: yabrPDFMetaSource)
     lazy var searchController = PDFSearchController(pdfView: pdfView, metaSource: yabrPDFMetaSource)
+    lazy var menuManager = PDFMenuManager(controller: self)
     let marginCropController = PDFMarginCropController()
 
     /// Read by `PDFPageWithBackground.draw` on PDFKit's render threads.
@@ -182,7 +181,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         pdfView.autoScales = false
 
         configureReaderChrome()
-        configureSelectionOverlay()
+        configureSelectionMenus()
         
         self.annotationManager.injectAllHighlights()
         
@@ -208,7 +207,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
 //        self.viewSafeAreaInsetsDidChange()
 //        self.viewLayoutMarginsDidChange()
         
-//        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
         if pdfOptions.pageMode == .Page {
             pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
@@ -291,18 +289,21 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController: PDFDocumentDelegate, PDFPageRenderThemeProviding {
     func classForPage() -> AnyClass {
         return PDFPageWithBackground.self
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController: PDFViewDelegate {
     func pdfViewParentViewController() -> UIViewController {
         return self
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 protocol YabrPDFMetaSource {
     func yabrPDFBook(_ view: YabrPDFView?, info: String) -> String?
     

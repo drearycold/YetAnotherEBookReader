@@ -55,6 +55,28 @@ placement (content right of center, top offset / drift after page turns).
   is masked; a loading cover hides the first layout. Overriding
   `PDFPage.thumbnail` does not affect PDFKit's placeholder.
   `testDarkInvertsPDFKitPagePlaceholders` fails loudly if PDFKit renames layers.
+- YabrPDF requires iOS 16 / Mac Catalyst 16 (uncommitted): `ReaderType.resolved()`
+  maps YabrPDF to ReadiumPDF on older systems and `ReaderInfo.init` applies it,
+  so every launch path falls back; YabrPDF types are `@available(iOS 16.0,
+  macCatalyst 16.0, *)`. Menus are native (`Managers/PDFMenuManager.swift`,
+  modelled on FolioReaderKit's `WebViewMenuManager`): selection actions are
+  injected by `YabrPDFView.buildMenu(with:)`; tapping a highlight shows the
+  app's own `UIEditMenuInteraction` (Copy / Select / Style ▸ / Delete). PDFKit
+  has its own markup menu for highlight taps (Copy / Highlight / Remove / Add
+  Note) that bypasses the app's persistence and does not go through
+  `buildMenu`; `highlightMenuTapGestureRecognizer` only begins on a highlight
+  and PDFKit's taps are required to wait for it. PDFView declares but does not
+  implement `gestureRecognizer(_:shouldBeRequiredToFailBy:)` — never call
+  super there. MenuItemKit / UIMenuController / `YabrPDFAnnotationView` are gone
+  from YabrPDF (FolioReaderKit still uses MenuItemKit on iOS 15).
+- Known iOS 18.5 gaps (found by running the PDF suites on iOS 18.5; 26.5 is
+  green): PDFKit's per-page placeholder layer structure differs, so the dark
+  placeholder inversion (flicker fix) finds no layers; and a width-fitted page
+  shorter than the view stays vertically centered (contentInset extension has
+  no effect), failing the portrait top-alignment tests. Needs follow-up.
+- In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
+  nil`; window-hosted harnesses must recreate one before adding a window or the
+  host's SwiftUI `appContainer` environment default asserts.
 - Persisted `pageOffsetX/Y` keep the visible upper-left semantics
   (`getPagePoint` now measures `convert(bounds, to: page)`).
   `rememberInPagePosition` is still never read by navigation code.

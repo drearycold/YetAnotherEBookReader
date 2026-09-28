@@ -7,6 +7,7 @@ import PDFKit
 ///
 /// Pages are synthetic: a white page with one solid black "text block" at a known
 /// PDF-space rect (bottom-left origin), so the expected crop and viewport are exact.
+@available(iOS 16.0, macCatalyst 16.0, *)
 @MainActor
 final class YabrPDFMarginCropTests: XCTestCase {
     private static let pageSize = CGSize(width: 612, height: 792)
@@ -430,7 +431,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
     // MARK: - Jump mask entry points
 
     func testTOCJumpShowsMask() throws {
-        guard #available(iOS 16.0, *) else { throw XCTSkip("UIAction.performWithSender needs iOS 16") }
         let harness = try makeJumpHarness()
         let document = try XCTUnwrap(harness.pdfView.document)
         let root = PDFOutline()
@@ -454,7 +454,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     func testHistoryBackShowsMask() throws {
-        guard #available(iOS 16.0, *) else { throw XCTSkip("the history back button is iOS 16+") }
         let harness = try makeJumpHarness()
         harness.controller.updateHistoryMenu(curPage: harness.page(0))
         pressNext(harness)
@@ -703,6 +702,159 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(harness.pdfView.bounds.size, Self.landscape)
         XCTAssertEqual(harness.pdfView.themeOverlayView.frame, harness.pdfView.bounds)
         XCTAssertEqual(harness.pdfView.jumpMaskView.frame, harness.pdfView.bounds)
+    }
+
+    // MARK: - Native edit menus
+
+    func testSelectionContextMenuOffersReaderActionsOnlyForASelection() throws {
+        let (harness, selection) = try makeTextHarness()
+
+        XCTAssertNil(harness.pdfView.selectionContextMenu(), "no selection, no reader actions")
+
+        harness.pdfView.setCurrentSelection(selection, animate: false)
+        let menu = try XCTUnwrap(harness.pdfView.selectionContextMenu())
+        XCTAssertTrue(menu.options.contains(.displayInline))
+        XCTAssertEqual(menu.children.compactMap { ($0 as? UIAction)?.identifier }, [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline])
+
+        harness.pdfView.highlightTapped = UUID()
+        XCTAssertNil(harness.pdfView.selectionContextMenu(), "a highlight's own menu is showing")
+    }
+
+    func testHighlightAndUnderlineActionsAnnotateTheSelection() throws {
+        let (harness, selection) = try makeTextHarness()
+
+        for (identifier, subtype) in [(PDFMenuManager.ActionID.highlight, PDFAnnotationSubtype.highlight), (PDFMenuManager.ActionID.underline, .underline)] {
+            harness.pdfView.setCurrentSelection(selection, animate: false)
+            try perform(identifier, in: harness.controller.menuManager.selectionMenuElements())
+
+            let annotations = harness.page(0).annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }
+            XCTAssertTrue(annotations.contains { $0.type == subtype.rawValue.replacingOccurrences(of: "/", with: "") }, "\(identifier): \(annotations.map { $0.type ?? "" })")
+        }
+        XCTAssertEqual(harness.pdfView.highlights.count, 2)
+    }
+
+    func testTappingHighlightPresentsItsMenu() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        let (_, rect) = try XCTUnwrap(harness.pdfView.highlight(at: highlightCenter(harness, highlightId)))
+
+        harness.pdfView.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY))
+        settle()
+
+        XCTAssertEqual(harness.pdfView.highlightTapped, highlightId)
+        XCTAssertEqual(harness.controller.menuManager.highlightMenuRect, rect)
+        let menu = try XCTUnwrap(editMenu(harness))
+        let children = menu.children
+        XCTAssertEqual(children.count, 4)
+        XCTAssertEqual((children[0] as? UIAction)?.identifier, PDFMenuManager.ActionID.copyHighlight)
+        XCTAssertEqual((children[1] as? UIAction)?.identifier, PDFMenuManager.ActionID.selectHighlight)
+        let style = try XCTUnwrap(children[2] as? UIMenu)
+        XCTAssertEqual(style.title, "Style")
+        XCTAssertEqual(style.children.count, BookHighlightStyle.allCases.count)
+        let checked = style.children.compactMap { $0 as? UIAction }.filter { $0.state == .on }.map(\.identifier)
+        XCTAssertEqual(checked, [PDFMenuManager.ActionID.style(.green)], "current style is ticked")
+        let delete = try XCTUnwrap(children[3] as? UIAction)
+        XCTAssertEqual(delete.identifier, PDFMenuManager.ActionID.deleteHighlight)
+        XCTAssertTrue(delete.attributes.contains(.destructive))
+    }
+
+    func testTappingOutsideHighlightsPresentsNoMenu() throws {
+        let (harness, _) = try makeHighlightHarness(style: .yellow)
+        let pageInView = harness.pdfView.convert(harness.page(0).bounds(for: .cropBox), from: harness.page(0))
+
+        harness.pdfView.handleHighlightTap(at: CGPoint(x: pageInView.midX, y: pageInView.maxY - 8))
+
+        XCTAssertNil(harness.pdfView.highlightTapped)
+    }
+
+    func testHighlightMenuActions() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        let text = harness.pdfView.highlights[highlightId]?.compactMap { $0.selection.string }.joined(separator: " ")
+        let elements = harness.controller.menuManager.highlightMenuElements(for: highlightId)
+
+        try perform(PDFMenuManager.ActionID.copyHighlight, in: elements)
+        XCTAssertEqual(UIPasteboard.general.string, text)
+
+        try perform(PDFMenuManager.ActionID.selectHighlight, in: elements)
+        XCTAssertEqual(harness.pdfView.currentSelection?.string, text)
+
+        try perform(PDFMenuManager.ActionID.style(.underline), in: elements)
+        XCTAssertEqual(harness.controller.annotationManager.style(of: highlightId), .underline)
+        XCTAssertTrue(harness.pdfView.highlights[highlightId]?.flatMap(\.annotations).allSatisfy { $0.type == "Underline" } ?? false)
+
+        try perform(PDFMenuManager.ActionID.deleteHighlight, in: elements)
+        XCTAssertNil(harness.pdfView.highlights[highlightId])
+        XCTAssertTrue(harness.page(0).annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }.isEmpty)
+    }
+
+    /// PDFKit shows its own markup menu (Remove / colour / Add Note, which bypass
+    /// the app's storage) when a highlight annotation is tapped; its taps must wait
+    /// for the app's highlight tap so the app's menu wins.
+    func testPDFKitTapsWaitForHighlightMenuTap() throws {
+        let (harness, _) = try makeHighlightHarness(style: .yellow)
+        let pdfView = harness.pdfView
+        let highlightMenuTap = try XCTUnwrap(pdfView.highlightMenuTapGestureRecognizer)
+        let pdfKitTap = UITapGestureRecognizer()
+        let pageContent = try XCTUnwrap(pdfView.documentScrollView?.subviews.first)
+        pageContent.addGestureRecognizer(pdfKitTap)
+        defer { pageContent.removeGestureRecognizer(pdfKitTap) }
+
+        XCTAssertTrue(pdfView.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: pdfKitTap))
+        XCTAssertFalse(pdfView.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: try XCTUnwrap(pdfView.highlightTapGestureRecognizer)))
+        // PDFView declares but does not implement this delegate method: falling back
+        // to super used to crash with an unrecognized selector.
+        XCTAssertFalse(pdfView.gestureRecognizer(pdfKitTap, shouldBeRequiredToFailBy: highlightMenuTap))
+    }
+
+    /// Real-text pages (the synthetic block pages have no text to select).
+    private func makeTextHarness() throws -> (Harness, PDFSelection) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let book = try BookPageGenerator.make(pageCount: 2, pageSize: Self.pageSize, in: directory)
+        tempURLs.append(book.url)
+        let harness = try makeHarness(
+            pages: book.bodyRects.map { PageSpec(content: $0) },
+            viewSize: Self.portrait,
+            pdfURL: book.url
+        )
+        waitForJumpMaskToClear(harness)
+        let document = try XCTUnwrap(harness.pdfView.document)
+        let selection = try XCTUnwrap(document.selection(from: harness.page(0), atCharacterIndex: 40, to: harness.page(0), atCharacterIndex: 90))
+        return (harness, selection)
+    }
+
+    private func makeHighlightHarness(style: BookHighlightStyle) throws -> (Harness, UUID) {
+        let (harness, selection) = try makeTextHarness()
+        harness.controller.annotationManager.addHighlight(style: style.rawValue, selection: selection)
+        let highlightId = try XCTUnwrap(harness.pdfView.highlights.keys.first)
+        return (harness, highlightId)
+    }
+
+    private func highlightCenter(_ harness: Harness, _ highlightId: UUID) -> CGPoint {
+        guard let annotation = harness.pdfView.highlights[highlightId]?.first?.annotations.first,
+              let page = annotation.page
+        else { return .zero }
+        let rect = harness.pdfView.convert(annotation.bounds, from: page)
+        return CGPoint(x: rect.midX, y: rect.midY)
+    }
+
+    private func editMenu(_ harness: Harness) -> UIMenu? {
+        let manager = harness.controller.menuManager
+        guard let interaction = harness.pdfView.interactions.compactMap({ $0 as? UIEditMenuInteraction }).first(where: { $0.delegate === manager }) else { return nil }
+        let configuration = UIEditMenuConfiguration(identifier: PDFMenuManager.highlightMenuIdentifier, sourcePoint: .zero)
+        return manager.editMenuInteraction(interaction, menuFor: configuration, suggestedActions: [])
+    }
+
+    private func perform(_ identifier: UIAction.Identifier, in elements: [UIMenuElement], file: StaticString = #filePath, line: UInt = #line) throws {
+        func find(_ elements: [UIMenuElement]) -> UIAction? {
+            for element in elements {
+                if let action = element as? UIAction, action.identifier == identifier { return action }
+                if let menu = element as? UIMenu, let action = find(menu.children) { return action }
+            }
+            return nil
+        }
+        let action = try XCTUnwrap(find(elements), "no action \(identifier.rawValue)", file: file, line: line)
+        action.performWithSender(nil, target: nil)
+        settle(0.1)
     }
 
     // MARK: - Jump helpers
@@ -1195,6 +1347,12 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func installWindow(root: UIViewController, size: CGSize) {
+        // Adding a window to the host app's scene re-evaluates its SwiftUI views,
+        // whose `appContainer` environment default asserts when
+        // `AppContainer.shared` is nil (some suites clear it in tearDown).
+        if AppContainer.shared == nil {
+            _ = MockAppContainerFactory.makeContainer()
+        }
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
         window.frame = CGRect(origin: .zero, size: size)
@@ -1334,6 +1492,7 @@ private enum BookPageGenerator {
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 private final class AppearanceTrackingPDFViewController: YabrPDFViewController {
     private(set) var didAppear = false
 

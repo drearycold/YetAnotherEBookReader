@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFTableViewController: UITableViewController {
     var pdfViewController: YabrPDFViewController? {
         (self.parent as? YabrPDFAnnotationPageVC)?.pdfViewController

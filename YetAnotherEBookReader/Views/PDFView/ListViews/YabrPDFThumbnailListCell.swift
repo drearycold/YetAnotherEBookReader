@@ -8,6 +8,7 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFThumbnailListCell: UICollectionViewCell {
     let thumbImage = UIImageView()
     let titleLabel = UILabel()
@@ -49,6 +50,7 @@ class YabrPDFThumbnailListCell: UICollectionViewCell {
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFThumbnailSectionCell: UICollectionViewCell {
     let titleLabel = UILabel()
     

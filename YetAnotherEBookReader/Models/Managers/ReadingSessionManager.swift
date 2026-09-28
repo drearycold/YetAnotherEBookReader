@@ -279,9 +279,9 @@ class ReadingSessionManager {
                 defaultFormat = Format.EPUB
         }
         
-        formatReaderMap[Format.EPUB] = [ReaderType.YabrEPUB, ReaderType.ReadiumEPUB]
-        formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
-        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
+        for format in [Format.EPUB, .PDF, .CBZ] {
+            formatReaderMap[format] = ReaderType.readers(for: format)
+        }
     }
     
     func setup(container: AppContainerProtocol) {
@@ -721,9 +721,9 @@ class ReadingSessionManager {
 
     // user preferred -> default -> unsupported
     func getPreferredReader(for format: Format) -> ReaderType {
-        return ReaderType(
+        return (ReaderType(
             rawValue: UserDefaults.standard.string(forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)") ?? ""
-        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED
+        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED).resolved()
     }
 
     func updatePreferredReader(for format: Format, with reader: ReaderType) {

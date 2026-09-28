@@ -8,6 +8,7 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFHighlightList: YabrPDFTableViewController {
     fileprivate var sectionHighlights = [Int: [PDFHighlight]]()
 

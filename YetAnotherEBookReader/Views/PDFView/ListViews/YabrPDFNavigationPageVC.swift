@@ -8,6 +8,7 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFNavigationPageVC: UIPageViewController {
     weak var pdfViewController: YabrPDFViewController?
     var yabrPDFView: YabrPDFView?
@@ -110,6 +111,7 @@ class YabrPDFNavigationPageVC: UIPageViewController {
 
 // MARK: UIPageViewControllerDelegate
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFNavigationPageVC: UIPageViewControllerDelegate {
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -123,6 +125,7 @@ extension YabrPDFNavigationPageVC: UIPageViewControllerDelegate {
 
 // MARK: UIPageViewControllerDataSource
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFNavigationPageVC: UIPageViewControllerDataSource {
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {

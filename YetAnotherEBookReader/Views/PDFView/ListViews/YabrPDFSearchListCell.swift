@@ -6,6 +6,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFSearchListCell: UITableViewCell {
     let pageLabel: UILabel = .init()
     let snippetLabel: UILabel = .init()

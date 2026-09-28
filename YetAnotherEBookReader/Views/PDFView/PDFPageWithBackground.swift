@@ -10,6 +10,7 @@ import PDFKit
 
 /// Per-document page rendering state. PDFKit renders page tiles on background
 /// threads, so access is lock-protected.
+@available(iOS 16.0, macCatalyst 16.0, *)
 final class PDFPageRenderTheme: @unchecked Sendable {
     private let lock = NSLock()
     private var storedDrawsInverted = false
@@ -29,12 +30,14 @@ final class PDFPageRenderTheme: @unchecked Sendable {
 }
 
 /// Implemented by the `PDFDocument.delegate` that owns the pages.
+@available(iOS 16.0, macCatalyst 16.0, *)
 protocol PDFPageRenderThemeProviding: AnyObject {
     var pageRenderTheme: PDFPageRenderTheme { get }
 }
 
 /// Draws the dark theme (inverted page, text at 70% gray). Light tints are an
 /// overlay on `YabrPDFView`; see `PDFThemePalette`.
+@available(iOS 16.0, macCatalyst 16.0, *)
 class PDFPageWithBackground: PDFPage {
     private var drawsInverted: Bool {
         (document?.delegate as? PDFPageRenderThemeProviding)?.pageRenderTheme.drawsInverted == true

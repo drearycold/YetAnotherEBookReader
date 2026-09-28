@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFHighlightListCell: UITableViewCell {
     let dateLabel: UILabel = .init()
     let highlightLabel: UILabel = .init()

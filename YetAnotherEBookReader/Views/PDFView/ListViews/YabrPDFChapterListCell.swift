@@ -9,6 +9,7 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFChapterListCell: UITableViewCell {
     let indexLabel = UILabel()
     let pageLabel = UILabel()

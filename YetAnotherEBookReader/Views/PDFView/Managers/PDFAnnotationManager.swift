@@ -6,6 +6,7 @@
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class PDFAnnotationManager {
     private weak var pdfView: YabrPDFView?
     private weak var delegate: ReaderEngineDelegate?
@@ -61,6 +62,10 @@ class PDFAnnotationManager {
             date: Date()
         )
         pdfView.injectHighlight(highlight: pdfHighlight)
+    }
+
+    func style(of uuid: UUID) -> BookHighlightStyle? {
+        activeHighlights[uuid].flatMap { BookHighlightStyle(rawValue: $0.type) }
     }
 
     func removeHighlight(uuid: UUID) {
