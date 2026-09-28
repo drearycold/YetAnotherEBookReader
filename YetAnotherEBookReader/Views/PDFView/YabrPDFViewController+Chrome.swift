@@ -18,8 +18,6 @@ extension YabrPDFViewController {
 
     func configureReaderChrome() {
         let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
-        self.navigationController?.navigationBar.barTintColor = backgroundColor
-        self.navigationController?.navigationBar.backgroundColor = backgroundColor
         self.navigationController?.toolbar.barTintColor = backgroundColor
         self.navigationController?.toolbar.backgroundColor = backgroundColor
         self.tabBarController?.tabBar.barTintColor = backgroundColor
@@ -160,10 +158,7 @@ extension YabrPDFViewController {
             pageController.yabrPDFView = self.pdfView
             pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
-            let nav = UINavigationController(rootViewController: pageController)
-            let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
-            nav.navigationBar.backgroundColor = fillColor
-            nav.navigationBar.barTintColor = fillColor
+            let nav = self.themedNavigationController(rootViewController: pageController)
 
             self.present(nav, animated: true)
 
@@ -294,6 +289,15 @@ extension YabrPDFViewController {
         chromeContainerHeightConstraint?.constant = ChromeMetrics.height
     }
 
+    /// Sheets presented from the reader take the reader theme's nav bar.
+    func themedNavigationController(rootViewController: UIViewController) -> UINavigationController {
+        let palette = pdfOptions.themePalette
+        palette.apply(to: rootViewController.navigationItem)
+        let nav = UINavigationController(rootViewController: rootViewController)
+        palette.apply(to: nav.navigationBar)
+        return nav
+    }
+
     func applyChromeTheme() {
         let tintColor = pdfOptions.isDark(UIColor.lightText, UIColor.darkText)
         let secondaryTintColor = tintColor.withAlphaComponent(0.28)
@@ -329,10 +333,7 @@ extension YabrPDFViewController {
                 navigationController.yabrPDFView = self.pdfView
                 navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
-                let nav = UINavigationController(rootViewController: navigationController)
-                let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
-                nav.navigationBar.backgroundColor = fillColor
-                nav.navigationBar.barTintColor = fillColor
+                let nav = self.themedNavigationController(rootViewController: navigationController)
 
                 self.present(nav, animated: true)
             })),
@@ -342,10 +343,7 @@ extension YabrPDFViewController {
                 annotationController.yabrPDFView = self.pdfView
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
-                let nav = UINavigationController(rootViewController: annotationController)
-                let fillColor = UIColor(cgColor: self.pdfOptions.fillColor)
-                nav.navigationBar.backgroundColor = fillColor
-                nav.navigationBar.barTintColor = fillColor
+                let nav = self.themedNavigationController(rootViewController: annotationController)
 
                 self.present(nav, animated: true)
             }))

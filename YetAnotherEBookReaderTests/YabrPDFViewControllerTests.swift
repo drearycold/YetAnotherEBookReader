@@ -62,6 +62,63 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertFalse(items.contains { $0.image == UIImage(systemName: "xmark.circle") }, "The reader workspace owns closing; YabrPDF must not add its own close button.")
     }
 
+    func testNavigationItemAppearanceFollowsTheme() throws {
+        let controller = SpyYabrPDFViewController()
+
+        for theme in PDFThemeMode.allCases {
+            controller.pdfOptions = PDFPreferenceValue(themeMode: theme)
+            let item = controller.navigationItem
+            let appearance = try XCTUnwrap(item.standardAppearance, "\(theme)")
+            for other in [item.scrollEdgeAppearance, item.compactAppearance, item.compactScrollEdgeAppearance] {
+                XCTAssertEqual(other?.backgroundColor, appearance.backgroundColor, "\(theme): every bar state uses the theme appearance")
+            }
+
+            let fill = controller.pdfOptions.fillColor
+            if fill.alpha > 0 {
+                XCTAssertEqual(appearance.backgroundColor?.cgColor.components, fill.components, "\(theme)")
+                XCTAssertNil(appearance.backgroundEffect, "\(theme) bar should be opaque")
+            } else {
+                XCTAssertNil(appearance.backgroundColor, "none keeps the system bar background")
+            }
+            let titleColor = appearance.titleTextAttributes[.foregroundColor] as? UIColor
+            XCTAssertEqual(titleColor, theme == .dark ? .white : .black, "\(theme)")
+        }
+    }
+
+    /// `open()` sets the options before the reader is pushed; the bar must still be
+    /// themed once it appears, even when the bar itself carries the app's wood look.
+    func testThemeSetBeforePushAppliesToNavigationBar() {
+        let controller = SpyYabrPDFViewController()
+        controller.pdfOptions = PDFPreferenceValue(themeMode: .dark)
+
+        let nav = UINavigationController(rootViewController: controller)
+        let wood = UINavigationBarAppearance()
+        wood.configureWithOpaqueBackground()
+        wood.backgroundColor = .brown
+        nav.navigationBar.standardAppearance = wood
+        nav.navigationBar.scrollEdgeAppearance = wood
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+
+        XCTAssertEqual(nav.navigationBar.tintColor, .lightText)
+        XCTAssertEqual(controller.navigationItem.standardAppearance?.backgroundColor?.cgColor.components, CGColor(gray: 0, alpha: 1).components)
+
+        controller.pdfOptions = PDFPreferenceValue(themeMode: .serpia)
+        XCTAssertEqual(nav.navigationBar.tintColor, .darkText)
+    }
+
+    func testPresentedSheetsUseReaderTheme() {
+        let controller = SpyYabrPDFViewController()
+        controller.pdfOptions = PDFPreferenceValue(themeMode: .forest)
+        let root = UIViewController()
+
+        let nav = controller.themedNavigationController(rootViewController: root)
+
+        XCTAssertTrue(nav.viewControllers.first === root)
+        XCTAssertEqual(root.navigationItem.standardAppearance?.backgroundColor?.cgColor.components, controller.pdfOptions.fillColor.components)
+        XCTAssertEqual(nav.navigationBar.tintColor, .darkText)
+    }
+
     func testApplyPreferencesMapsReaderEnginePreferencesToPDFOptions() {
         let controller = SpyYabrPDFViewController()
         let preferences = ReaderEnginePreferences(themeMode: 3, scroll: true, scrollDirection: 1)

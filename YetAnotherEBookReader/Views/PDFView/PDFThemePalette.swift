@@ -4,6 +4,7 @@
 //
 
 import CoreGraphics
+import UIKit
 
 /// How a YabrPDF theme is rendered.
 ///
@@ -30,7 +31,8 @@ struct PDFThemePalette: Equatable {
     }
 
     let themeMode: PDFThemeMode
-    /// Chrome, list and page background colour.
+    /// Chrome, list and page background colour, in sRGB: `CGColor(red:green:blue:)`
+    /// is Generic RGB (gamma 1.8) and renders visibly lighter than the page.
     let background: CGColor
     /// Colour of the PDFView canvas outside the page, below the overlay.
     let canvas: CGColor
@@ -48,12 +50,12 @@ struct PDFThemePalette: Equatable {
             overlay = nil
             drawsInverted = false
         case .serpia:
-            background = CGColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
+            background = CGColor(srgbRed: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
             canvas = CGColor(gray: 1.0, alpha: 1.0)
             overlay = Self.overlay(mappingWhiteTo: background)
             drawsInverted = false
         case .forest:
-            background = CGColor(red: 0xBA / 255.0, green: 0xD5 / 255.0, blue: 0xC1 / 255.0, alpha: 1.0)
+            background = CGColor(srgbRed: 0xBA / 255.0, green: 0xD5 / 255.0, blue: 0xC1 / 255.0, alpha: 1.0)
             canvas = CGColor(gray: 1.0, alpha: 1.0)
             overlay = Self.overlay(mappingWhiteTo: background)
             drawsInverted = false
@@ -77,5 +79,42 @@ struct PDFThemePalette: Equatable {
             blue: 1 - drop[2] / alpha,
             alpha: alpha
         )
+    }
+}
+
+extension PDFThemePalette {
+    /// Nav bar look for the reader and the sheets it presents. Applied through
+    /// `UINavigationItem` so it wins over the app-wide wood appearance that is set
+    /// on `UINavigationBar.appearance()` and on individual bars.
+    func navigationBarAppearance() -> UINavigationBarAppearance {
+        let appearance = UINavigationBarAppearance()
+        if background.alpha > 0 {
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(cgColor: background)
+            appearance.shadowColor = .clear
+        } else {
+            appearance.configureWithDefaultBackground()
+        }
+        let titleColor: UIColor = drawsInverted ? .white : .black
+        appearance.titleTextAttributes = [.foregroundColor: titleColor]
+        appearance.largeTitleTextAttributes = [.foregroundColor: titleColor]
+        return appearance
+    }
+
+    /// Bar button tint, matching the reader chrome.
+    var barTintColor: UIColor {
+        drawsInverted ? .lightText : .darkText
+    }
+
+    func apply(to navigationItem: UINavigationItem) {
+        let appearance = navigationBarAppearance()
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationItem.compactAppearance = appearance
+        navigationItem.compactScrollEdgeAppearance = appearance
+    }
+
+    func apply(to navigationBar: UINavigationBar) {
+        navigationBar.tintColor = barTintColor
     }
 }

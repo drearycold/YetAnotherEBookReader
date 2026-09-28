@@ -26,6 +26,15 @@ final class PDFThemePaletteTests: XCTestCase {
         }
     }
 
+    /// `CGColor(red:green:blue:)` is Generic RGB (gamma 1.8); bars built from it
+    /// render visibly lighter than the page, so theme colours must be sRGB.
+    func testTintBackgroundsAreSRGB() {
+        for theme in [PDFThemeMode.serpia, .forest] {
+            let palette = PDFThemePalette(themeMode: theme)
+            XCTAssertEqual(palette.background.colorSpace?.name, CGColorSpace.sRGB, "\(theme)")
+        }
+    }
+
     func testDarkIsDrawnInvertedWithoutOverlay() {
         let palette = PDFThemePalette(themeMode: .dark)
 

@@ -68,8 +68,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             applyThemePalette()
 
             let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
-            self.navigationController?.navigationBar.barTintColor = backgroundColor
-            self.navigationController?.navigationBar.backgroundColor = backgroundColor
             self.navigationController?.toolbar.barTintColor = backgroundColor
             self.navigationController?.toolbar.backgroundColor = backgroundColor
             self.tabBarController?.tabBar.barTintColor = backgroundColor
@@ -196,6 +194,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if let navigationBar = navigationController?.navigationBar {
+            pdfOptions.themePalette.apply(to: navigationBar)
+        }
         // Hide PDFKit's placeholder and the unfitted first layout until the first
         // page is positioned.
         pdfView.showLoadingCover()
@@ -276,6 +277,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
 
     func applyThemePalette() {
         let palette = pdfOptions.themePalette
+        // navigationItem exists before the reader is pushed, so this also holds
+        // when `open()` sets the options ahead of presentation.
+        palette.apply(to: navigationItem)
+        if let navigationBar = navigationController?.navigationBar {
+            palette.apply(to: navigationBar)
+        }
         pageRenderTheme.drawsInverted = palette.drawsInverted
         pdfView.applyTheme(palette)
         pdfViewAux.applyTheme(palette)
