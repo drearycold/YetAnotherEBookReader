@@ -38,18 +38,18 @@ extension YabrPDFViewController {
         navigationItem.titleView = titleInfoButton
 
         pdfView.delegate = self
-        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        surface.translatesAutoresizingMaskIntoConstraints = false
 
-        self.view.addSubview(pdfView)
+        self.view.addSubview(surface)
 
-        let bottomConstraint = pdfView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
+        let bottomConstraint = surface.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
         self.pdfViewBottomConstraint = bottomConstraint
 
         NSLayoutConstraint.activate([
-            pdfView.topAnchor.constraint(equalTo: self.view.topAnchor),
+            surface.topAnchor.constraint(equalTo: self.view.topAnchor),
             bottomConstraint,
-            pdfView.leftAnchor.constraint(equalTo: self.view.leftAnchor),
-            pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
+            surface.leftAnchor.constraint(equalTo: self.view.leftAnchor),
+            surface.rightAnchor.constraint(equalTo: self.view.rightAnchor)
         ])
     }
 
@@ -91,7 +91,6 @@ extension YabrPDFViewController {
 
             let pageController = YabrPDFNavigationPageVC()
             pageController.pdfViewController = self
-            pageController.yabrPDFView = self.pdfView
             pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
             let nav = self.themedNavigationController(rootViewController: pageController)
@@ -264,7 +263,6 @@ extension YabrPDFViewController {
             UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { _ in
                 let navigationController = YabrPDFNavigationPageVC()
                 navigationController.pdfViewController = self
-                navigationController.yabrPDFView = self.pdfView
                 navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
                 let nav = self.themedNavigationController(rootViewController: navigationController)
@@ -274,7 +272,6 @@ extension YabrPDFViewController {
             UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { _ in
                 let annotationController = YabrPDFAnnotationPageVC()
                 annotationController.pdfViewController = self
-                annotationController.yabrPDFView = self.pdfView
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
 
                 let nav = self.themedNavigationController(rootViewController: annotationController)

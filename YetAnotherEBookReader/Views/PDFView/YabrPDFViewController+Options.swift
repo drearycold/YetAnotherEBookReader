@@ -68,7 +68,7 @@ extension YabrPDFViewController {
     }
 
     @objc func handleDisplayBoxChange(_ sender: Any?) {
-        print("handleDisplayBoxChange: \(self.pdfView.currentDestination!)")
+        print("handleDisplayBoxChange: \(String(describing: self.pdfView.currentDestination))")
     }
 }
 

@@ -300,6 +300,8 @@
 		E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35262FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift */; };
 		2AC9D76130A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D76030A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift */; };
 		2AC9D76230A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D76030A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift */; };
+		2AC9D77130A0A10000AA0001 /* PDFReaderSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D77030A0A10000AA0001 /* PDFReaderSurface.swift */; };
+		2AC9D77230A0A10000AA0001 /* PDFReaderSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D77030A0A10000AA0001 /* PDFReaderSurface.swift */; };
 		E71F35282FE3B38A007AB0B1 /* CalibreSyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35262FE3B389007AB0B1 /* CalibreSyncModels.swift */; };
 		E71F352A2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35292FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift */; };
 		E71F352A2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */; };
@@ -717,6 +719,7 @@
 		E71F35232FE3B37A007AB0B1 /* CalibrePayloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrePayloadModels.swift; sourceTree = "<group>"; };
 		E71F35262FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "YabrPDFViewController+Selection.swift"; sourceTree = "<group>"; };
 		2AC9D76030A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFNoteEditorViewController.swift; sourceTree = "<group>"; };
+		2AC9D77030A0A10000AA0001 /* PDFReaderSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReaderSurface.swift; sourceTree = "<group>"; };
 		E71F35262FE3B389007AB0B1 /* CalibreSyncModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreSyncModels.swift; sourceTree = "<group>"; };
 		E71F35292FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "YabrPDFViewController+Sharing.swift"; sourceTree = "<group>"; };
 		E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrePluginModels.swift; sourceTree = "<group>"; };
@@ -1057,6 +1060,7 @@
 				E71F35232FDFC180007AB0B1 /* YabrPDFViewController+Options.swift */,
 				E71F35262FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift */,
 				2AC9D76030A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift */,
+				2AC9D77030A0A10000AA0001 /* PDFReaderSurface.swift */,
 				E71F35292FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift */,
 				E792835228F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift */,
 				E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */,
@@ -1846,6 +1850,7 @@
 				E7226E452FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35272FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				2AC9D76130A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift in Sources */,
+				2AC9D77130A0A10000AA0001 /* PDFReaderSurface.swift in Sources */,
 				E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
 				E7AD300230F0A00100AD0001 /* ShelfAdLayoutPolicy.swift in Sources */,
 				E7AD301130F0A00100AD0001 /* ShelfLayoutPlanner.swift in Sources */,
@@ -2151,6 +2156,7 @@
 				E71F35832FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,
 				E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				2AC9D76230A0A10000AA0001 /* YabrPDFNoteEditorViewController.swift in Sources */,
+				2AC9D77230A0A10000AA0001 /* PDFReaderSurface.swift in Sources */,
 				E71F351E2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift in Sources */,
 				E71F352B2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */,
 				E71F352E2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */,

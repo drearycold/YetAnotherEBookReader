@@ -289,7 +289,6 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         let page = YabrPDFAnnotationPageVC()
         page.pdfViewController = controller
-        page.yabrPDFView = controller.pdfView
         page.yabrPDFMetaSource = metaSource
         page.loadViewIfNeeded()
         let list = page.highlightViewController
@@ -305,6 +304,28 @@ final class YabrPDFViewControllerTests: XCTestCase {
         delete.handler(delete, UIView()) { completed = $0 }
         XCTAssertEqual(spy.removed, [highlight.uuid.uuidString], "persisted removal goes through the annotation manager")
         XCTAssertEqual(completed, true)
+    }
+
+    func testSurfaceHostsTheActivePageViewAndRelaysItsNotifications() {
+        let controller = SpyYabrPDFViewController()
+        controller.loadViewIfNeeded()
+        XCTAssertTrue(controller.pdfView === controller.surface.activeView)
+        XCTAssertTrue(controller.pdfView.superview === controller.surface)
+        XCTAssertTrue(controller.surface.superview === controller.view)
+
+        let relayedNames: [Notification.Name] = [.readerSurfacePageChanged, .readerSurfaceScaleChanged, .readerSurfaceDisplayBoxChanged]
+        var relayed: [Notification.Name] = []
+        let observers = relayedNames.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: controller.surface, queue: nil) { relayed.append($0.name) }
+        }
+        defer { observers.forEach(NotificationCenter.default.removeObserver) }
+
+        for name in [Notification.Name.PDFViewPageChanged, .PDFViewScaleChanged, .PDFViewDisplayBoxChanged] {
+            NotificationCenter.default.post(name: name, object: controller.pdfView)
+        }
+        NotificationCenter.default.post(name: .PDFViewPageChanged, object: controller.pdfViewAux)
+
+        XCTAssertEqual(relayed, relayedNames, "only the active page view's notifications are relayed")
     }
 
     func testEditMenuInteractionIsInstalledOnPDFView() {

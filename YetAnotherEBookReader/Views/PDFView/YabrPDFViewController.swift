@@ -13,7 +13,10 @@ import SwiftUI
 
 @available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, ObservableObject {
-    let pdfView = YabrPDFView()
+    /// Hosts the page views; see `PDFReaderSurface`.
+    let surface = PDFReaderSurface()
+    /// The page view on screen. Read it at the point of use; never store it.
+    var pdfView: YabrPDFView { surface.activeView }
     let pdfViewAux = YabrPDFView()
     
     let thumbController = UIViewController()
@@ -48,10 +51,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     lazy var annotationManager: PDFAnnotationManager = {
         let bookId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Key") ?? ""
-        return PDFAnnotationManager(pdfView: pdfView, delegate: readerEngineDelegate, bookId: bookId)
+        return PDFAnnotationManager(surface: surface, delegate: readerEngineDelegate, bookId: bookId)
     }()
-    lazy var bookmarkManager = PDFBookmarkManager(pdfView: pdfView, metaSource: yabrPDFMetaSource)
-    lazy var searchController = PDFSearchController(pdfView: pdfView, metaSource: yabrPDFMetaSource)
+    lazy var bookmarkManager = PDFBookmarkManager(surface: surface, metaSource: yabrPDFMetaSource)
+    lazy var searchController = PDFSearchController(surface: surface, metaSource: yabrPDFMetaSource)
     lazy var menuManager = PDFMenuManager(controller: self)
     let marginCropController = PDFMarginCropController()
 
@@ -175,9 +178,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         
         // pdfView.usePageViewController(true, withViewOptions: nil)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .PDFViewScaleChanged, object: pdfView)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .PDFViewDisplayBoxChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .readerSurfacePageChanged, object: surface)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .readerSurfaceScaleChanged, object: surface)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .readerSurfaceDisplayBoxChanged, object: surface)
         
         pdfView.autoScales = false
 

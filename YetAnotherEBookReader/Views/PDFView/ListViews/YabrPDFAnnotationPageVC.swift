@@ -14,7 +14,8 @@ internal let kReuseHeaderFooterIdentifier = "io.github.drearycold.DSReader.Cell.
 @available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFAnnotationPageVC: UIPageViewController {
     weak var pdfViewController: YabrPDFViewController?
-    var yabrPDFView: YabrPDFView?
+    /// Read from the reader each time; the page view on screen can change.
+    var yabrPDFView: YabrPDFView? { pdfViewController?.pdfView }
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
     var segmentedControl: UISegmentedControl!

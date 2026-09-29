@@ -8,14 +8,15 @@ import PDFKit
 
 @available(iOS 16.0, macCatalyst 16.0, *)
 class PDFAnnotationManager {
-    private weak var pdfView: YabrPDFView?
+    private weak var surface: PDFReaderSurface?
+    private var pdfView: YabrPDFView? { surface?.activeView }
     weak var delegate: ReaderEngineDelegate?
     private var bookId: String
     
     private var activeHighlights = [UUID: ReaderEngineHighlight]()
 
-    init(pdfView: YabrPDFView, delegate: ReaderEngineDelegate?, bookId: String) {
-        self.pdfView = pdfView
+    init(surface: PDFReaderSurface, delegate: ReaderEngineDelegate?, bookId: String) {
+        self.surface = surface
         self.delegate = delegate
         self.bookId = bookId
     }
