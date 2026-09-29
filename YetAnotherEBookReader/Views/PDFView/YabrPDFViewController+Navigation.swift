@@ -221,7 +221,7 @@ extension YabrPDFViewController {
                 on: curPage
             )
             if showsJumpMask {
-                pdfView.showJumpMask(for: curPage)
+                surface.showJumpMask(for: curPage)
             }
             return
         }
@@ -256,7 +256,7 @@ extension YabrPDFViewController {
 
         pdfView.applyViewport(fit, on: curPage)
         if showsJumpMask {
-            pdfView.showJumpMask(for: curPage)
+            surface.showJumpMask(for: curPage)
         }
 
         updatePageViewPositionHistory()

@@ -161,20 +161,22 @@ extension YabrPDFViewController {
 
         pageAuxButton.setImage(UIImage(systemName: "square.split.bottomrightquarter"), for: .normal)
         pageAuxButton.addAction(.init(handler: { [self] _ in
-            if pdfViewAux.superview == nil {
+            if auxSurface.superview == nil {
                 pdfViewAux.backgroundColor = pdfView.backgroundColor
 
-                pdfViewAux.frame = .init(
+                auxSurface.frame = .init(
                     origin: .init(x: 150.0, y: view.frame.height - 260),
                     size: .init(width: pdfView.frame.width - 200.0, height: 200.0)
                 )
+                // Size the page view before it is scaled.
+                auxSurface.layoutIfNeeded()
 
                 if pdfViewAux.document == nil {
                     pdfViewAux.document = pdfView.document
 
-                    pdfViewAux.layer.borderWidth = 2
-                    pdfViewAux.layer.cornerRadius = 8
-                    pdfViewAux.layer.shadowRadius = 16
+                    auxSurface.layer.borderWidth = 2
+                    auxSurface.layer.cornerRadius = 8
+                    auxSurface.layer.shadowRadius = 16
 
                     pdfViewAux.scaleFactor = pdfView.scaleFactor * 0.8
                     pdfViewAux.displayMode = .singlePageContinuous
@@ -186,9 +188,9 @@ extension YabrPDFViewController {
                     }
                 }
 
-                view.addSubview(pdfViewAux)
+                view.addSubview(auxSurface)
             } else {
-                pdfViewAux.removeFromSuperview()
+                auxSurface.removeFromSuperview()
             }
 
         }), for: .primaryActionTriggered)

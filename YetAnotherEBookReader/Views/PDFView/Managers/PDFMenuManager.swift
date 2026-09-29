@@ -29,7 +29,7 @@ final class PDFMenuManager: NSObject {
 
     private weak var controller: YabrPDFViewController?
     private lazy var editMenuInteraction = UIEditMenuInteraction(delegate: self)
-    /// View rect of the highlight whose menu is showing.
+    /// Rect (in the surface) of the highlight whose menu is showing.
     private(set) var highlightMenuRect = CGRect.zero
 
     init(controller: YabrPDFViewController) {
@@ -38,10 +38,10 @@ final class PDFMenuManager: NSObject {
     }
 
     func install() {
-        guard let pdfView = controller?.pdfView,
-              !pdfView.interactions.contains(where: { $0 === editMenuInteraction })
+        guard let surface = controller?.surface,
+              !surface.interactions.contains(where: { $0 === editMenuInteraction })
         else { return }
-        pdfView.addInteraction(editMenuInteraction)
+        surface.addInteraction(editMenuInteraction)
     }
 
     // MARK: Text selection
@@ -106,10 +106,13 @@ final class PDFMenuManager: NSObject {
         ]
     }
 
+    /// `rect` is in the page view's coordinates.
     func presentHighlightMenu(for highlightId: UUID, rect: CGRect) {
-        guard let pdfView = controller?.pdfView else { return }
+        guard let controller else { return }
+        let pdfView = controller.pdfView
         install()
         pdfView.highlightTapped = highlightId
+        let rect = pdfView.convert(rect, to: controller.surface)
         highlightMenuRect = rect
         let configuration = UIEditMenuConfiguration(
             identifier: Self.highlightMenuIdentifier,

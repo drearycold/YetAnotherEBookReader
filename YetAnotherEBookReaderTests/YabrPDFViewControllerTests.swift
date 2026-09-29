@@ -50,7 +50,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.open(), 0)
         XCTAssertEqual(controller.pdfOptions.themeMode, .forest)
-        XCTAssertFalse(controller.pdfView.themeOverlayView.isHidden)
+        XCTAssertFalse(controller.surface.themeOverlayView.isHidden)
         XCTAssertFalse(controller.pageRenderTheme.drawsInverted)
     }
 
@@ -328,11 +328,11 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(relayed, relayedNames, "only the active page view's notifications are relayed")
     }
 
-    func testEditMenuInteractionIsInstalledOnPDFView() {
+    func testEditMenuInteractionIsInstalledOnSurface() {
         let controller = SpyYabrPDFViewController()
         controller.loadViewIfNeeded()
 
-        let interactions = controller.pdfView.interactions.compactMap { $0 as? UIEditMenuInteraction }
+        let interactions = controller.surface.interactions.compactMap { $0 as? UIEditMenuInteraction }
         XCTAssertTrue(interactions.contains { $0.delegate === controller.menuManager })
     }
 

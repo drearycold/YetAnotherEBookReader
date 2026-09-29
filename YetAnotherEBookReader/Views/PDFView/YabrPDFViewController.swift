@@ -17,7 +17,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let surface = PDFReaderSurface()
     /// The page view on screen. Read it at the point of use; never store it.
     var pdfView: YabrPDFView { surface.activeView }
-    let pdfViewAux = YabrPDFView()
+    /// The floating reference view (the chrome's aux button).
+    let auxSurface = PDFReaderSurface()
+    var pdfViewAux: YabrPDFView { auxSurface.activeView }
     
     let thumbController = UIViewController()
 
@@ -128,9 +130,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             }
             
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapResize(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                surface.pageTapResize(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
-                pdfView.pageTapDisable()
+                surface.pageTapDisable()
             }
             
             yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
@@ -190,7 +192,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         self.annotationManager.injectAllHighlights()
         
         
-        pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
+        surface.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
         
         configureThumbnailPreview()
     }
@@ -202,7 +204,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         }
         // Hide PDFKit's placeholder and the unfitted first layout until the first
         // page is positioned.
-        pdfView.showLoadingCover()
+        surface.showLoadingCover()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -213,7 +215,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         
 //        starDictView.loadViewIfNeeded()
         if pdfOptions.pageMode == .Page {
-            pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+            surface.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
         }
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
@@ -232,7 +234,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         if destPageIndex == 0 {
             self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
-        pdfView.finishLoadingCover()
+        surface.finishLoadingCover()
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -245,9 +247,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         } completion: { [self] _ in
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                surface.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
-                pdfView.pageTapDisable()
+                surface.pageTapDisable()
             }
         }
     }
@@ -265,7 +267,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
               pdfView.displayMode == .singlePage,
               let page = pdfView.currentPage
         else { return }
-        pdfView.showJumpMask(for: page)
+        surface.showJumpMask(for: page)
     }
 
     /// Call before navigating to a different page by a jump (TOC, history, slider,
@@ -286,8 +288,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             palette.apply(to: navigationBar)
         }
         pageRenderTheme.drawsInverted = palette.drawsInverted
-        pdfView.applyTheme(palette)
-        pdfViewAux.applyTheme(palette)
+        surface.applyTheme(palette)
+        auxSurface.applyTheme(palette)
         pdfView.invertsPagePlaceholders = palette.drawsInverted
         pdfViewAux.invertsPagePlaceholders = palette.drawsInverted
         // Both views show the same pages, whose annotations `pdfView` owns.

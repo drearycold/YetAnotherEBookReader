@@ -45,7 +45,7 @@ extension YabrPDFViewController {
         updatePageViewPositionHistory()
         // Cover with the page already rendered in the new theme before PDFKit
         // drops its tiles; the restored viewport is identical.
-        pdfView.showJumpMask(for: page)
+        surface.showJumpMask(for: page)
         pdfView.document = nil
         pdfView.document = document
         pdfView.go(to: page)

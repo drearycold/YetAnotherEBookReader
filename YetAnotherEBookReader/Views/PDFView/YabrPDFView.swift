@@ -11,33 +11,12 @@ import PDFKit
 
 @available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFView: PDFView {
-    let doubleTapLeftLabel = UILabel()
-    let doubleTapRightLabel = UILabel()
-    let singleTapLeftLabel = UILabel()
-    let singleTapRightLabel = UILabel()
-    let labelTextColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
-    let labelDoubleBackgroundColor = UIColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 0.9).cgColor
-    let labelSingleBackgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
-    let labelHiddenColor = UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 0.01)
-    let labelDisabledColor = UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
-
-    var doubleTapGestureRecognizer: UITapGestureRecognizer?
-    var singleTapGestureRecognizer: UITapGestureRecognizer?
-    var highlightTapGestureRecognizer: UITapGestureRecognizer?
-    /// Only begins on a highlight; PDFKit's taps wait for it to fail, so tapping a
-    /// highlight shows the app's persisted menu instead of PDFKit's markup menu
-    /// (whose Remove / colour / Add Note would bypass the app's storage).
-    var highlightMenuTapGestureRecognizer: UITapGestureRecognizer?
-
     var yabrPDFViewController: YabrPDFViewController? {
         delegate?.pdfViewParentViewController?() as? YabrPDFViewController
     }
     var yabrPDFMetaSource: YabrPDFMetaSource? {
         yabrPDFViewController?.yabrPDFMetaSource
     }
-    
-    var pageNextButton: UIButton?
-    var pagePrevButton: UIButton?
     
     var highlights = [UUID: [HighlightValue]]()
     /// The highlights on the pages, to rebuild their annotations.
@@ -59,27 +38,6 @@ class YabrPDFView: PDFView {
     /// PDFKit's own page break margins, before `padPageBreakMargins(for:)`.
     private var defaultPageBreakMargins: UIEdgeInsets?
 
-    /// Light theme tint (see `PDFThemePalette`), above the pages.
-    let themeOverlayView: UIView = {
-        let view = UIView()
-        view.isUserInteractionEnabled = false
-        view.isHidden = true
-        return view
-    }()
-
-    /// Opaque preview of the destination page shown briefly after a jump, while
-    /// PDFKit renders the new page's tiles. Sits below the theme overlay.
-    let jumpMaskView: UIImageView = {
-        let view = UIImageView()
-        view.isUserInteractionEnabled = false
-        view.contentMode = .scaleToFill
-        view.alpha = 0
-        return view
-    }()
-    /// Incremented each time the jump mask is shown.
-    private(set) var jumpMaskGeneration = 0
-    private var loadingCoverGeneration = -1
-
     /// PDFKit shows a per-page placeholder layer (white background plus an
     /// unthemed low-resolution preview) until a page's tiles render. Dark pages are
     /// drawn inverted into the tiles, so under dark the placeholder is inverted too,
@@ -100,11 +58,6 @@ class YabrPDFView: PDFView {
         let observations: [NSKeyValueObservation]
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        arrangeOverlayViews()
-    }
-    
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         // Selecting a whole PDF is slow and never what a reader wants.
         if action == #selector(UIResponderStandardEditActions.selectAll(_:)) {
@@ -135,274 +88,27 @@ class YabrPDFView: PDFView {
         return UIMenu(options: .displayInline, children: elements)
     }
 
-    override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer == singleTapGestureRecognizer || gestureRecognizer == doubleTapGestureRecognizer {
-            if otherGestureRecognizer is UILongPressGestureRecognizer { return false }
-            if otherGestureRecognizer is UIPanGestureRecognizer { return false }
+    /// The reader surface hosting this page view, if any.
+    var surface: PDFReaderSurface? {
+        superview as? PDFReaderSurface
+    }
 
-            if gestureRecognizer == doubleTapGestureRecognizer && otherGestureRecognizer == singleTapGestureRecognizer { return false }
-            if gestureRecognizer == singleTapGestureRecognizer && otherGestureRecognizer == doubleTapGestureRecognizer { return false }
-            return true
-        }
-        
-        if gestureRecognizer == highlightTapGestureRecognizer {
-            return true
-        }
-        
-        return super.gestureRecognizer(gestureRecognizer, shouldRecognizeSimultaneouslyWith: otherGestureRecognizer)
-    }
-    
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer === highlightMenuTapGestureRecognizer {
-            return highlight(at: gestureRecognizer.location(in: self)) != nil
-        }
-        return super.gestureRecognizerShouldBegin(gestureRecognizer)
-    }
+    // The app's own taps live on the surface; these delegate methods see PDFKit's.
 
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer === highlightMenuTapGestureRecognizer {
-            return otherGestureRecognizer is UITapGestureRecognizer
-                && otherGestureRecognizer !== highlightTapGestureRecognizer
-                && otherGestureRecognizer.view?.isDescendant(of: self) == true
-        }
         // PDFView declares but does not implement this optional delegate method, so
         // calling super crashes; `false` is UIKit's default when it is absent.
         return false
     }
 
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        let location = touch.location(in: self)
-        if singleTapGestureRecognizer == gestureRecognizer {
-            return touch.tapCount == 1 && (singleTapLeftLabel.frame.contains(location) || singleTapRightLabel.frame.contains(location))
-        }
-        if doubleTapGestureRecognizer == gestureRecognizer {
-            return doubleTapLeftLabel.frame.contains(location) ||
-            doubleTapRightLabel.frame.contains(location) ||
-            singleTapLeftLabel.frame.contains(location) ||
-            singleTapRightLabel.frame.contains(location)
-        }
-        if gestureRecognizer is UITapGestureRecognizer {
-            return doubleTapLeftLabel.frame.contains(location) == false
-            && doubleTapRightLabel.frame.contains(location) == false
-            && singleTapLeftLabel.frame.contains(location) == false
-            && singleTapRightLabel.frame.contains(location) == false
+        // PDFKit's taps stay out of the page-turn tap zones.
+        if gestureRecognizer is UITapGestureRecognizer, let surface, surface.isInTapZone(touch.location(in: surface)) {
+            return false
         }
         return super.gestureRecognizer(gestureRecognizer, shouldReceive: touch)
     }
     
-    func prepareActions(pageNextButton: UIButton, pagePrevButton: UIButton) {
-        self.pageNextButton = pageNextButton
-        self.pagePrevButton = pagePrevButton
-        
-        doubleTapLeftLabel.text = "Double Tap\nThis Region\nto Turn Page"
-        doubleTapLeftLabel.textAlignment = .center
-        doubleTapLeftLabel.numberOfLines = 0
-        doubleTapLeftLabel.layer.cornerRadius = 8
-        doubleTapLeftLabel.layer.masksToBounds = true
-        
-        doubleTapRightLabel.text = "Double Tap\nThis Region\nto Turn Page"
-        doubleTapRightLabel.textAlignment = .center
-        doubleTapRightLabel.numberOfLines = 0
-        doubleTapRightLabel.layer.cornerRadius = 8
-        doubleTapRightLabel.layer.masksToBounds = true
-        
-        singleTapLeftLabel.text = "Tap to Turn"
-        singleTapLeftLabel.textAlignment = .center
-        singleTapLeftLabel.numberOfLines = 0
-        singleTapLeftLabel.layer.cornerRadius = 8
-        singleTapLeftLabel.layer.masksToBounds = true
-        
-        singleTapRightLabel.text = "Tap to Turn"
-        singleTapRightLabel.textAlignment = .center
-        singleTapRightLabel.numberOfLines = 0
-        singleTapRightLabel.layer.cornerRadius = 8
-        singleTapRightLabel.layer.masksToBounds = true
-        
-        self.addSubview(doubleTapLeftLabel)
-        self.addSubview(doubleTapRightLabel)
-        self.addSubview(singleTapLeftLabel)
-        self.addSubview(singleTapRightLabel)
-        
-        let doubleTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(doubleTappedGesture(sender:)))
-        doubleTapGestureRecognizer.numberOfTapsRequired = 2
-        doubleTapGestureRecognizer.delegate = self
-        addGestureRecognizer(doubleTapGestureRecognizer)
-        self.doubleTapGestureRecognizer = doubleTapGestureRecognizer
-        
-        let singleTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(singleTappedGesture(sender:)))
-        singleTapGestureRecognizer.numberOfTapsRequired = 1
-        singleTapGestureRecognizer.delegate = self
-        singleTapGestureRecognizer.delaysTouchesEnded = true
-        addGestureRecognizer(singleTapGestureRecognizer)
-        self.singleTapGestureRecognizer = singleTapGestureRecognizer
-        
-        let highlightTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(highlightTappedGesture(sender:)))
-        highlightTapGestureRecognizer.numberOfTapsRequired = 1
-        highlightTapGestureRecognizer.delegate = self
-        highlightTapGestureRecognizer.delaysTouchesEnded = true
-        addGestureRecognizer(highlightTapGestureRecognizer)
-        self.highlightTapGestureRecognizer = highlightTapGestureRecognizer
-
-        let highlightMenuTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(highlightMenuTappedGesture(sender:)))
-        highlightMenuTapGestureRecognizer.numberOfTapsRequired = 1
-        highlightMenuTapGestureRecognizer.delegate = self
-        addGestureRecognizer(highlightMenuTapGestureRecognizer)
-        self.highlightMenuTapGestureRecognizer = highlightMenuTapGestureRecognizer
-    }
-    
-    func pageTapPreview(hMarginAutoScaler: Double) {
-        pageTapResize(hMarginAutoScaler: hMarginAutoScaler)
-        
-        let textFont = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 16 : 12, weight: .regular)
-        UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
-//            doubleTapLeftLabel.becomeFirstResponder()
-            doubleTapLeftLabel.font = textFont
-//            doubleTapLeftLabel.isUserInteractionEnabled = true
-            doubleTapLeftLabel.textColor = labelTextColor
-            doubleTapLeftLabel.layer.backgroundColor = labelDoubleBackgroundColor
-
-//            doubleTapRightLabel.becomeFirstResponder()
-            doubleTapRightLabel.font = textFont
-//            doubleTapRightLabel.isUserInteractionEnabled = true
-            doubleTapRightLabel.textColor = labelTextColor
-            doubleTapRightLabel.layer.backgroundColor = labelDoubleBackgroundColor
-
-//            singleTapLeftLabel.becomeFirstResponder()
-            singleTapLeftLabel.font = textFont
-//            singleTapLeftLabel.isUserInteractionEnabled = true
-            singleTapLeftLabel.textColor = labelTextColor
-            singleTapLeftLabel.layer.backgroundColor = labelSingleBackgroundColor
-
-//            singleTapRightLabel.becomeFirstResponder()
-            singleTapRightLabel.font = textFont
-//            singleTapRightLabel.isUserInteractionEnabled = true
-            singleTapRightLabel.textColor = labelTextColor
-            singleTapRightLabel.layer.backgroundColor = labelSingleBackgroundColor
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [self] in
-            UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
-                doubleTapLeftLabel.textColor = labelHiddenColor
-                doubleTapLeftLabel.layer.backgroundColor = labelHiddenColor.cgColor
-                doubleTapRightLabel.textColor = labelHiddenColor
-                doubleTapRightLabel.layer.backgroundColor = labelHiddenColor.cgColor
-                singleTapLeftLabel.textColor = labelHiddenColor
-                singleTapLeftLabel.layer.backgroundColor = labelHiddenColor.cgColor
-                singleTapRightLabel.textColor = labelHiddenColor
-                singleTapRightLabel.layer.backgroundColor = labelHiddenColor.cgColor
-            }
-        }
-    }
-    
-    func pageTapResize(hMarginAutoScaler: Double) {
-        let pdfViewHeight = self.frame.height
-        var doubleTapWidth = self.frame.width * (hMarginAutoScaler - 5) / 100.0
-        if doubleTapWidth < 50.0 {
-            doubleTapWidth = 50.0
-        }
-        if doubleTapWidth > 100.0 {
-            doubleTapWidth = 100.0
-        }
-        var singleTapWidth = self.frame.width * (hMarginAutoScaler - 5) / 50.0
-        if singleTapWidth < doubleTapWidth * 2 {
-            singleTapWidth = doubleTapWidth * 2
-        }
-        if singleTapWidth > doubleTapWidth * 2 {
-            singleTapWidth = doubleTapWidth * 2
-        }
-        let singleTapHeight = self.frame.height * 0.15
-        doubleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1),
-            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
-        )
-        
-        doubleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - doubleTapWidth, y: pdfViewHeight * 0.1),
-            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
-        )
-        
-        singleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight - singleTapHeight),
-            size: CGSize(width: singleTapWidth, height: singleTapHeight)
-        )
-        
-        singleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - singleTapWidth, y: pdfViewHeight - singleTapHeight),
-            size: CGSize(width: singleTapWidth, height: singleTapHeight)
-        )
-        
-    }
-    
-    func pageTapDisable() {
-        doubleTapLeftLabel.textColor = labelDisabledColor
-        doubleTapLeftLabel.layer.backgroundColor = labelDisabledColor.cgColor
-        doubleTapRightLabel.textColor = labelDisabledColor
-        doubleTapRightLabel.layer.backgroundColor = labelDisabledColor.cgColor
-        singleTapLeftLabel.textColor = labelDisabledColor
-        singleTapLeftLabel.layer.backgroundColor = labelDisabledColor.cgColor
-        singleTapRightLabel.textColor = labelDisabledColor
-        singleTapRightLabel.layer.backgroundColor = labelDisabledColor.cgColor
-    }
-    
-    @objc private func doubleTappedGesture(sender: UITapGestureRecognizer) {
-        guard doubleTapLeftLabel.layer.backgroundColor != labelDisabledColor.cgColor else { return }
-
-        print("\(#function) \(sender.state.rawValue) \(sender.view)")
-        
-        if sender.state == .ended {
-            print("tappedGesture \(sender.location(in: self)) in \(self.frame)")
-            
-            if sender.view == doubleTapLeftLabel || doubleTapLeftLabel.frame.contains(sender.location(in: self)) {
-                pagePrevButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-            if sender.view == doubleTapRightLabel || doubleTapRightLabel.frame.contains(sender.location(in: self)) {
-                pageNextButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-            if sender.view == singleTapLeftLabel || singleTapLeftLabel.frame.contains(sender.location(in: self))  {
-                pagePrevButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-            if sender.view == singleTapRightLabel || singleTapRightLabel.frame.contains(sender.location(in: self))  {
-                pageNextButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-        }
-    }
-    
-    @objc private func singleTappedGesture(sender: UITapGestureRecognizer) {
-        guard doubleTapLeftLabel.layer.backgroundColor != labelDisabledColor.cgColor else { return }
-
-        print("\(#function) \(sender.state.rawValue) \(sender.view)")
-        
-        if sender.state == .ended {
-            print("tappedGesture \(sender.location(in: self)) in \(self.frame)")
-            
-            if sender.view == singleTapLeftLabel || singleTapLeftLabel.frame.contains(sender.location(in: self))  {
-                pagePrevButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-            if sender.view == singleTapRightLabel || singleTapRightLabel.frame.contains(sender.location(in: self))  {
-                pageNextButton?.sendActions(for: .primaryActionTriggered)
-                return
-            }
-        }
-    }
-    
-    @objc private func highlightTappedGesture(sender: UITapGestureRecognizer) {
-        guard sender.state == .ended else { return }
-        let location = sender.location(in: self)
-        // Taps on a highlight belong to `highlightMenuTapGestureRecognizer`.
-        guard highlight(at: location) == nil else { return }
-        handleTap(at: location)
-    }
-
-    @objc private func highlightMenuTappedGesture(sender: UITapGestureRecognizer) {
-        guard sender.state == .ended else { return }
-        handleHighlightTap(at: sender.location(in: self))
-    }
-
     /// Shows the edit menu of the highlight at `location`; returns whether one was hit.
     @discardableResult
     func handleHighlightTap(at location: CGPoint) -> Bool {
@@ -587,67 +293,9 @@ extension YabrPDFView {
 extension YabrPDFView {
     // MARK: Theme and jump mask
 
+    /// The page canvas colour; the surface owns the tint and the jump mask.
     func applyTheme(_ palette: PDFThemePalette) {
         backgroundColor = UIColor(cgColor: palette.canvas)
-        if let overlay = palette.overlay {
-            themeOverlayView.backgroundColor = UIColor(red: overlay.red, green: overlay.green, blue: overlay.blue, alpha: overlay.alpha)
-            themeOverlayView.isHidden = false
-        } else {
-            themeOverlayView.backgroundColor = nil
-            themeOverlayView.isHidden = true
-        }
-        jumpMaskView.backgroundColor = palette.canvas.alpha > 0 ? UIColor(cgColor: palette.canvas) : .white
-        arrangeOverlayViews()
-    }
-
-    var isJumpMaskVisible: Bool {
-        jumpMaskView.alpha > 0
-    }
-
-    /// Covers the view with `page` rendered at the current viewport, then fades out.
-    /// Call after the viewport is applied so both land in the same frame.
-    func showJumpMask(for page: PDFPage) {
-        showJumpMask(image: viewportSnapshot(of: page))
-    }
-
-    /// A plain page-coloured cover while the reader appears, before the first page
-    /// is positioned. Replaced by the first jump mask, or faded by
-    /// `finishLoadingCover()`.
-    func showLoadingCover() {
-        jumpMaskView.image = nil
-        jumpMaskView.layer.removeAllAnimations()
-        jumpMaskView.alpha = 1
-        jumpMaskGeneration += 1
-        loadingCoverGeneration = jumpMaskGeneration
-        arrangeOverlayViews()
-    }
-
-    func finishLoadingCover() {
-        guard loadingCoverGeneration == jumpMaskGeneration, jumpMaskView.alpha > 0 else { return }
-        scheduleJumpMaskFade(generation: jumpMaskGeneration)
-    }
-
-    private func showJumpMask(image: UIImage) {
-        jumpMaskView.image = image
-        jumpMaskView.layer.removeAllAnimations()
-        jumpMaskView.alpha = 1
-        arrangeOverlayViews()
-
-        jumpMaskGeneration += 1
-        scheduleJumpMaskFade(generation: jumpMaskGeneration)
-    }
-
-    private func scheduleJumpMaskFade(generation: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400)) { [weak self] in
-            guard let self, self.jumpMaskGeneration == generation else { return }
-            UIView.animate(withDuration: 0.15) {
-                self.jumpMaskView.alpha = 0
-            } completion: { _ in
-                if self.jumpMaskGeneration == generation {
-                    self.jumpMaskView.image = nil
-                }
-            }
-        }
     }
 
     /// `page` as it appears in the view right now. Page drawing is untinted (the
@@ -686,19 +334,6 @@ extension YabrPDFView {
             } else {
                 page.draw(with: displayBox, to: context)
             }
-        }
-    }
-
-    private func arrangeOverlayViews() {
-        for overlay in [jumpMaskView, themeOverlayView] as [UIView] {
-            if overlay.superview !== self {
-                addSubview(overlay)
-            }
-            overlay.frame = bounds
-            bringSubviewToFront(overlay)
-        }
-        for label in [doubleTapLeftLabel, doubleTapRightLabel, singleTapLeftLabel, singleTapRightLabel] where label.superview === self {
-            bringSubviewToFront(label)
         }
     }
 

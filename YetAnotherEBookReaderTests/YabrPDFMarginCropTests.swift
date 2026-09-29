@@ -339,19 +339,20 @@ final class YabrPDFMarginCropTests: XCTestCase {
             viewSize: Self.portrait,
             themeMode: .serpia
         )
-        let pdfView = harness.pdfView
-        let subviews = pdfView.subviews
-        let scrollIndex = try XCTUnwrap(subviews.firstIndex { $0 is UIScrollView })
-        let maskIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.jumpMaskView })
-        let overlayIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.themeOverlayView })
-        let labelIndex = try XCTUnwrap(subviews.firstIndex { $0 === pdfView.singleTapLeftLabel })
+        let surface = harness.surface
+        let subviews = surface.subviews
+        let pageIndex = try XCTUnwrap(subviews.firstIndex { $0 === harness.pdfView })
+        let maskIndex = try XCTUnwrap(subviews.firstIndex { $0 === surface.jumpMaskView })
+        let overlayIndex = try XCTUnwrap(subviews.firstIndex { $0 === surface.themeOverlayView })
+        let labelIndex = try XCTUnwrap(subviews.firstIndex { $0 === surface.singleTapLeftLabel })
 
-        XCTAssertLessThan(scrollIndex, maskIndex)
+        XCTAssertLessThan(pageIndex, maskIndex)
         XCTAssertLessThan(maskIndex, overlayIndex)
         XCTAssertLessThan(overlayIndex, labelIndex)
-        XCTAssertFalse(pdfView.themeOverlayView.isHidden)
-        XCTAssertFalse(pdfView.themeOverlayView.isUserInteractionEnabled)
-        XCTAssertEqual(pdfView.themeOverlayView.frame, pdfView.bounds)
+        XCTAssertFalse(surface.themeOverlayView.isHidden)
+        XCTAssertFalse(surface.themeOverlayView.isUserInteractionEnabled)
+        XCTAssertEqual(surface.themeOverlayView.frame, surface.bounds)
+        XCTAssertEqual(harness.pdfView.frame, surface.bounds)
     }
 
     func testThemeSwitchRetintsWithoutMovingViewport() throws {
@@ -361,7 +362,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             themeMode: .serpia
         )
         let before = visibleRect(harness, pageIndex: 0)
-        let sepiaOverlay = harness.pdfView.themeOverlayView.backgroundColor
+        let sepiaOverlay = harness.surface.themeOverlayView.backgroundColor
 
         for (theme, overlayHidden, inverted) in [(PDFThemeMode.forest, false, false), (.dark, true, true), (.none, true, false)] {
             var options = harness.controller.pdfOptions
@@ -369,10 +370,10 @@ final class YabrPDFMarginCropTests: XCTestCase {
             harness.controller.handleOptionsChange(pdfOptions: options)
             settle()
 
-            XCTAssertEqual(harness.pdfView.themeOverlayView.isHidden, overlayHidden, "\(theme)")
+            XCTAssertEqual(harness.surface.themeOverlayView.isHidden, overlayHidden, "\(theme)")
             XCTAssertEqual(harness.controller.pageRenderTheme.drawsInverted, inverted, "\(theme)")
             if theme == .forest {
-                XCTAssertNotEqual(harness.pdfView.themeOverlayView.backgroundColor, sepiaOverlay)
+                XCTAssertNotEqual(harness.surface.themeOverlayView.backgroundColor, sepiaOverlay)
             }
             let after = visibleRect(harness, pageIndex: 0)
             XCTAssertEqual(after.minX, before.minX, accuracy: 0.5, "\(theme)")
@@ -388,18 +389,18 @@ final class YabrPDFMarginCropTests: XCTestCase {
             viewSize: Self.portrait
         )
         waitForJumpMaskToClear(harness)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible)
 
         pressNext(harness)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible, "next page must not show the jump mask in light themes")
+        XCTAssertFalse(harness.surface.isJumpMaskVisible, "next page must not show the jump mask in light themes")
 
         slide(harness, toPage: 5)
         XCTAssertEqual(harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) }, 4)
-        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, "slider jump should show the jump mask")
+        XCTAssertTrue(harness.surface.isJumpMaskVisible, "slider jump should show the jump mask")
         XCTAssertNil(harness.controller.pendingJumpMaskPage)
 
         settle(0.8)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible, "jump mask should fade out")
+        XCTAssertFalse(harness.surface.isJumpMaskVisible, "jump mask should fade out")
     }
 
     /// Toggling dark re-attaches the document to drop cached tiles; the reader must
@@ -489,9 +490,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
         XCTAssertEqual(currentPageIndex(harness), 2)
         // Loading cover in viewWillAppear, then the restored page's mask.
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, 2)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, 2)
         XCTAssertNil(harness.controller.pendingJumpMaskPage)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible)
     }
 
     func testLoadingCoverFadesAfterOpening() throws {
@@ -500,22 +501,22 @@ final class YabrPDFMarginCropTests: XCTestCase {
             viewSize: Self.portrait,
             themeMode: .serpia
         )
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, 1, "cover only; opening on the first page is not a jump")
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, 1, "cover only; opening on the first page is not a jump")
         waitForJumpMaskToClear(harness)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible)
     }
 
     /// Dark pages are drawn into PDFKit's tiles; a newly shown page is a white
     /// placeholder until they render, so dark page turns are covered too.
     func testDarkPageTurnShowsMask() throws {
         let harness = try makeJumpHarness(themeMode: .dark)
-        let before = harness.pdfView.jumpMaskGeneration
+        let before = harness.surface.jumpMaskGeneration
 
         pressNext(harness)
 
         // Frozen current page before PDFKit's transition, then the new page.
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 2)
-        XCTAssertTrue(harness.pdfView.isJumpMaskVisible)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before + 2)
+        XCTAssertTrue(harness.surface.isJumpMaskVisible)
         XCTAssertEqual(currentPageIndex(harness), 1)
     }
 
@@ -561,13 +562,13 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let harness = try makeJumpHarness()
         pressNext(harness)
         pressNext(harness)
-        let before = harness.pdfView.jumpMaskGeneration
+        let before = harness.surface.jumpMaskGeneration
 
         var options = harness.controller.pdfOptions
         options.pageMode = .Scroll
         harness.controller.handleOptionsChange(pdfOptions: options)
         settle()
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before, "continuous mode shows no mask")
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before, "continuous mode shows no mask")
         XCTAssertNil(harness.controller.pendingJumpMaskPage)
 
         let scrollModePage = currentPageIndex(harness)
@@ -575,7 +576,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         harness.controller.handleOptionsChange(pdfOptions: options)
         settle()
         XCTAssertEqual(currentPageIndex(harness), scrollModePage)
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 1)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before + 1)
         XCTAssertNil(harness.controller.pendingJumpMaskPage)
     }
 
@@ -585,11 +586,11 @@ final class YabrPDFMarginCropTests: XCTestCase {
         options.pageMode = .Scroll
         harness.controller.handleOptionsChange(pdfOptions: options)
         settle()
-        let before = harness.pdfView.jumpMaskGeneration
+        let before = harness.surface.jumpMaskGeneration
 
         slide(harness, toPage: 4)
 
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before)
         XCTAssertNil(harness.controller.pendingJumpMaskPage)
     }
 
@@ -603,7 +604,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     func testStaleJumpTargetIsDroppedByOrdinaryTurn() throws {
         let harness = try makeJumpHarness()
-        let before = harness.pdfView.jumpMaskGeneration
+        let before = harness.surface.jumpMaskGeneration
 
         harness.controller.markJumpTarget(harness.page(2))
         pressNext(harness)
@@ -611,7 +612,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         pressNext(harness)
 
         XCTAssertEqual(currentPageIndex(harness), 2)
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before, "reaching the old target by next must not show the mask")
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before, "reaching the old target by next must not show the mask")
     }
 
     func testSecondQuickJumpKeepsMaskForItsOwnHold() throws {
@@ -621,10 +622,10 @@ final class YabrPDFMarginCropTests: XCTestCase {
         settle(0.2)
         slide(harness, toPage: 5)
         settle(0.2)   // past the first jump's 400ms hold
-        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, "the first jump's timer must not hide the second mask")
+        XCTAssertTrue(harness.surface.isJumpMaskVisible, "the first jump's timer must not hide the second mask")
 
         settle(0.6)
-        XCTAssertFalse(harness.pdfView.isJumpMaskVisible)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible)
     }
 
     // MARK: - Jump mask preview geometry
@@ -706,8 +707,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         settle()
 
         XCTAssertEqual(harness.pdfView.bounds.size, Self.landscape)
-        XCTAssertEqual(harness.pdfView.themeOverlayView.frame, harness.pdfView.bounds)
-        XCTAssertEqual(harness.pdfView.jumpMaskView.frame, harness.pdfView.bounds)
+        XCTAssertEqual(harness.surface.themeOverlayView.frame, harness.surface.bounds)
+        XCTAssertEqual(harness.surface.jumpMaskView.frame, harness.surface.bounds)
     }
 
     // MARK: - Native edit menus
@@ -814,14 +815,20 @@ final class YabrPDFMarginCropTests: XCTestCase {
     func testPDFKitTapsWaitForHighlightMenuTap() throws {
         let (harness, _) = try makeHighlightHarness(style: .yellow)
         let pdfView = harness.pdfView
-        let highlightMenuTap = try XCTUnwrap(pdfView.highlightMenuTapGestureRecognizer)
+        let surface = harness.surface
+        let highlightMenuTap = try XCTUnwrap(surface.highlightMenuTapGestureRecognizer)
+        XCTAssertTrue(highlightMenuTap.view === surface)
         let pdfKitTap = UITapGestureRecognizer()
         let pageContent = try XCTUnwrap(pdfView.documentScrollView?.subviews.first)
         pageContent.addGestureRecognizer(pdfKitTap)
         defer { pageContent.removeGestureRecognizer(pdfKitTap) }
 
-        XCTAssertTrue(pdfView.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: pdfKitTap))
-        XCTAssertFalse(pdfView.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: try XCTUnwrap(pdfView.highlightTapGestureRecognizer)))
+        XCTAssertTrue(surface.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: pdfKitTap))
+        XCTAssertFalse(surface.gestureRecognizer(highlightMenuTap, shouldBeRequiredToFailBy: try XCTUnwrap(surface.highlightTapGestureRecognizer)))
+        // A double tap in a side zone turns the page instead of selecting a word.
+        for pageTurnTap in [surface.doubleTapGestureRecognizer, surface.singleTapGestureRecognizer] {
+            XCTAssertTrue(surface.gestureRecognizer(try XCTUnwrap(pageTurnTap), shouldBeRequiredToFailBy: pdfKitTap))
+        }
         // PDFView declares but does not implement this delegate method: falling back
         // to super used to crash with an unrecognized selector.
         XCTAssertFalse(pdfView.gestureRecognizer(pdfKitTap, shouldBeRequiredToFailBy: highlightMenuTap))
@@ -1178,7 +1185,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     private func editMenu(_ harness: Harness) -> UIMenu? {
         let manager = harness.controller.menuManager
-        guard let interaction = harness.pdfView.interactions.compactMap({ $0 as? UIEditMenuInteraction }).first(where: { $0.delegate === manager }) else { return nil }
+        guard let interaction = harness.surface.interactions.compactMap({ $0 as? UIEditMenuInteraction }).first(where: { $0.delegate === manager }) else { return nil }
         let configuration = UIEditMenuConfiguration(identifier: PDFMenuManager.highlightMenuIdentifier, sourcePoint: .zero)
         return manager.editMenuInteraction(interaction, menuFor: configuration, suggestedActions: [])
     }
@@ -1211,7 +1218,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     private func waitForJumpMaskToClear(_ harness: Harness) {
         let deadline = Date().addingTimeInterval(2)
-        while harness.pdfView.isJumpMaskVisible && Date() < deadline {
+        while harness.surface.isJumpMaskVisible && Date() < deadline {
             settle(0.05)
         }
     }
@@ -1221,12 +1228,12 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func assertShowsJumpMask(_ harness: Harness, toPageIndex pageIndex: Int, file: StaticString = #filePath, line: UInt = #line, jump: () -> Void) throws {
-        let before = harness.pdfView.jumpMaskGeneration
+        let before = harness.surface.jumpMaskGeneration
         jump()
         settle()
         XCTAssertEqual(currentPageIndex(harness), pageIndex, file: file, line: line)
-        XCTAssertEqual(harness.pdfView.jumpMaskGeneration, before + 1, "jump should show the mask once", file: file, line: line)
-        XCTAssertTrue(harness.pdfView.isJumpMaskVisible, file: file, line: line)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before + 1, "jump should show the mask once", file: file, line: line)
+        XCTAssertTrue(harness.surface.isJumpMaskVisible, file: file, line: line)
         XCTAssertNil(harness.controller.pendingJumpMaskPage, file: file, line: line)
     }
 
@@ -1265,7 +1272,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             themeMode: theme
         )
         slide(harness, toPage: 3)
-        let image = try XCTUnwrap(harness.pdfView.jumpMaskView.image, file: file, line: line)
+        let image = try XCTUnwrap(harness.surface.jumpMaskView.image, file: file, line: line)
 
         let inView = contentInView(harness, pageIndex: 2)
         let visibleContent = inView.intersection(harness.pdfView.bounds)
@@ -1596,6 +1603,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let pages: [PageSpec]
 
         var pdfView: YabrPDFView { controller.pdfView }
+        var surface: PDFReaderSurface { controller.surface }
 
         func page(_ index: Int) -> PDFPage {
             controller.pdfView.document!.page(at: index)!
