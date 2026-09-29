@@ -119,6 +119,26 @@ placement (content right of center, top offset / drift after page turns).
   - **List-delete fix.** Deleting from the highlight list now goes through
     the annotation manager. It used to bypass `activeHighlights`, and deleting
     the last row of a section used `deleteRows` after removing the section.
+- #55 preload experiment (2026-09-29, iOS 26.5; temporary tile-draw log in
+  `PDFPageWithBackground.draw`, since removed):
+  - **When tiles render.** PDFKit renders a page's tiles only once the page
+    is current, taking about 260-270 ms for a Width-fit page.
+  - **Nothing renders ahead.** None of these made PDFKit draw the next page
+    early: single-page mode, `usePageViewController(true)`, horizontal
+    continuous mode (zero draws of the off-screen neighbour while idle), or a
+    hidden second `PDFView` on the next page (tile caches are per view).
+  - **What you see.** In `recordVideo`, parts of the new page stay a blurry
+    low-res placeholder for ~140-190 ms after each light-mode turn.
+  - **Only remaining option.** An app-side prerendered cover
+    (`viewportSnapshot`-style), held until the page's tile draws stop. Its
+    text must render like PDFKit's tiles, which are lighter than the
+    current snapshots.
+  - **Industry practice.** pdf.js, Nutrient (PSPDFKit), KOReader/MuPDF and
+    AndroidPdfViewer all use their own renderers. They render neighbouring
+    pages ahead in the direction of travel into a page-bitmap cache, give the
+    visible page priority with cancellable prefetch, and tile only when zoomed.
+  - **Chosen direction.** Option A: a hybrid PDFView plus prefetched cover.
+    Snapshot fidelity is validated first.
 - In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
   nil`; window-hosted harnesses must recreate one before adding a window or the
   host's SwiftUI `appContainer` environment default asserts.
