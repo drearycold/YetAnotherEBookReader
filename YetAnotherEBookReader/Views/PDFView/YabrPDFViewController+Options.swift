@@ -46,6 +46,8 @@ extension YabrPDFViewController {
         // Cover with the page already rendered in the new theme before PDFKit
         // drops its tiles; the restored viewport is identical.
         surface.showJumpMask(for: page)
+        // Buffers hold tiles of the old theme; refilled after the page change.
+        surface.discardBuffers()
         pdfView.document = nil
         pdfView.document = document
         pdfView.go(to: page)

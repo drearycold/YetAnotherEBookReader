@@ -8,36 +8,35 @@ import UIKit
 
 @available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
+    /// Builds the Contents menu from the outline's top level. Cheap, so it runs on
+    /// the main thread (it used to fill `tocList` from a background queue).
     func buildTocList() {
-        DispatchQueue.global(qos: .utility).async {
-            var tableOfContents = [UIMenuElement]()
+        var tableOfContents = [UIMenuElement]()
+        tocList.removeAll()
 
-            if let pdfDoc = self.pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
-                while outlineRoot.numberOfChildren == 1 {
-                    outlineRoot = outlineRoot.child(at: 0)!
-                }
-                for i in (0..<outlineRoot.numberOfChildren) {
-                    self.tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
-                    tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { _ in
-                        guard let dest = outlineRoot.child(at: i)?.destination,
-                              let curPage = self.pdfView.currentPage
-                        else { return }
-
-                        self.updateHistoryMenu(curPage: curPage)
-
-                        self.markJumpTarget(dest.page)
-                        self.pdfView.go(to: dest)
-                    })
-
-                }
+        if let pdfDoc = pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
+            while outlineRoot.numberOfChildren == 1, let onlyChild = outlineRoot.child(at: 0) {
+                outlineRoot = onlyChild
             }
+            for i in 0..<outlineRoot.numberOfChildren {
+                let item = outlineRoot.child(at: i)
+                let label = item?.label ?? "Label at \(i)"
+                tocList.append((label, item?.destination?.page?.pageRef?.pageNumber ?? 1))
+                tableOfContents.append(UIAction(title: label) { [weak self] _ in
+                    guard let self,
+                          let dest = item?.destination,
+                          let curPage = self.pdfView.currentPage
+                    else { return }
 
-            let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
+                    self.updateHistoryMenu(curPage: curPage)
 
-            DispatchQueue.main.async {
-                self.titleInfoButton.menu = navContentsMenu
+                    self.markJumpTarget(dest.page)
+                    self.pdfView.go(to: dest)
+                })
             }
         }
+
+        titleInfoButton.menu = UIMenu(title: "Contents", children: tableOfContents)
     }
 
     func updateHistoryMenu(curPage: PDFPage, location: CGRect? = nil) {
@@ -158,7 +157,8 @@ extension YabrPDFViewController {
         // Dark pages are drawn into PDFKit's tiles and a newly shown page is a
         // white placeholder until they render, so every dark page change is
         // covered; light themes only cover jumps.
-        let showsJumpMask = pendingJumpMaskPage == curPageNum || pdfOptions.themePalette.drawsInverted
+        let isJumpTarget = pendingJumpMaskPage == curPageNum
+        let showsJumpMask = isJumpTarget || pdfOptions.themePalette.drawsInverted
         pendingJumpMaskPage = nil
         pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
@@ -168,6 +168,7 @@ extension YabrPDFViewController {
         guard pdfView.frame.width > 1.0 else { return }
 
         if pdfView.displayMode != .singlePage {
+            surface.discardBuffers()
             pdfView.restoreDefaultPageBreakMargins()
             pdfView.scaleFactor = pdfOptions.lastScale
 
@@ -190,48 +191,62 @@ extension YabrPDFViewController {
             return
         }
 
-        let boundForVisibleContentKey = PageVisibleContentKey(
-            pageNumber: curPageNum,
-            readingDirection: pdfOptions.readingDirection,
-            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
-        )
-        let boundForVisibleContent = marginCropController.visibleBounds(for: curPage, key: boundForVisibleContentKey)
-
         marginCropController.preAnalyzeAdjacentPages(
             currentPageNumber: curPageNum,
             document: pdfView.document,
             readingDirection: pdfOptions.readingDirection,
             hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+            vMarginDetectStrength: pdfOptions.vMarginDetectStrength,
+            completion: { [weak self] in self?.refreshPageBuffers() }
         )
 
-        let pageHistory = getPageViewPositionHistory(curPageNum)
+        let viewport = singlePageViewport(for: curPage, in: pdfView)
+        pdfView.applyViewport(viewport.fit, on: curPage)
+        // A buffered neighbour already rendered at this viewport hides PDFKit's
+        // low-resolution placeholder while the page's tiles render; under dark it
+        // also replaces the page-change mask (explicit jumps keep theirs).
+        let coveredByBuffer = surface.coverWithBuffer(showing: curPage)
+        if isJumpTarget || (showsJumpMask && !coveredByBuffer) {
+            surface.showJumpMask(for: curPage)
+        }
+        guard !viewport.restoresSavedPosition else { return }
+
+        updatePageViewPositionHistory()
+        updateReadingProgress()
+    }
+
+    /// The single-page viewport of `page` in `view`: its saved position, or a fit
+    /// of its detected content that keeps any saved axis. Used for the page on
+    /// screen and for the buffered neighbours, so both land identically.
+    func singlePageViewport(for page: PDFPage, in view: YabrPDFView) -> (fit: PDFPageViewportFit, restoresSavedPosition: Bool) {
+        let pageNumber = page.pageRef?.pageNumber ?? 1
+        let pageHistory = getPageViewPositionHistory(pageNumber)
         if let pageViewPosition = pageHistory,
            pageViewPosition.scaler > 0,
-           pageViewPosition.viewSize == pdfView.frame.size,
+           pageViewPosition.viewSize == view.frame.size,
            !pageViewPosition.point.x.isNaN,
            !pageViewPosition.point.y.isNaN {
-            pdfView.applyViewport(
-                PDFPageViewportFitter.restore(
-                    scale: pageViewPosition.scaler,
-                    upperLeft: pageViewPosition.point,
-                    viewBounds: pdfView.bounds
-                ),
-                on: curPage
+            let fit = PDFPageViewportFitter.restore(
+                scale: pageViewPosition.scaler,
+                upperLeft: pageViewPosition.point,
+                viewBounds: view.bounds
             )
-            if showsJumpMask {
-                surface.showJumpMask(for: curPage)
-            }
-            return
+            return (fit, true)
         }
 
-        let boundsForCropBox = curPage.bounds(for: .cropBox)
+        let key = PageVisibleContentKey(
+            pageNumber: pageNumber,
+            readingDirection: pdfOptions.readingDirection,
+            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+        )
+        let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
+        let boundsForCropBox = page.bounds(for: .cropBox)
         var fit = PDFPageViewportFitter.fit(
             PDFPageViewportFitter.Input(
                 contentBounds: PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox),
                 pageBounds: boundsForCropBox,
-                readableRect: pdfView.bounds.inset(by: pdfView.safeAreaInsets),
+                readableRect: view.bounds.inset(by: view.safeAreaInsets),
                 autoScaler: pdfOptions.selectedAutoScaler,
                 hMarginPercent: pdfOptions.hMarginAutoScaler,
                 vMarginPercent: pdfOptions.vMarginAutoScaler,
@@ -246,21 +261,32 @@ extension YabrPDFViewController {
         if let pageHistory {
             if !pageHistory.point.x.isNaN {
                 fit.pageAnchor.x = pageHistory.point.x
-                fit.viewAnchor.x = pdfView.bounds.minX
+                fit.viewAnchor.x = view.bounds.minX
             }
             if !pageHistory.point.y.isNaN {
                 fit.pageAnchor.y = pageHistory.point.y
-                fit.viewAnchor.y = pdfView.bounds.minY
+                fit.viewAnchor.y = view.bounds.minY
             }
         }
+        return (fit, false)
+    }
 
-        pdfView.applyViewport(fit, on: curPage)
-        if showsJumpMask {
-            surface.showJumpMask(for: curPage)
+    /// Renders the neighbours of the page on screen in the surface's buffers
+    /// (issues #54 / #55); single-page mode only.
+    func refreshPageBuffers() {
+        guard pdfView.displayMode == .singlePage,
+              let document = pdfView.document,
+              let page = pdfView.currentPage
+        else {
+            surface.discardBuffers()
+            return
         }
-
-        updatePageViewPositionHistory()
-        updateReadingProgress()
+        let index = document.index(for: page)
+        // The next page first: reading forward is the common case.
+        let neighbours = [index + 1, index - 1].compactMap { $0 >= 0 ? document.page(at: $0) : nil }
+        surface.prepareBuffers(showing: neighbours) { [unowned self] page, view in
+            singlePageViewport(for: page, in: view).fit
+        }
     }
 
     func updateReadingProgress() {

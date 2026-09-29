@@ -15,6 +15,9 @@ final class PDFPageRenderTheme: @unchecked Sendable {
     private let lock = NSLock()
     private var storedDrawsInverted = false
 
+    /// Last finished draw per page and resolution bucket (see `drawKey`).
+    private var lastDrawEnd: [Int: [Int: CFTimeInterval]] = [:]
+
     var drawsInverted: Bool {
         get {
             lock.lock()
@@ -26,6 +29,31 @@ final class PDFPageRenderTheme: @unchecked Sendable {
             storedDrawsInverted = newValue
             lock.unlock()
         }
+    }
+
+    /// Records that a page finished drawing at `pixelsPerPoint` (a PDFKit tile, or
+    /// a thumbnail). PDFKit renders a newly shown page twice: quickly at 100% zoom,
+    /// then at the view's own resolution, which is what it finally shows.
+    func noteDraw(ofPage pageNumber: Int, pixelsPerPoint: CGFloat) {
+        let now = CACurrentMediaTime()
+        lock.lock()
+        lastDrawEnd[pageNumber, default: [:]][Self.drawKey(pixelsPerPoint)] = now
+        lock.unlock()
+    }
+
+    /// When the page last finished drawing at about `pixelsPerPoint`
+    /// (`CACurrentMediaTime`), if ever.
+    func lastDrawEnd(ofPage pageNumber: Int, pixelsPerPoint: CGFloat) -> CFTimeInterval? {
+        let key = Self.drawKey(pixelsPerPoint)
+        lock.lock()
+        defer { lock.unlock() }
+        guard let draws = lastDrawEnd[pageNumber] else { return nil }
+        return [key - 1, key, key + 1].compactMap { draws[$0] }.max()
+    }
+
+    /// 2% buckets.
+    private static func drawKey(_ pixelsPerPoint: CGFloat) -> Int {
+        Int((log(max(pixelsPerPoint, 0.01)) / log(1.02)).rounded())
     }
 }
 
@@ -43,8 +71,18 @@ class PDFPageWithBackground: PDFPage {
         (document?.delegate as? PDFPageRenderThemeProviding)?.pageRenderTheme.drawsInverted == true
     }
 
+    private var renderTheme: PDFPageRenderTheme? {
+        (document?.delegate as? PDFPageRenderThemeProviding)?.pageRenderTheme
+    }
+
     override func draw(with box: PDFDisplayBox, to context: CGContext) {
         super.draw(with: box, to: context)
+        defer {
+            if let pageNumber = pageRef?.pageNumber {
+                let ctm = context.ctm
+                renderTheme?.noteDraw(ofPage: pageNumber, pixelsPerPoint: hypot(ctm.a, ctm.b))
+            }
+        }
 
         guard drawsInverted else { return }
 

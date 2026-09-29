@@ -196,6 +196,43 @@ placement (content right of center, top offset / drift after page turns).
     declares that PDFKit's taps inside the page view wait for its page-turn and
     highlight-menu taps. Without this, a side-zone double tap also selected a
     word.
+  - **Step 2 done: buffers with a cover policy.**
+    - **Buffers.** `PDFReaderSurface` keeps two non-interactive `YabrPDFView`
+      buffers behind the active view, showing its neighbours
+      (`refreshPageBuffers`, after neighbour detection completes).
+    - **Shared viewport.** `singlePageViewport(for:in:)` is shared by the page
+      on screen and the buffers.
+    - **Covering.** `handlePageChange` calls `coverWithBuffer(showing:)`, which
+      brings the matching buffer above the active view, below the overlays.
+      - It requires the same scale, margins and content size, and a top left
+        within 24 px.
+      - It then copies the active view's exact inset and offset
+        (`alignScrollPosition`). The same fit can land 1-4 px apart depending
+        on how each view got there, most on iOS 18.
+    - **Handover.** The cover ends once the active view has drawn the page at
+      its own resolution and then been quiet for 60 ms (timeout 1 s).
+      `PDFPageRenderTheme` logs draws per page and resolution. PDFKit first
+      draws a new page at 100% zoom (the old blurry/heavy intermediate), then
+      at `scaleFactor x screen scale`.
+    - **Dark.** Buffered dark turns skip the freeze and page-change snapshot
+      masks: a snapshot's glyphs render heavier than tiles, visible as the mask
+      faded.
+    - **Verified by recording** (iOS 26.5): light and dark turns each change
+      once, from the old page to the final new page. There are no placeholder,
+      intermediate or bright frames, and the handover is at codec-noise level.
+  - **Test-environment deadlock.** PDFKit analyses visible pages with Vision
+    (`PDFPageAnalyzerV2` on the document's `formFillingQueue`). About 67 test
+    documents with pending analyses exhaust GCD's worker pool, so the global
+    utility queue never runs again in that process. Two fixes:
+    - Margin detection uses its own serial queue; private queues still get
+      threads.
+    - `buildTocList` runs on the main thread (it also raced on `tocList`).
+
+    In the app only one document is open, and analysis is serial per document.
+  - **Consent prompts in tests.** Tests skip the ATT and ad-consent (UMP)
+    prompts (`UITestingConfiguration.skipsConsentPrompts`: the UI-test launch
+    argument or the unit-test host). Otherwise the UMP form covered the UI
+    tests and window-hosted sessions.
   - **Hand-check tips.** After `xcodebuild` reboots a simulator, `attach` the
     Simulator tool before the first tap, or the running test app is killed.
     Run the next session without `simctl shutdown` to keep the connection.

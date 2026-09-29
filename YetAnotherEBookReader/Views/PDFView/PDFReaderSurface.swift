@@ -91,6 +91,25 @@ final class PDFReaderSurface: UIView {
     /// Highlight whose edit menu is showing.
     var highlightTapped: UUID?
 
+    /// Off-screen page views rendering the neighbours of the page on screen,
+    /// behind the active view (PDFKit renders views that are covered, not hidden
+    /// ones). A page change onto a buffered page brings its buffer to the front
+    /// until the active view has drawn the page: PDFKit renders a page only once
+    /// it is current, so without it the new page shows a blurry placeholder for
+    /// a few hundred milliseconds. Both are PDFKit renderings at the same viewport,
+    /// so the handover is pixel-identical.
+    private(set) var bufferViews: [YabrPDFView] = []
+    static let bufferCount = 2
+    /// The buffer currently in front of the active view.
+    private(set) weak var coveringView: YabrPDFView?
+    /// Where pages report finished draws; tells when the active view has drawn.
+    weak var drawLog: PDFPageRenderTheme?
+    private var coverStart: CFTimeInterval = 0
+    private var coverTimer: Timer?
+    /// Called when a cover is removed; the buffer is free for another page. It may
+    /// run during a page change, so defer heavy work.
+    var onCoverEnded: (() -> Void)?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         install(activeView)
@@ -108,6 +127,7 @@ final class PDFReaderSurface: UIView {
 
     deinit {
         relayObservers.forEach(NotificationCenter.default.removeObserver)
+        coverTimer?.invalidate()
     }
 
     private func install(_ pageView: YabrPDFView) {
@@ -143,6 +163,11 @@ final class PDFReaderSurface: UIView {
 extension PDFReaderSurface {
     func applyTheme(_ palette: PDFThemePalette) {
         activeView.applyTheme(palette)
+        activeView.invertsPagePlaceholders = palette.drawsInverted
+        for buffer in bufferViews {
+            buffer.applyTheme(palette)
+            buffer.invertsPagePlaceholders = palette.drawsInverted
+        }
         if let overlay = palette.overlay {
             themeOverlayView.backgroundColor = UIColor(red: overlay.red, green: overlay.green, blue: overlay.blue, alpha: overlay.alpha)
             themeOverlayView.isHidden = false
@@ -532,5 +557,162 @@ extension PDFReaderSurface {
             values[lastIndex].annotations.append(marker)
         }
         return values
+    }
+}
+
+// MARK: - Buffered neighbour pages
+
+@available(iOS 16.0, macCatalyst 16.0, *)
+extension PDFReaderSurface {
+    /// The pages the buffers hold.
+    var bufferedPages: [PDFPage] {
+        bufferViews.compactMap { $0.document == nil ? nil : $0.currentPage }
+    }
+
+    /// Shows `pages` in the buffers at the viewport `viewport` gives, keeping any
+    /// buffer that already holds one of them. The buffer in front stays until its
+    /// cover ends.
+    func prepareBuffers(showing pages: [PDFPage], viewport: (PDFPage, YabrPDFView) -> PDFPageViewportFit) {
+        guard let document = activeView.document else {
+            discardBuffers()
+            return
+        }
+        while bufferViews.count < Self.bufferCount {
+            let buffer = YabrPDFView()
+            buffer.isUserInteractionEnabled = false
+            buffer.accessibilityElementsHidden = true
+            installBuffer(buffer)
+            bufferViews.append(buffer)
+        }
+
+        let wanted = Array(pages.prefix(Self.bufferCount))
+        var free = bufferViews.filter { $0 !== coveringView }
+        var unassigned = [PDFPage]()
+        for page in wanted {
+            if let index = free.firstIndex(where: { $0.document === document && $0.currentPage === page }) {
+                let buffer = free.remove(at: index)
+                show(page, in: buffer, viewport: viewport)
+            } else if page !== coveringView?.currentPage {
+                unassigned.append(page)
+            }
+        }
+        for (page, buffer) in zip(unassigned, free) {
+            show(page, in: buffer, viewport: viewport)
+        }
+    }
+
+    /// Releases the buffers' pages (scroll mode, theme re-render).
+    func discardBuffers() {
+        endCover(notifies: false)
+        for buffer in bufferViews {
+            buffer.document = nil
+        }
+    }
+
+    /// Brings the buffer holding `page` in front of the active view if it shows
+    /// the page exactly where the active view does. Call after the active view's
+    /// viewport is applied. Returns whether it covers.
+    @discardableResult
+    func coverWithBuffer(showing page: PDFPage) -> Bool {
+        if let coveringView, coveringView.currentPage !== page {
+            endCover()
+        }
+        guard coveringView == nil,
+              let buffer = bufferViews.first(where: { $0.document === activeView.document && $0.currentPage === page }),
+              // The same fit can land a few pixels apart depending on how each view
+              // got there (iOS 18 lays pages out asynchronously); take the active
+              // view's exact position. A shift this small stays within the
+              // buffer's rendered tiles.
+              Self.showsSameViewport(buffer, activeView, page: page, pixels: 24),
+              buffer.alignScrollPosition(to: activeView),
+              Self.showsSameViewport(buffer, activeView, page: page, pixels: 0.03)
+        else { return false }
+
+        insertSubview(buffer, aboveSubview: activeView)
+        coveringView = buffer
+        coverStart = CACurrentMediaTime()
+        coverTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            self.checkCoverHandover()
+        }
+        // Also while a touch is tracking.
+        RunLoop.main.add(timer, forMode: .common)
+        coverTimer = timer
+        return true
+    }
+
+    private func installBuffer(_ buffer: YabrPDFView) {
+        buffer.translatesAutoresizingMaskIntoConstraints = false
+        insertSubview(buffer, belowSubview: activeView)
+        NSLayoutConstraint.activate([
+            buffer.topAnchor.constraint(equalTo: topAnchor),
+            buffer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            buffer.leftAnchor.constraint(equalTo: leftAnchor),
+            buffer.rightAnchor.constraint(equalTo: rightAnchor),
+        ])
+    }
+
+    private func show(_ page: PDFPage, in buffer: YabrPDFView, viewport: (PDFPage, YabrPDFView) -> PDFPageViewportFit) {
+        let active = activeView
+        if buffer.document !== active.document {
+            buffer.document = active.document
+        }
+        buffer.displayMode = .singlePage
+        buffer.displayDirection = active.displayDirection
+        buffer.displaysRTL = active.displaysRTL
+        buffer.displayBox = active.displayBox
+        buffer.interpolationQuality = active.interpolationQuality
+        buffer.autoScales = false
+        buffer.backgroundColor = active.backgroundColor
+        buffer.invertsPagePlaceholders = active.invertsPagePlaceholders
+        buffer.layoutIfNeeded()
+        if buffer.currentPage !== page {
+            buffer.go(to: page)
+        }
+        buffer.applyViewport(viewport(page, buffer), on: page)
+    }
+
+    /// Same scale and the same page point at the view's top left, within
+    /// `pixels` device pixels.
+    private static func showsSameViewport(_ a: YabrPDFView, _ b: YabrPDFView, page: PDFPage, pixels: CGFloat) -> Bool {
+        guard abs(a.scaleFactor - b.scaleFactor) < 0.0005 else { return false }
+        let pointA = a.convert(a.bounds.origin, to: page)
+        let pointB = b.convert(b.bounds.origin, to: page)
+        let pixel = 1 / (a.traitCollection.displayScale > 0 ? a.traitCollection.displayScale : UIScreen.main.scale)
+        let tolerance = pixels * pixel / max(a.scaleFactor, 0.01)
+        return abs(pointA.x - pointB.x) <= tolerance && abs(pointA.y - pointB.y) <= tolerance
+    }
+
+    /// Ends the cover once the active view has drawn the page at its own
+    /// resolution and gone quiet, or after a timeout (tiles still cached from
+    /// before are not redrawn).
+    private func checkCoverHandover() {
+        guard let page = coveringView?.currentPage, let pageNumber = page.pageRef?.pageNumber else {
+            endCover()
+            return
+        }
+        let now = CACurrentMediaTime()
+        let elapsed = now - coverStart
+        let displayScale = activeView.traitCollection.displayScale > 0 ? activeView.traitCollection.displayScale : UIScreen.main.scale
+        let lastDraw = drawLog?.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: activeView.scaleFactor * displayScale) ?? 0
+        let drewSinceCover = lastDraw > coverStart
+        if elapsed > 1.0 || (drewSinceCover && now - lastDraw > 0.06) {
+            endCover()
+        }
+    }
+
+    private func endCover(notifies: Bool = true) {
+        coverTimer?.invalidate()
+        coverTimer = nil
+        guard let buffer = coveringView else { return }
+        insertSubview(buffer, belowSubview: activeView)
+        coveringView = nil
+        if notifies {
+            onCoverEnded?()
+        }
     }
 }

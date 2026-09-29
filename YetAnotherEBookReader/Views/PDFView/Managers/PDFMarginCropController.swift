@@ -9,6 +9,10 @@ import UIKit
 
 class PDFMarginCropController {
     private(set) var visibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
+    /// Its own serial queue: a private queue still gets a thread when the global
+    /// pool is saturated (PDFKit's per-document page analysis can fill it), and
+    /// detections do not run concurrently.
+    private let analysisQueue = DispatchQueue(label: "YabrPDF.marginDetection", qos: .utility)
 
     func clearCache() {
         visibleContentBounds.removeAll()
@@ -36,12 +40,15 @@ class PDFMarginCropController {
         return visibleContentBounds[key]?.bounds ?? page.bounds(for: .cropBox)
     }
 
+    /// Detects the neighbours of `currentPageNumber` in the background.
+    /// `completion` runs on the main queue once both are cached.
     func preAnalyzeAdjacentPages(
         currentPageNumber: Int,
         document: PDFDocument?,
         readingDirection: PDFReadDirection,
         hMarginDetectStrength: Double,
-        vMarginDetectStrength: Double
+        vMarginDetectStrength: Double,
+        completion: (() -> Void)? = nil
     ) {
         let nextKey = PageVisibleContentKey(
             pageNumber: currentPageNumber + 1,
@@ -58,9 +65,14 @@ class PDFMarginCropController {
 
         let needsNext = visibleContentBounds[nextKey] == nil
         let needsPrevious = visibleContentBounds[previousKey] == nil
-        guard needsNext || needsPrevious else { return }
+        guard needsNext || needsPrevious else {
+            if let completion {
+                DispatchQueue.main.async(execute: completion)
+            }
+            return
+        }
 
-        DispatchQueue.global(qos: .utility).async { [weak self, weak document] in
+        analysisQueue.async { [weak self, weak document] in
             guard let self = self else { return }
 
             let boundsNext = needsNext
@@ -92,6 +104,7 @@ class PDFMarginCropController {
                 if let boundsPrevious = boundsPrevious {
                     self.visibleContentBounds[previousKey] = boundsPrevious
                 }
+                completion?()
             }
         }
     }

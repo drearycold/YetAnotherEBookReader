@@ -353,6 +353,24 @@ extension YabrPDFView {
         }
     }
 
+    /// Moves to exactly `other`'s scroll position when both lay the page out the
+    /// same way (scale, margins, content size). A pixel or two of scrolling keeps
+    /// the rendered tiles. Returns whether it moved.
+    func alignScrollPosition(to other: YabrPDFView) -> Bool {
+        guard abs(scaleFactor - other.scaleFactor) < 0.0005,
+              pageBreakMargins == other.pageBreakMargins,
+              let scrollView = documentScrollView,
+              let otherScrollView = other.documentScrollView,
+              abs(scrollView.contentSize.width - otherScrollView.contentSize.width) < 0.01,
+              abs(scrollView.contentSize.height - otherScrollView.contentSize.height) < 0.01
+        else { return false }
+        scrollView.contentInset = otherScrollView.contentInset
+        viewportExtraInset = other.viewportExtraInset
+        scrollView.contentOffset = otherScrollView.contentOffset
+        layoutIfNeeded()
+        return true
+    }
+
     /// PDFKit centres a document smaller than the view, and on iOS 18 it does so by
     /// moving the document view during layout, which cancels any scroll offset.
     /// Padding each side of the page by the view's excess keeps the document at

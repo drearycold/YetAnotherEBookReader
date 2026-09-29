@@ -185,6 +185,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .readerSurfaceDisplayBoxChanged, object: surface)
         
         pdfView.autoScales = false
+        surface.drawLog = pageRenderTheme
+        surface.onCoverEnded = { [weak self] in
+            DispatchQueue.main.async { self?.refreshPageBuffers() }
+        }
 
         configureReaderChrome()
         configureSelectionMenus()
@@ -261,12 +265,19 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     /// Dark page turns: PDFKit's page transition starts before `handlePageChange`
     /// can cover it, so freeze the current page first; `handlePageChange` then
-    /// swaps in the new page.
-    func coverPageTurnIfNeeded() {
+    /// swaps in the new page. Not needed when the target page is buffered: its
+    /// buffer covers the page change exactly, and a snapshot's glyphs render a
+    /// little heavier than PDFKit's tiles, which shows as the mask fades.
+    func coverPageTurnIfNeeded(forward: Bool) {
         guard pdfOptions.themePalette.drawsInverted,
               pdfView.displayMode == .singlePage,
+              let document = pdfView.document,
               let page = pdfView.currentPage
         else { return }
+        let target = document.page(at: document.index(for: page) + (forward ? 1 : -1))
+        if let target, surface.bufferedPages.contains(where: { $0 === target }) {
+            return
+        }
         surface.showJumpMask(for: page)
     }
 
@@ -290,7 +301,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         pageRenderTheme.drawsInverted = palette.drawsInverted
         surface.applyTheme(palette)
         auxSurface.applyTheme(palette)
-        pdfView.invertsPagePlaceholders = palette.drawsInverted
         pdfViewAux.invertsPagePlaceholders = palette.drawsInverted
         // The aux view shows the same pages, whose annotations `surface` owns.
         surface.highlightAppearance = palette.drawsInverted ? .dark : .standard
