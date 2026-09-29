@@ -139,6 +139,44 @@ placement (content right of center, top offset / drift after page turns).
     visible page priority with cancellable prefetch, and tile only when zoomed.
   - **Chosen direction.** Option A: a hybrid PDFView plus prefetched cover.
     Snapshot fidelity is validated first.
+  - **Fidelity check** (real `simctl io screenshot`, compared inside the page,
+    iOS 26.5):
+    - **Tile resolutions.** PDFKit renders tiles at two levels: exactly the
+      screen resolution (`scaleFactor` x screen scale) and 100% zoom x screen
+      scale (downscaled for display).
+    - **Image covers never match exactly.** Every image cover differs on glyph
+      edges: `viewportSnapshot` averages 8.5 per pixel, a page image at
+      exact resolution 6.4, and one at 3 px/pt downscaled by Core Animation
+      5.7. Ink totals match; no whole-pixel shift helps.
+    - **A second PDFView matches.** A `YabrPDFView` on the same page with the
+      same viewport (`applyViewport(restore(...))`), rendered behind and then
+      brought to the front, has zero difference except under the tap-zone
+      labels (alpha 0.01), which the cover sat above in the test.
+    - **So the prefetch cover should be a second PDFView** placed below the tap
+      labels and the theme overlay, as `jumpMaskView` is.
+  - **Direction.** Triple buffer behind a `PDFReaderSurface` container that
+    owns 1-3 `YabrPDFView`s and all per-view state.
+    1. Pure refactor with one view.
+    2. Buffers with a cover policy.
+    3. Takeover policy.
+  - **Gesture-priority experiment** (iOS 26.5 and 18.5, real taps in the
+    harness).
+    `YabrPDFView` was moved into a container, and its four app tap recognizers
+    plus the app's `UIEditMenuInteraction` were moved onto the container. The
+    delegate stays the view and uses `location(in: self)`. Results:
+    - tapping a highlight shows the app's highlight menu, not PDFKit's markup
+      menu;
+    - long press selects text, and the system edit menu shows the app items;
+    - corner single-tap and edge-strip double-tap turn pages.
+    - **Caveats.** PDFView has its own `UIEditMenuInteraction` (text selection)
+      that must stay on the PDFView. A view moved to a new parent at runtime
+      needs `translatesAutoresizingMaskIntoConstraints = true`, or its
+      constraints drop and it collapses. Tap zones are the bottom corners
+      (single tap) and 50 pt edge strips (double tap).
+    - **Harness quirk.** In a freshly started window-hosted test, the
+      text-selection system menu appears only after a sheet has been presented
+      once, with or without the container.
+    - The same checks pass on iPhone 16 (iOS 18.5).
 - In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
   nil`; window-hosted harnesses must recreate one before adding a window or the
   host's SwiftUI `appContainer` environment default asserts.
