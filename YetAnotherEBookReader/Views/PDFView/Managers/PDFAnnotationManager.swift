@@ -9,7 +9,7 @@ import PDFKit
 @available(iOS 16.0, macCatalyst 16.0, *)
 class PDFAnnotationManager {
     private weak var pdfView: YabrPDFView?
-    private weak var delegate: ReaderEngineDelegate?
+    weak var delegate: ReaderEngineDelegate?
     private var bookId: String
     
     private var activeHighlights = [UUID: ReaderEngineHighlight]()
@@ -20,8 +20,11 @@ class PDFAnnotationManager {
         self.bookId = bookId
     }
 
-    func addHighlight(style: Int, selection: PDFSelection) {
-        guard let pdfView = pdfView else { return }
+    /// Adds a highlight for `selection`, optionally with a note; returns its id.
+    @discardableResult
+    func addHighlight(style: Int, selection: PDFSelection, note: String? = nil) -> UUID? {
+        guard let pdfView = pdfView else { return nil }
+        let note = Self.normalizedNote(note)
         
         var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
         selection.pages.forEach { selectionPage in
@@ -45,6 +48,7 @@ class PDFAnnotationManager {
             page: pdfHighlightPageLocations.first?.page ?? 1,
             date: Date(),
             type: style,
+            note: note,
             content: selection.string ?? "No Content",
             cfiStart: "/\((pdfHighlightPageLocations.first?.page ?? 1) * 2)",
             cfiEnd: "/\((pdfHighlightPageLocations.last?.page ?? 1) * 2)",
@@ -59,13 +63,23 @@ class PDFAnnotationManager {
             pos: pdfHighlightPageLocations,
             type: style,
             content: selection.string ?? "No Content",
+            note: note,
             date: Date()
         )
         pdfView.injectHighlight(highlight: pdfHighlight)
+        return uuid
+    }
+
+    func highlight(for uuid: UUID) -> ReaderEngineHighlight? {
+        activeHighlights[uuid]
     }
 
     func style(of uuid: UUID) -> BookHighlightStyle? {
         activeHighlights[uuid].flatMap { BookHighlightStyle(rawValue: $0.type) }
+    }
+
+    func note(of uuid: UUID) -> String? {
+        activeHighlights[uuid]?.note
     }
 
     func removeHighlight(uuid: UUID) {
@@ -80,23 +94,39 @@ class PDFAnnotationManager {
     }
 
     func modifyHighlightStyle(uuid: UUID, type: BookHighlightStyle) {
+        updateHighlight(uuid: uuid) { $0.type = type.rawValue }
+    }
+
+    /// Sets or, when blank, clears the note of a highlight.
+    func setNote(uuid: UUID, note: String?) {
+        let note = Self.normalizedNote(note)
+        updateHighlight(uuid: uuid) { $0.note = note }
+    }
+
+    /// Changes a highlight, persists it under the same id, and redraws it.
+    private func updateHighlight(uuid: UUID, _ mutate: (inout ReaderEngineHighlight) -> Void) {
         guard let pdfView = pdfView,
               var engineHighlight = activeHighlights[uuid]
         else { return }
-        
+
         if let oldPdfHighlight = convertToPDFHighlight(engineHighlight) {
             pdfView.removeHighlight(highlight: oldPdfHighlight)
         }
-        
-        engineHighlight.type = type.rawValue
+
+        mutate(&engineHighlight)
         engineHighlight.date = Date()
         activeHighlights[uuid] = engineHighlight
-        
+
         delegate?.readerEngine(pdfView, didAddHighlight: engineHighlight)
-        
+
         if let newPdfHighlight = convertToPDFHighlight(engineHighlight) {
             pdfView.injectHighlight(highlight: newPdfHighlight)
         }
+    }
+
+    static func normalizedNote(_ note: String?) -> String? {
+        guard let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     func applyHighlights(_ highlights: [ReaderEngineHighlight]) {

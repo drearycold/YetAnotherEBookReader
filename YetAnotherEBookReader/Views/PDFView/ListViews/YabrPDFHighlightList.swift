@@ -130,20 +130,43 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
         self.dismiss(animated: true)
     }
 
-    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete {
-            guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
-            else { return }
+    override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
+        else { return nil }
 
-            //TODO: remove
-            yabrPDFMetaSource?.yabrPDFHighlights(yabrPDFView, remove: highlight)
-            
-            sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
-            if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
-                sectionHighlights.removeValue(forKey: sections[indexPath.section])
-                sections.remove(at: indexPath.section)
-            }
+        let delete = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, completion in
+            self?.removeHighlight(highlight, at: indexPath)
+            completion(true)
+        }
+        let note = UIContextualAction(style: .normal, title: highlight.note == nil ? "Note" : "Edit Note") { [weak self] _, _, completion in
+            self?.editNote(of: highlight)
+            completion(true)
+        }
+        note.backgroundColor = .systemBlue
+        return UISwipeActionsConfiguration(actions: [delete, note])
+    }
+
+    /// Removes through the annotation manager so the page and the persisted
+    /// highlights stay in step.
+    private func removeHighlight(_ highlight: PDFHighlight, at indexPath: IndexPath) {
+        pdfViewController?.annotationManager.removeHighlight(uuid: highlight.uuid)
+
+        guard tableView.window != nil else { return }
+        sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
+        if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
+            sectionHighlights.removeValue(forKey: sections[indexPath.section])
+            sections.remove(at: indexPath.section)
+            tableView.deleteSections(IndexSet(integer: indexPath.section), with: .fade)
+        } else {
             tableView.deleteRows(at: [indexPath], with: .fade)
+        }
+    }
+
+    private func editNote(of highlight: PDFHighlight) {
+        guard let pdfViewController else { return }
+        pdfViewController.presentNoteEditor(for: highlight.uuid, from: self) { [weak self] in
+            self?.loadItems()
+            self?.tableView.reloadData()
         }
     }
     

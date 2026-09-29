@@ -224,8 +224,8 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         let elements = controller.menuManager.selectionMenuElements().compactMap { $0 as? UIAction }
 
-        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline])
-        XCTAssertEqual(elements.map(\.title), ["Highlight", "Underline"])
+        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.note])
+        XCTAssertEqual(elements.map(\.title), ["Highlight", "Underline", "Note"])
         XCTAssertTrue(elements.allSatisfy { $0.image != nil })
     }
 
@@ -236,8 +236,75 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         let elements = controller.menuManager.selectionMenuElements().compactMap { $0 as? UIAction }
 
-        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.dictionary])
+        XCTAssertEqual(elements.map(\.identifier), [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.note, PDFMenuManager.ActionID.dictionary])
         XCTAssertEqual(elements.last?.title, "MDict")
+    }
+
+    func testNoteEditorSavesTrimmedTextAndCancelSavesNothing() {
+        var saved: [String?] = []
+        let editor = YabrPDFNoteEditorViewController(quote: "Quoted text", style: .green, note: nil)
+        editor.onSave = { saved.append($0) }
+        editor.loadViewIfNeeded()
+
+        XCTAssertEqual(editor.quote, "Quoted text")
+        XCTAssertFalse(editor.isModalInPresentation, "nothing to lose yet")
+        editor.textView.text = "  a note \n"
+        editor.textViewDidChange(editor.textView)
+        XCTAssertTrue(editor.isModalInPresentation, "edited text is not swiped away")
+
+        editor.save()
+        XCTAssertEqual(saved, ["a note"])
+
+        let cancelled = YabrPDFNoteEditorViewController(quote: "Q", style: .yellow, note: "old")
+        cancelled.onSave = { saved.append($0) }
+        cancelled.loadViewIfNeeded()
+        XCTAssertEqual(cancelled.textView.text, "old")
+        cancelled.textView.text = "changed"
+        cancelled.cancel()
+        XCTAssertEqual(saved, ["a note"], "cancel saves nothing")
+
+        let cleared = YabrPDFNoteEditorViewController(quote: "Q", style: .yellow, note: "old")
+        cleared.onSave = { saved.append($0) }
+        cleared.loadViewIfNeeded()
+        cleared.textView.text = "  "
+        cleared.save()
+        XCTAssertEqual(saved, ["a note", nil], "blank clears the note")
+    }
+
+    func testHighlightListSwipeOffersNoteAndDeletesThroughAnnotationManager() throws {
+        let controller = SpyYabrPDFViewController()
+        let metaSource = MockYabrPDFMetaSource(pdfURL: nil)
+        let highlight = PDFHighlight(
+            uuid: UUID(),
+            pos: [PDFHighlight.PageLocation(page: 1, ranges: [NSRange(location: 0, length: 4)])],
+            type: BookHighlightStyle.yellow.rawValue,
+            content: "Text",
+            note: "noted",
+            date: Date()
+        )
+        metaSource.highlightsValue = [highlight]
+        controller.yabrPDFMetaSource = metaSource
+        let spy = HighlightRemovalSpy()
+        controller.annotationManager.delegate = spy
+
+        let page = YabrPDFAnnotationPageVC()
+        page.pdfViewController = controller
+        page.yabrPDFView = controller.pdfView
+        page.yabrPDFMetaSource = metaSource
+        page.loadViewIfNeeded()
+        let list = page.highlightViewController
+        page.setViewControllers([list], direction: .forward, animated: false)
+        list.loadViewIfNeeded()
+
+        let configuration = try XCTUnwrap(list.tableView(list.tableView, trailingSwipeActionsConfigurationForRowAt: IndexPath(row: 0, section: 0)))
+        XCTAssertEqual(configuration.actions.map(\.title), ["Delete", "Edit Note"])
+        XCTAssertEqual(configuration.actions.first?.style, .destructive)
+
+        let delete = try XCTUnwrap(configuration.actions.first)
+        var completed: Bool?
+        delete.handler(delete, UIView()) { completed = $0 }
+        XCTAssertEqual(spy.removed, [highlight.uuid.uuidString], "persisted removal goes through the annotation manager")
+        XCTAssertEqual(completed, true)
     }
 
     func testEditMenuInteractionIsInstalledOnPDFView() {
@@ -474,8 +541,10 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
     }
 
+    var highlightsValue: [PDFHighlight] = []
+
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight] {
-        []
+        highlightsValue
     }
 
     func yabrPDFHighlights(_ view: YabrPDFView?, getById highlightId: UUID) -> PDFHighlight? {
@@ -532,4 +601,14 @@ private final class MockPDFPreferenceRepository: ReaderPreferenceRepositoryProto
     func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) {
         savedPDFPreferences.append(preferences)
     }
+}
+
+private final class HighlightRemovalSpy: ReaderEngineDelegate {
+    private(set) var removed: [String] = []
+    func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {}
+    func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {}
+    func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {
+        removed.append(highlightId)
+    }
+    func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {}
 }

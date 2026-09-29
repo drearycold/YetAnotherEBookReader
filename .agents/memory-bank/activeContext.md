@@ -80,6 +80,28 @@ placement (content right of center, top offset / drift after page turns).
   The iOS 18 edit menu expands the highlight Style submenu inline and
   horizontally, without the swatch images or the ✓ on the current style that
   iOS 26 shows; both behave the same otherwise (verified by hand on 18.5/26.5).
+- Highlight notes (FolioReader-style), new:
+  - **Entry points.** "Note" appears in the selection menu; nothing is created
+    unless a note is saved. The highlight menu has "Note" / "Edit Note", and the
+    highlight list has swipe actions (Delete, Note / Edit Note).
+  - **Editor.** `YabrPDFNoteEditorViewController`, a page sheet built with
+    `themedNavigationController`.
+  - **Storage.** `PDFAnnotationManager.setNote` saves through `didAddHighlight`
+    (same id, upsert). A blank note clears it.
+  - **On-page marker.** `PDFNoteMarker` is a small square highlight
+    annotation (same colour) in the top-right corner of the last line. PDFKit
+    renders it in the page like the highlight, so it reads as a darker patch
+    with the text readable. It doesn't change margin detection: detection counts
+    a pixel as ink only when every channel is below 200. Not visible in dark
+    mode, where highlights show only as tinted text.
+  - **Rejected marker: custom `draw(with:in:)`.** PDFKit composites such
+    annotations in a separate layer: on screen they are opaque, ignore the
+    multiply blend, and skip the dark inversion.
+  - **Export.** Annotated export puts the note in the first line annotation's
+    `contents` and removes the markers while writing (`writeAnnotatedPDF`).
+  - **List-delete fix.** Deleting from the highlight list now goes through
+    the annotation manager. It used to bypass `activeHighlights`, and deleting
+    the last row of a section used `deleteRows` after removing the section.
 - In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
   nil`; window-hosted harnesses must recreate one before adding a window or the
   host's SwiftUI `appContainer` environment default asserts.

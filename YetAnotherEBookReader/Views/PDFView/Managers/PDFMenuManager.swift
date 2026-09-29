@@ -18,6 +18,7 @@ final class PDFMenuManager: NSObject {
         static let highlight = UIAction.Identifier("yabr.pdf.highlight")
         static let underline = UIAction.Identifier("yabr.pdf.underline")
         static let dictionary = UIAction.Identifier("yabr.pdf.dictionary")
+        static let note = UIAction.Identifier("yabr.pdf.note")
         static let copyHighlight = UIAction.Identifier("yabr.pdf.highlight.copy")
         static let selectHighlight = UIAction.Identifier("yabr.pdf.highlight.select")
         static let deleteHighlight = UIAction.Identifier("yabr.pdf.highlight.delete")
@@ -55,6 +56,9 @@ final class PDFMenuManager: NSObject {
             UIAction(title: "Underline", image: UIImage(systemName: "highlighter"), identifier: ActionID.underline) { [weak controller] _ in
                 controller?.addHighlight(style: .underline)
             },
+            UIAction(title: "Note", image: UIImage(systemName: "note.text.badge.plus"), identifier: ActionID.note) { [weak controller] _ in
+                controller?.presentNoteEditorForSelection()
+            },
         ]
         if let (name, _) = controller.yabrPDFMetaSource?.yabrPDFDictViewer(controller.pdfView) {
             elements.append(
@@ -72,6 +76,7 @@ final class PDFMenuManager: NSObject {
         guard let controller else { return [] }
         let pdfView = controller.pdfView
         let currentStyle = controller.annotationManager.style(of: highlightId)
+        let hasNote = controller.annotationManager.note(of: highlightId) != nil
 
         let styles = BookHighlightStyle.allCases.map { style in
             UIAction(
@@ -90,6 +95,9 @@ final class PDFMenuManager: NSObject {
             },
             UIAction(title: "Select", image: UIImage(systemName: "text.cursor"), identifier: ActionID.selectHighlight) { [weak pdfView] _ in
                 pdfView?.selectHighlight(highlightId)
+            },
+            UIAction(title: hasNote ? "Edit Note" : "Note", image: UIImage(systemName: "note.text"), identifier: ActionID.note) { [weak controller] _ in
+                controller?.presentNoteEditor(for: highlightId)
             },
             UIMenu(title: "Style", image: UIImage(systemName: "paintpalette"), children: styles),
             UIAction(title: "Delete", image: UIImage(systemName: "trash"), identifier: ActionID.deleteHighlight, attributes: .destructive) { [weak controller] _ in

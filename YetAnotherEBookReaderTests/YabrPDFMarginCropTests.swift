@@ -720,7 +720,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         harness.pdfView.setCurrentSelection(selection, animate: false)
         let menu = try XCTUnwrap(harness.pdfView.selectionContextMenu())
         XCTAssertTrue(menu.options.contains(.displayInline))
-        XCTAssertEqual(menu.children.compactMap { ($0 as? UIAction)?.identifier }, [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline])
+        XCTAssertEqual(menu.children.compactMap { ($0 as? UIAction)?.identifier }, [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.note])
 
         harness.pdfView.highlightTapped = UUID()
         XCTAssertNil(harness.pdfView.selectionContextMenu(), "a highlight's own menu is showing")
@@ -750,15 +750,16 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(harness.controller.menuManager.highlightMenuRect, rect)
         let menu = try XCTUnwrap(editMenu(harness))
         let children = menu.children
-        XCTAssertEqual(children.count, 4)
+        XCTAssertEqual(children.count, 5)
         XCTAssertEqual((children[0] as? UIAction)?.identifier, PDFMenuManager.ActionID.copyHighlight)
         XCTAssertEqual((children[1] as? UIAction)?.identifier, PDFMenuManager.ActionID.selectHighlight)
-        let style = try XCTUnwrap(children[2] as? UIMenu)
+        XCTAssertEqual((children[2] as? UIAction)?.identifier, PDFMenuManager.ActionID.note)
+        let style = try XCTUnwrap(children[3] as? UIMenu)
         XCTAssertEqual(style.title, "Style")
         XCTAssertEqual(style.children.count, BookHighlightStyle.allCases.count)
         let checked = style.children.compactMap { $0 as? UIAction }.filter { $0.state == .on }.map(\.identifier)
         XCTAssertEqual(checked, [PDFMenuManager.ActionID.style(.green)], "current style is ticked")
-        let delete = try XCTUnwrap(children[3] as? UIAction)
+        let delete = try XCTUnwrap(children[4] as? UIAction)
         XCTAssertEqual(delete.identifier, PDFMenuManager.ActionID.deleteHighlight)
         XCTAssertTrue(delete.attributes.contains(.destructive))
     }
@@ -824,6 +825,182 @@ final class YabrPDFMarginCropTests: XCTestCase {
         // PDFView declares but does not implement this delegate method: falling back
         // to super used to crash with an unrecognized selector.
         XCTAssertFalse(pdfView.gestureRecognizer(pdfKitTap, shouldBeRequiredToFailBy: highlightMenuTap))
+    }
+
+    // MARK: - Highlight notes
+
+    func testSetNotePersistsThroughTheSameHighlight() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        let spy = HighlightSpy()
+        harness.controller.annotationManager.delegate = spy
+        let manager = harness.controller.annotationManager
+
+        manager.setNote(uuid: highlightId, note: "  a thought \n")
+
+        XCTAssertEqual(manager.note(of: highlightId), "a thought", "trimmed")
+        XCTAssertEqual(spy.added.map(\.id), [highlightId.uuidString], "updates the highlight in place")
+        XCTAssertEqual(spy.added.last?.note, "a thought")
+        XCTAssertEqual(manager.style(of: highlightId), .yellow, "style kept")
+
+        manager.setNote(uuid: highlightId, note: " \n ")
+        XCTAssertNil(manager.note(of: highlightId), "blank clears the note")
+        XCTAssertNil(spy.added.last?.note)
+        XCTAssertEqual(spy.added.count, 2)
+    }
+
+    func testAddHighlightWithNotePersistsItAndSurvivesReapply() throws {
+        let (harness, selection) = try makeTextHarness()
+        let spy = HighlightSpy()
+        let manager = harness.controller.annotationManager
+        manager.delegate = spy
+
+        let highlightId = try XCTUnwrap(manager.addHighlight(style: BookHighlightStyle.blue.rawValue, selection: selection, note: "why"))
+
+        XCTAssertEqual(spy.added.last?.note, "why")
+        XCTAssertEqual(manager.note(of: highlightId), "why")
+
+        manager.applyHighlights(spy.added)
+        XCTAssertEqual(manager.note(of: highlightId), "why")
+        XCTAssertEqual(noteMarkers(harness).count, 1, "re-applying does not duplicate the marker")
+    }
+
+    func testNoteMarkerSitsInsideTheLastLineAndFollowsTheNote() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        let manager = harness.controller.annotationManager
+        XCTAssertTrue(noteMarkers(harness).isEmpty, "no note, no marker")
+
+        manager.setNote(uuid: highlightId, note: "marked")
+
+        let marker = try XCTUnwrap(noteMarkers(harness).first)
+        XCTAssertEqual(noteMarkers(harness).count, 1)
+        let lines = try XCTUnwrap(harness.pdfView.highlights[highlightId]).flatMap(\.annotations).filter { !($0.isNoteMarker) }
+        let lastLine = try XCTUnwrap(lines.last)
+        XCTAssertTrue(lastLine.bounds.contains(marker.bounds), "marker \(marker.bounds) inside last line \(lastLine.bounds)")
+        XCTAssertEqual(marker.bounds.maxX, lastLine.bounds.maxX, accuracy: 0.01, "top-right corner")
+        XCTAssertEqual(marker.bounds.maxY, lastLine.bounds.maxY, accuracy: 0.01, "top-right corner")
+        XCTAssertLessThanOrEqual(marker.bounds.width, PDFNoteMarker.maxSide + 0.01)
+        XCTAssertEqual(marker.type, "Highlight", "rendered inside the page like the highlight")
+        XCTAssertEqual(marker.color, lastLine.color)
+        XCTAssertEqual(lines.first?.contents, "marked", "exported as the highlight's comment")
+
+        // Tapping the marker is tapping the highlight.
+        let markerInView = harness.pdfView.convert(marker.bounds, from: harness.page(0))
+        XCTAssertEqual(harness.pdfView.highlight(at: CGPoint(x: markerInView.midX, y: markerInView.midY))?.0, highlightId)
+
+        manager.setNote(uuid: highlightId, note: nil)
+        XCTAssertTrue(noteMarkers(harness).isEmpty, "cleared note removes the marker")
+        XCTAssertNil(harness.pdfView.highlights[highlightId]?.first?.annotations.first?.contents)
+
+        manager.setNote(uuid: highlightId, note: "again")
+        manager.removeHighlight(uuid: highlightId)
+        XCTAssertTrue(noteMarkers(harness).isEmpty, "removed highlight removes the marker")
+    }
+
+    /// The fixture highlight sits on the page's first lines, so a tab that read as
+    /// ink would raise the detected top edge.
+    func testNoteMarkerDoesNotChangeMarginDetection() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .pink)
+        let manager = harness.controller.annotationManager
+
+        for style in BookHighlightStyle.allCases {
+            manager.modifyHighlightStyle(uuid: highlightId, type: style)
+            manager.setNote(uuid: highlightId, note: nil)
+            let before = detectedBounds(harness, pageIndex: 0)
+
+            manager.setNote(uuid: highlightId, note: "margin")
+
+            XCTAssertEqual(noteMarkers(harness).count, 1)
+            XCTAssertEqual(detectedBounds(harness, pageIndex: 0), before, "\(style)")
+        }
+    }
+
+    func testHighlightMenuOffersNoteOrEditNote() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        let manager = harness.controller.menuManager
+
+        func noteTitle() -> String? {
+            manager.highlightMenuElements(for: highlightId).compactMap { $0 as? UIAction }.first { $0.identifier == PDFMenuManager.ActionID.note }?.title
+        }
+        XCTAssertEqual(noteTitle(), "Note")
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "n")
+        XCTAssertEqual(noteTitle(), "Edit Note")
+    }
+
+    func testHighlightNoteActionEditsTheNote() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "old")
+
+        try perform(PDFMenuManager.ActionID.note, in: harness.controller.menuManager.highlightMenuElements(for: highlightId))
+        let editor = try presentedNoteEditor(harness)
+        XCTAssertEqual(editor.textView.text, "old", "prefilled")
+        XCTAssertFalse(editor.quote.isEmpty)
+
+        editor.textView.text = "new"
+        editor.save()
+        settle(0.5)
+
+        XCTAssertEqual(harness.controller.annotationManager.note(of: highlightId), "new")
+        waitForDismissal(harness)
+        XCTAssertNil(harness.controller.presentedViewController)
+    }
+
+    func testSelectionNoteCreatesHighlightOnlyOnSave() throws {
+        let (harness, selection) = try makeTextHarness()
+
+        harness.pdfView.setCurrentSelection(selection, animate: false)
+        try perform(PDFMenuManager.ActionID.note, in: harness.controller.menuManager.selectionMenuElements())
+        let cancelled = try presentedNoteEditor(harness)
+        XCTAssertEqual(cancelled.quote, selection.string)
+        cancelled.textView.text = "never saved"
+        cancelled.cancel()
+        waitForDismissal(harness)
+        XCTAssertTrue(harness.pdfView.highlights.isEmpty, "cancel creates nothing")
+
+        harness.pdfView.setCurrentSelection(selection, animate: false)
+        try perform(PDFMenuManager.ActionID.note, in: harness.controller.menuManager.selectionMenuElements())
+        let editor = try presentedNoteEditor(harness)
+        editor.textView.text = "kept"
+        editor.save()
+        waitForDismissal(harness)
+
+        let highlightId = try XCTUnwrap(harness.pdfView.highlights.keys.first)
+        XCTAssertEqual(harness.pdfView.highlights.count, 1)
+        XCTAssertEqual(harness.controller.annotationManager.note(of: highlightId), "kept")
+        XCTAssertEqual(harness.controller.annotationManager.style(of: highlightId), .yellow)
+        XCTAssertEqual(noteMarkers(harness).count, 1)
+    }
+
+    func testAnnotatedExportCarriesNoteWithoutMarker() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "exported")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+        tempURLs.append(url)
+
+        XCTAssertTrue(harness.controller.writeAnnotatedPDF(to: url))
+
+        let exported = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+        let highlightAnnotations = exported.annotations.filter { $0.type == "Highlight" }
+        XCTAssertFalse(highlightAnnotations.isEmpty)
+        XCTAssertTrue(highlightAnnotations.contains { $0.contents == "exported" })
+        XCTAssertFalse(exported.annotations.contains { $0.isNoteMarker }, "no marker in the export")
+        XCTAssertEqual(noteMarkers(harness).count, 1, "marker back on screen")
+    }
+
+    private func noteMarkers(_ harness: Harness) -> [PDFAnnotation] {
+        (0..<(harness.pdfView.document?.pageCount ?? 0)).flatMap { harness.page($0).annotations.filter { $0.isNoteMarker } }
+    }
+
+    private func waitForDismissal(_ harness: Harness) {
+        let deadline = Date().addingTimeInterval(3)
+        while harness.controller.presentedViewController != nil && Date() < deadline {
+            settle(0.1)
+        }
+    }
+
+    private func presentedNoteEditor(_ harness: Harness, file: StaticString = #filePath, line: UInt = #line) throws -> YabrPDFNoteEditorViewController {
+        settle(0.5)
+        let nav = try XCTUnwrap(harness.controller.presentedViewController as? UINavigationController, file: file, line: line)
+        return try XCTUnwrap(nav.viewControllers.first as? YabrPDFNoteEditorViewController, file: file, line: line)
     }
 
     /// Real-text pages (the synthetic block pages have no text to select).
@@ -1541,5 +1718,18 @@ private final class PositionSpy: ReaderEngineDelegate {
     }
     func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {}
     func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {}
+    func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {}
+}
+
+private final class HighlightSpy: ReaderEngineDelegate {
+    private(set) var added: [ReaderEngineHighlight] = []
+    private(set) var removed: [String] = []
+    func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {}
+    func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {
+        added.append(highlight)
+    }
+    func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {
+        removed.append(highlightId)
+    }
     func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {}
 }
