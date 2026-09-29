@@ -67,7 +67,7 @@ class PDFAnnotationManager {
             note: note,
             date: Date()
         )
-        pdfView.injectHighlight(highlight: pdfHighlight)
+        surface?.injectHighlight(highlight: pdfHighlight)
         return uuid
     }
 
@@ -90,7 +90,7 @@ class PDFAnnotationManager {
         
         if let engineHighlight = activeHighlights.removeValue(forKey: uuid),
            let pdfHighlight = convertToPDFHighlight(engineHighlight) {
-            pdfView.removeHighlight(highlight: pdfHighlight)
+            surface?.removeHighlight(highlight: pdfHighlight)
         }
     }
 
@@ -111,7 +111,7 @@ class PDFAnnotationManager {
         else { return }
 
         if let oldPdfHighlight = convertToPDFHighlight(engineHighlight) {
-            pdfView.removeHighlight(highlight: oldPdfHighlight)
+            surface?.removeHighlight(highlight: oldPdfHighlight)
         }
 
         mutate(&engineHighlight)
@@ -121,7 +121,7 @@ class PDFAnnotationManager {
         delegate?.readerEngine(pdfView, didAddHighlight: engineHighlight)
 
         if let newPdfHighlight = convertToPDFHighlight(engineHighlight) {
-            pdfView.injectHighlight(highlight: newPdfHighlight)
+            surface?.injectHighlight(highlight: newPdfHighlight)
         }
     }
 
@@ -135,7 +135,7 @@ class PDFAnnotationManager {
         
         activeHighlights.values.forEach { engineHighlight in
             if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
-                pdfView.removeHighlight(highlight: pdfHighlight)
+                surface?.removeHighlight(highlight: pdfHighlight)
             }
         }
         activeHighlights.removeAll()
@@ -144,7 +144,7 @@ class PDFAnnotationManager {
             guard let uuid = UUID(uuidString: engineHighlight.id) else { return }
             activeHighlights[uuid] = engineHighlight
             if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
-                pdfView.injectHighlight(highlight: pdfHighlight)
+                surface?.injectHighlight(highlight: pdfHighlight)
             }
         }
     }
@@ -153,7 +153,7 @@ class PDFAnnotationManager {
         guard let pdfView = pdfView else { return }
         activeHighlights.values.forEach { engineHighlight in
             if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
-                pdfView.injectHighlight(highlight: pdfHighlight)
+                surface?.injectHighlight(highlight: pdfHighlight)
             }
         }
     }

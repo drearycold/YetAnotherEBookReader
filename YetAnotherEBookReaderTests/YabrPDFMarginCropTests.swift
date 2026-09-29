@@ -723,7 +723,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(menu.options.contains(.displayInline))
         XCTAssertEqual(menu.children.compactMap { ($0 as? UIAction)?.identifier }, [PDFMenuManager.ActionID.highlight, PDFMenuManager.ActionID.underline, PDFMenuManager.ActionID.note])
 
-        harness.pdfView.highlightTapped = UUID()
+        harness.surface.highlightTapped = UUID()
         XCTAssertNil(harness.pdfView.selectionContextMenu(), "a highlight's own menu is showing")
     }
 
@@ -737,17 +737,17 @@ final class YabrPDFMarginCropTests: XCTestCase {
             let annotations = harness.page(0).annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }
             XCTAssertTrue(annotations.contains { $0.type == subtype.rawValue.replacingOccurrences(of: "/", with: "") }, "\(identifier): \(annotations.map { $0.type ?? "" })")
         }
-        XCTAssertEqual(harness.pdfView.highlights.count, 2)
+        XCTAssertEqual(harness.surface.highlights.count, 2)
     }
 
     func testTappingHighlightPresentsItsMenu() throws {
         let (harness, highlightId) = try makeHighlightHarness(style: .green)
-        let (_, rect) = try XCTUnwrap(harness.pdfView.highlight(at: highlightCenter(harness, highlightId)))
+        let (_, rect) = try XCTUnwrap(harness.surface.highlight(at: highlightCenter(harness, highlightId)))
 
-        harness.pdfView.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY))
+        harness.surface.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY))
         settle()
 
-        XCTAssertEqual(harness.pdfView.highlightTapped, highlightId)
+        XCTAssertEqual(harness.surface.highlightTapped, highlightId)
         XCTAssertEqual(harness.controller.menuManager.highlightMenuRect, rect)
         let menu = try XCTUnwrap(editMenu(harness))
         let children = menu.children
@@ -769,13 +769,13 @@ final class YabrPDFMarginCropTests: XCTestCase {
     func testHighlightMenuPointsAtTappedLine() throws {
         let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
         let pdfView = harness.pdfView
-        let lineRects = (pdfView.highlights[highlightId] ?? []).flatMap(\.annotations).compactMap { annotation -> CGRect? in
+        let lineRects = (harness.surface.highlights[highlightId] ?? []).flatMap(\.annotations).compactMap { annotation -> CGRect? in
             annotation.page.map { pdfView.convert(annotation.bounds, from: $0) }
         }
         XCTAssertGreaterThan(lineRects.count, 1, "fixture highlight should span lines")
 
         for rect in lineRects {
-            XCTAssertTrue(pdfView.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY)))
+            XCTAssertTrue(harness.surface.handleHighlightTap(at: CGPoint(x: rect.midX, y: rect.midY)))
             XCTAssertEqual(harness.controller.menuManager.highlightMenuRect, rect)
         }
     }
@@ -784,14 +784,14 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let (harness, _) = try makeHighlightHarness(style: .yellow)
         let pageInView = harness.pdfView.convert(harness.page(0).bounds(for: .cropBox), from: harness.page(0))
 
-        harness.pdfView.handleHighlightTap(at: CGPoint(x: pageInView.midX, y: pageInView.maxY - 8))
+        harness.surface.handleHighlightTap(at: CGPoint(x: pageInView.midX, y: pageInView.maxY - 8))
 
-        XCTAssertNil(harness.pdfView.highlightTapped)
+        XCTAssertNil(harness.surface.highlightTapped)
     }
 
     func testHighlightMenuActions() throws {
         let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
-        let text = harness.pdfView.highlights[highlightId]?.compactMap { $0.selection.string }.joined(separator: " ")
+        let text = harness.surface.highlights[highlightId]?.compactMap { $0.selection.string }.joined(separator: " ")
         let elements = harness.controller.menuManager.highlightMenuElements(for: highlightId)
 
         try perform(PDFMenuManager.ActionID.copyHighlight, in: elements)
@@ -802,10 +802,10 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
         try perform(PDFMenuManager.ActionID.style(.underline), in: elements)
         XCTAssertEqual(harness.controller.annotationManager.style(of: highlightId), .underline)
-        XCTAssertTrue(harness.pdfView.highlights[highlightId]?.flatMap(\.annotations).allSatisfy { $0.type == "Underline" } ?? false)
+        XCTAssertTrue(harness.surface.highlights[highlightId]?.flatMap(\.annotations).allSatisfy { $0.type == "Underline" } ?? false)
 
         try perform(PDFMenuManager.ActionID.deleteHighlight, in: elements)
-        XCTAssertNil(harness.pdfView.highlights[highlightId])
+        XCTAssertNil(harness.surface.highlights[highlightId])
         XCTAssertTrue(harness.page(0).annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }.isEmpty)
     }
 
@@ -880,7 +880,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
         let marker = try XCTUnwrap(noteMarkers(harness).first)
         XCTAssertEqual(noteMarkers(harness).count, 1)
-        let lines = try XCTUnwrap(harness.pdfView.highlights[highlightId]).flatMap(\.annotations).filter { !($0.isNoteMarker) }
+        let lines = try XCTUnwrap(harness.surface.highlights[highlightId]).flatMap(\.annotations).filter { !($0.isNoteMarker) }
         let lastLine = try XCTUnwrap(lines.last)
         XCTAssertTrue(lastLine.bounds.contains(marker.bounds), "marker \(marker.bounds) inside last line \(lastLine.bounds)")
         XCTAssertEqual(marker.bounds.maxX, lastLine.bounds.maxX, accuracy: 0.01, "top-right corner")
@@ -892,11 +892,11 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
         // Tapping the marker is tapping the highlight.
         let markerInView = harness.pdfView.convert(marker.bounds, from: harness.page(0))
-        XCTAssertEqual(harness.pdfView.highlight(at: CGPoint(x: markerInView.midX, y: markerInView.midY))?.0, highlightId)
+        XCTAssertEqual(harness.surface.highlight(at: CGPoint(x: markerInView.midX, y: markerInView.midY))?.0, highlightId)
 
         manager.setNote(uuid: highlightId, note: nil)
         XCTAssertTrue(noteMarkers(harness).isEmpty, "cleared note removes the marker")
-        XCTAssertNil(harness.pdfView.highlights[highlightId]?.first?.annotations.first?.contents)
+        XCTAssertNil(harness.surface.highlights[highlightId]?.first?.annotations.first?.contents)
 
         manager.setNote(uuid: highlightId, note: "again")
         manager.removeHighlight(uuid: highlightId)
@@ -964,7 +964,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         cancelled.textView.text = "never saved"
         cancelled.cancel()
         waitForDismissal(harness)
-        XCTAssertTrue(harness.pdfView.highlights.isEmpty, "cancel creates nothing")
+        XCTAssertTrue(harness.surface.highlights.isEmpty, "cancel creates nothing")
 
         harness.pdfView.setCurrentSelection(selection, animate: false)
         try perform(PDFMenuManager.ActionID.note, in: harness.controller.menuManager.selectionMenuElements())
@@ -973,8 +973,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         editor.save()
         waitForDismissal(harness)
 
-        let highlightId = try XCTUnwrap(harness.pdfView.highlights.keys.first)
-        XCTAssertEqual(harness.pdfView.highlights.count, 1)
+        let highlightId = try XCTUnwrap(harness.surface.highlights.keys.first)
+        XCTAssertEqual(harness.surface.highlights.count, 1)
         XCTAssertEqual(harness.controller.annotationManager.note(of: highlightId), "kept")
         XCTAssertEqual(harness.controller.annotationManager.style(of: highlightId), .yellow)
         XCTAssertEqual(noteMarkers(harness).count, 1)
@@ -1017,13 +1017,13 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let marker = try XCTUnwrap(noteMarkers(harness).first)
         XCTAssertEqual(noteMarkers(harness).count, 1)
         XCTAssertEqual(marker.type, "Square")
-        XCTAssertEqual(harness.pdfView.highlight(at: highlightCenter(harness, highlightId))?.0, highlightId, "still tappable")
+        XCTAssertEqual(harness.surface.highlight(at: highlightCenter(harness, highlightId))?.0, highlightId, "still tappable")
 
         setTheme(harness, .none)
 
         XCTAssertTrue(lineAnnotations(harness, highlightId).allSatisfy { $0.type == "Highlight" })
         XCTAssertEqual(noteMarkers(harness).first?.type, "Highlight")
-        XCTAssertEqual(harness.pdfView.highlights.count, 1)
+        XCTAssertEqual(harness.surface.highlights.count, 1)
     }
 
     func testDarkUnderlineIsABarAtTheBottomOfEachLine() throws {
@@ -1123,7 +1123,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func lineAnnotations(_ harness: Harness, _ highlightId: UUID) -> [PDFAnnotation] {
-        (harness.pdfView.highlights[highlightId] ?? []).flatMap(\.annotations).filter { !$0.isNoteMarker }
+        (harness.surface.highlights[highlightId] ?? []).flatMap(\.annotations).filter { !$0.isNoteMarker }
     }
 
     private func setTheme(_ harness: Harness, _ themeMode: PDFThemeMode) {
@@ -1171,12 +1171,12 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private func makeHighlightHarness(style: BookHighlightStyle) throws -> (Harness, UUID) {
         let (harness, selection) = try makeTextHarness()
         harness.controller.annotationManager.addHighlight(style: style.rawValue, selection: selection)
-        let highlightId = try XCTUnwrap(harness.pdfView.highlights.keys.first)
+        let highlightId = try XCTUnwrap(harness.surface.highlights.keys.first)
         return (harness, highlightId)
     }
 
     private func highlightCenter(_ harness: Harness, _ highlightId: UUID) -> CGPoint {
-        guard let annotation = harness.pdfView.highlights[highlightId]?.first?.annotations.first,
+        guard let annotation = harness.surface.highlights[highlightId]?.first?.annotations.first,
               let page = annotation.page
         else { return .zero }
         let rect = harness.pdfView.convert(annotation.bounds, from: page)

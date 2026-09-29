@@ -177,6 +177,28 @@ placement (content right of center, top offset / drift after page turns).
       text-selection system menu appears only after a sheet has been presented
       once, with or without the container.
     - The same checks pass on iPhone 16 (iOS 18.5).
+  - **Step 1 done.** `PDFReaderSurface` hosts the single `YabrPDFView`.
+    `controller.pdfView` is read from the surface; nothing stores it, and the
+    controller observes the surface's relayed notifications. The surface owns:
+    - the theme overlay, jump mask and loading cover;
+    - the tap zones and labels, and the app's four taps with their delegate
+      rules;
+    - the highlight edit-menu interaction;
+    - the highlight model (`highlights`, sources, appearance,
+      `highlightTapped`, inject/remove/export/hit-testing).
+
+    `YabrPDFView` keeps what is per view: viewport, snapshot, placeholders,
+    `buildMenu`, and taps off highlights (`handleTap`). `pdfViewAux` has its
+    own surface.
+  - **Found by hand in step 1.** PDFKit makes its taps (including the text
+    interaction's double tap on `PDFDocumentView`) wait for recognizers
+    attached to the PDFView, but not for ones on an ancestor. The surface
+    declares that PDFKit's taps inside the page view wait for its page-turn and
+    highlight-menu taps. Without this, a side-zone double tap also selected a
+    word.
+  - **Hand-check tips.** After `xcodebuild` reboots a simulator, `attach` the
+    Simulator tool before the first tap, or the running test app is killed.
+    Run the next session without `simctl shutdown` to keep the connection.
 - In tests, `ReadingSessionManagerTests.tearDown` sets `AppContainer.shared =
   nil`; window-hosted harnesses must recreate one before adding a window or the
   host's SwiftUI `appContainer` environment default asserts.

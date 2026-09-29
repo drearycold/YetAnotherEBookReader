@@ -142,7 +142,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         else { return }
         
         AppContainer.shared?.annotationRepository.removeHighlight(id: bookHighlight.id)
-        view?.removeHighlight(highlight: highlight)
+        view?.surface?.removeHighlight(highlight: highlight)
     }
     
     func yabrPDFReferenceText(_ view: YabrPDFView?) -> String? {

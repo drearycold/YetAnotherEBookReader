@@ -61,6 +61,6 @@ extension YabrPDFViewController {
     /// Writes the document with its highlights; notes travel as the highlights'
     /// comments. The page theme is not rendered.
     func writeAnnotatedPDF(to url: URL) -> Bool {
-        pdfView.annotatedExportDocument()?.write(to: url) == true
+        surface.annotatedExportDocument()?.write(to: url) == true
     }
 }

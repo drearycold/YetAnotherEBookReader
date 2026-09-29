@@ -76,6 +76,21 @@ final class PDFReaderSurface: UIView {
     var pageNextButton: UIButton?
     var pagePrevButton: UIButton?
 
+    /// Highlight annotations by highlight id. They live on the document's pages,
+    /// which every page view of the document shows.
+    var highlights = [UUID: [HighlightValue]]()
+    /// The highlights on the pages, to rebuild their annotations.
+    private var highlightSources = [UUID: PDFHighlight]()
+    /// How highlight annotations are drawn; switching rebuilds them.
+    var highlightAppearance = PDFHighlightAppearance.standard {
+        didSet {
+            guard highlightAppearance != oldValue else { return }
+            highlightSources.values.forEach(injectHighlight(highlight:))
+        }
+    }
+    /// Highlight whose edit menu is showing.
+    var highlightTapped: UUID?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         install(activeView)
@@ -342,15 +357,14 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
 
     @objc private func highlightTappedGesture(sender: UITapGestureRecognizer) {
         guard sender.state == .ended else { return }
-        let location = sender.location(in: activeView)
         // Taps on a highlight belong to `highlightMenuTapGestureRecognizer`.
-        guard activeView.highlight(at: location) == nil else { return }
-        activeView.handleTap(at: location)
+        guard highlight(at: sender.location(in: self)) == nil else { return }
+        activeView.handleTap(at: sender.location(in: activeView))
     }
 
     @objc private func highlightMenuTappedGesture(sender: UITapGestureRecognizer) {
         guard sender.state == .ended else { return }
-        activeView.handleHighlightTap(at: sender.location(in: activeView))
+        handleHighlightTap(at: sender.location(in: self))
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -367,7 +381,7 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer === highlightMenuTapGestureRecognizer {
-            return activeView.highlight(at: gestureRecognizer.location(in: activeView)) != nil
+            return highlight(at: gestureRecognizer.location(in: self)) != nil
         }
         return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
@@ -396,5 +410,127 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
         }
         // The highlight taps stay out of the tap zones.
         return !isInTapZone(location)
+    }
+}
+
+// MARK: - Highlights
+
+@available(iOS 16.0, macCatalyst 16.0, *)
+extension PDFReaderSurface {
+    /// Adds (or redraws) a highlight's annotations in the current appearance.
+    func injectHighlight(highlight: PDFHighlight) {
+        guard let document = activeView.document else { return }
+        removeAnnotations(of: highlight.uuid)
+        highlightSources[highlight.uuid] = highlight
+        let values = Self.addAnnotations(for: highlight, to: document, appearance: highlightAppearance)
+        if !values.isEmpty {
+            highlights[highlight.uuid] = values
+        }
+    }
+
+    func removeHighlight(highlight: PDFHighlight) {
+        highlightSources.removeValue(forKey: highlight.uuid)
+        removeAnnotations(of: highlight.uuid)
+    }
+
+    /// The highlight under `location` (in the surface) and the rect (in the
+    /// surface) of the annotation hit, so a multi-line highlight's menu points at
+    /// the line that was tapped.
+    func highlight(at location: CGPoint) -> (UUID, CGRect)? {
+        let pageView = activeView
+        let locationInPageView = convert(location, to: pageView)
+        for (highlightId, values) in highlights {
+            for annotation in values.flatMap(\.annotations) {
+                guard let page = annotation.page,
+                      annotation.bounds.contains(pageView.convert(locationInPageView, to: page))
+                else { continue }
+                return (highlightId, pageView.convert(pageView.convert(annotation.bounds, from: page), to: self))
+            }
+        }
+        return nil
+    }
+
+    /// Shows the edit menu of the highlight at `location` (in the surface); returns
+    /// whether one was hit.
+    @discardableResult
+    func handleHighlightTap(at location: CGPoint) -> Bool {
+        guard let (highlightId, rect) = highlight(at: location) else { return false }
+        activeView.yabrPDFViewController?.menuManager.presentHighlightMenu(for: highlightId, rect: rect)
+        return true
+    }
+
+    func copyHighlight(_ highlightId: UUID) {
+        guard let values = highlights[highlightId] else { return }
+        UIPasteboard.general.string = values.compactMap { $0.selection.string }.joined(separator: " ")
+    }
+
+    func selectHighlight(_ highlightId: UUID) {
+        guard let values = highlights[highlightId], let document = activeView.document else { return }
+        let selection = PDFSelection(document: document)
+        selection.add(values.map { $0.selection })
+        activeView.setCurrentSelection(selection, animate: false)
+    }
+
+    /// A fresh copy of the document with the highlights in their standard form and
+    /// the notes as their comments, for sharing. The pages on screen are untouched.
+    func annotatedExportDocument() -> PDFDocument? {
+        guard let document = activeView.document,
+              let copy = document.documentURL.flatMap(PDFDocument.init(url:)) ?? document.dataRepresentation().flatMap(PDFDocument.init(data:))
+        else { return nil }
+        if document.documentURL == nil {
+            // A serialized copy already holds the on-screen annotations.
+            for index in 0..<copy.pageCount {
+                guard let page = copy.page(at: index) else { continue }
+                page.annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }.forEach(page.removeAnnotation)
+            }
+        }
+        for highlight in highlightSources.values {
+            _ = Self.addAnnotations(for: highlight, to: copy, appearance: .export)
+        }
+        return copy
+    }
+
+    private func removeAnnotations(of highlightId: UUID) {
+        highlights.removeValue(forKey: highlightId)?.flatMap(\.annotations).forEach { annotation in
+            annotation.page?.removeAnnotation(annotation)
+        }
+    }
+
+    /// Adds a highlight's annotations to `document`'s pages: one per line, the note
+    /// as the first line's comment (an exported PDF shows it on the highlight), and
+    /// a marker on the last line when there is a note.
+    private static func addAnnotations(for highlight: PDFHighlight, to document: PDFDocument, appearance: PDFHighlightAppearance) -> [HighlightValue] {
+        guard let style = BookHighlightStyle(rawValue: highlight.type) else { return [] }
+        var values = [HighlightValue]()
+        // Text line of the last annotation; a dark underline bar is only its bottom.
+        var lastLineBounds: CGRect?
+        for location in highlight.pos {
+            guard let page = document.page(at: location.page - 1) else { continue }
+            for range in location.ranges {
+                guard let selection = document.selection(from: page, atCharacterIndex: range.lowerBound, to: page, atCharacterIndex: range.upperBound)
+                else { continue }
+                var value = HighlightValue(selection: selection)
+                for line in selection.selectionsByLine() {
+                    let lineBounds = line.bounds(for: page)
+                    let annotation = PDFHighlightAnnotations.line(bounds: lineBounds, style: style, highlightId: highlight.uuid, appearance: appearance)
+                    page.addAnnotation(annotation)
+                    value.annotations.append(annotation)
+                    lastLineBounds = lineBounds
+                }
+                values.append(value)
+            }
+        }
+
+        guard let note = highlight.note, !note.isEmpty,
+              let lastIndex = values.indices.last,
+              let page = values[lastIndex].annotations.last?.page,
+              let lastLineBounds
+        else { return values }
+        values.first?.annotations.first?.contents = note
+        if let marker = PDFHighlightAnnotations.noteMarker(lineBounds: lastLineBounds, style: style, highlightId: highlight.uuid, appearance: appearance) {
+            page.addAnnotation(marker)
+            values[lastIndex].annotations.append(marker)
+        }
+        return values
     }
 }

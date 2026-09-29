@@ -74,7 +74,7 @@ final class PDFMenuManager: NSObject {
 
     func highlightMenuElements(for highlightId: UUID) -> [UIMenuElement] {
         guard let controller else { return [] }
-        let pdfView = controller.pdfView
+        let surface = controller.surface
         let currentStyle = controller.annotationManager.style(of: highlightId)
         let hasNote = controller.annotationManager.note(of: highlightId) != nil
 
@@ -90,11 +90,11 @@ final class PDFMenuManager: NSObject {
         }
 
         return [
-            UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc"), identifier: ActionID.copyHighlight) { [weak pdfView] _ in
-                pdfView?.copyHighlight(highlightId)
+            UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc"), identifier: ActionID.copyHighlight) { [weak surface] _ in
+                surface?.copyHighlight(highlightId)
             },
-            UIAction(title: "Select", image: UIImage(systemName: "text.cursor"), identifier: ActionID.selectHighlight) { [weak pdfView] _ in
-                pdfView?.selectHighlight(highlightId)
+            UIAction(title: "Select", image: UIImage(systemName: "text.cursor"), identifier: ActionID.selectHighlight) { [weak surface] _ in
+                surface?.selectHighlight(highlightId)
             },
             UIAction(title: hasNote ? "Edit Note" : "Note", image: UIImage(systemName: "note.text"), identifier: ActionID.note) { [weak controller] _ in
                 controller?.presentNoteEditor(for: highlightId)
@@ -106,13 +106,11 @@ final class PDFMenuManager: NSObject {
         ]
     }
 
-    /// `rect` is in the page view's coordinates.
+    /// `rect` is in the surface's coordinates.
     func presentHighlightMenu(for highlightId: UUID, rect: CGRect) {
         guard let controller else { return }
-        let pdfView = controller.pdfView
         install()
-        pdfView.highlightTapped = highlightId
-        let rect = pdfView.convert(rect, to: controller.surface)
+        controller.surface.highlightTapped = highlightId
         highlightMenuRect = rect
         let configuration = UIEditMenuConfiguration(
             identifier: Self.highlightMenuIdentifier,
@@ -135,7 +133,7 @@ final class PDFMenuManager: NSObject {
 @available(iOS 16.0, macCatalyst 16.0, *)
 extension PDFMenuManager: UIEditMenuInteractionDelegate {
     func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
-        guard let highlightId = controller?.pdfView.highlightTapped else { return nil }
+        guard let highlightId = controller?.surface.highlightTapped else { return nil }
         return UIMenu(children: highlightMenuElements(for: highlightId))
     }
 
@@ -146,10 +144,10 @@ extension PDFMenuManager: UIEditMenuInteractionDelegate {
     func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration, animator: UIEditMenuInteractionAnimating) {
         // Tapping another highlight presents its menu before this one finishes
         // dismissing; only clear the highlight this menu belonged to.
-        let dismissed = controller?.pdfView.highlightTapped
+        let dismissed = controller?.surface.highlightTapped
         animator.addCompletion { [weak self] in
-            guard let pdfView = self?.controller?.pdfView, pdfView.highlightTapped == dismissed else { return }
-            pdfView.highlightTapped = nil
+            guard let surface = self?.controller?.surface, surface.highlightTapped == dismissed else { return }
+            surface.highlightTapped = nil
         }
     }
 }

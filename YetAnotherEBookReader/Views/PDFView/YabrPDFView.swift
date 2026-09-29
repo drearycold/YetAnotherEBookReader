@@ -18,19 +18,6 @@ class YabrPDFView: PDFView {
         yabrPDFViewController?.yabrPDFMetaSource
     }
     
-    var highlights = [UUID: [HighlightValue]]()
-    /// The highlights on the pages, to rebuild their annotations.
-    private var highlightSources = [UUID: PDFHighlight]()
-    /// How highlight annotations are drawn; switching rebuilds them.
-    var highlightAppearance = PDFHighlightAppearance.standard {
-        didSet {
-            guard highlightAppearance != oldValue else { return }
-            highlightSources.values.forEach(injectHighlight(highlight:))
-        }
-    }
-    /// Highlight whose edit menu is showing.
-    var highlightTapped: UUID?
-
     /// Content inset added on top of PDFKit's own so a viewport anchor outside the
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
     /// can be reached.
@@ -80,7 +67,7 @@ class YabrPDFView: PDFView {
     /// The reader actions for the current text selection, or `nil` when there is no
     /// selection or a highlight's own menu is showing.
     func selectionContextMenu() -> UIMenu? {
-        guard highlightTapped == nil,
+        guard surface?.highlightTapped == nil,
               let text = currentSelection?.string, !text.isEmpty,
               let elements = yabrPDFViewController?.menuManager.selectionMenuElements(),
               !elements.isEmpty
@@ -109,18 +96,10 @@ class YabrPDFView: PDFView {
         return super.gestureRecognizer(gestureRecognizer, shouldReceive: touch)
     }
     
-    /// Shows the edit menu of the highlight at `location`; returns whether one was hit.
-    @discardableResult
-    func handleHighlightTap(at location: CGPoint) -> Bool {
-        guard let (highlightId, rect) = highlight(at: location) else { return false }
-        yabrPDFViewController?.menuManager.presentHighlightMenu(for: highlightId, rect: rect)
-        return true
-    }
-
     /// A tap off any highlight: dismisses the highlight menu, clears the selection,
     /// and follows link annotations.
     func handleTap(at tapLocation: CGPoint) {
-        self.highlightTapped = nil
+        surface?.highlightTapped = nil
         yabrPDFViewController?.menuManager.dismissHighlightMenu()
 
         let aoi = self.areaOfInterest(for: tapLocation)
@@ -156,31 +135,6 @@ class YabrPDFView: PDFView {
         }
     }
 
-    /// The highlight under `location` and the view rect of the annotation hit, so a
-    /// multi-line highlight's menu points at the line that was tapped.
-    func highlight(at location: CGPoint) -> (UUID, CGRect)? {
-        for (highlightId, values) in highlights {
-            for annotation in values.flatMap(\.annotations) {
-                guard let page = annotation.page,
-                      annotation.bounds.contains(self.convert(location, to: page))
-                else { continue }
-                return (highlightId, self.convert(annotation.bounds, from: page))
-            }
-        }
-        return nil
-    }
-
-    func copyHighlight(_ highlightId: UUID) {
-        guard let values = highlights[highlightId] else { return }
-        UIPasteboard.general.string = values.compactMap { $0.selection.string }.joined(separator: " ")
-    }
-
-    func selectHighlight(_ highlightId: UUID) {
-        guard let values = highlights[highlightId], let document = self.document else { return }
-        let selection = PDFSelection(document: document)
-        selection.add(values.map { $0.selection })
-        self.setCurrentSelection(selection, animate: false)
-    }
 }
 
 @available(iOS 16.0, macCatalyst 16.0, *)
@@ -199,94 +153,6 @@ extension BookHighlightStyle {
             return (.highlight, .systemPink)
         }
     }
-}
-
-// MARK: Highlights
-@available(iOS 16.0, macCatalyst 16.0, *)
-extension YabrPDFView {
-    /// Adds (or redraws) a highlight's annotations in the current appearance.
-    func injectHighlight(highlight: PDFHighlight) {
-        guard let document else { return }
-        removeAnnotations(of: highlight.uuid)
-        highlightSources[highlight.uuid] = highlight
-        let values = Self.addAnnotations(for: highlight, to: document, appearance: highlightAppearance)
-        if !values.isEmpty {
-            highlights[highlight.uuid] = values
-        }
-    }
-
-    /// Adds a highlight's annotations to `document`'s pages: one per line, the note
-    /// as the first line's comment (an exported PDF shows it on the highlight), and
-    /// a marker on the last line when there is a note.
-    private static func addAnnotations(for highlight: PDFHighlight, to document: PDFDocument, appearance: PDFHighlightAppearance) -> [HighlightValue] {
-        guard let style = BookHighlightStyle(rawValue: highlight.type) else { return [] }
-        var values = [HighlightValue]()
-        // Text line of the last annotation; a dark underline bar is only its bottom.
-        var lastLineBounds: CGRect?
-        for location in highlight.pos {
-            guard let page = document.page(at: location.page - 1) else { continue }
-            for range in location.ranges {
-                guard let selection = document.selection(from: page, atCharacterIndex: range.lowerBound, to: page, atCharacterIndex: range.upperBound)
-                else { continue }
-                var value = HighlightValue(selection: selection)
-                for line in selection.selectionsByLine() {
-                    let lineBounds = line.bounds(for: page)
-                    let annotation = PDFHighlightAnnotations.line(bounds: lineBounds, style: style, highlightId: highlight.uuid, appearance: appearance)
-                    page.addAnnotation(annotation)
-                    value.annotations.append(annotation)
-                    lastLineBounds = lineBounds
-                }
-                values.append(value)
-            }
-        }
-
-        guard let note = highlight.note, !note.isEmpty,
-              let lastIndex = values.indices.last,
-              let page = values[lastIndex].annotations.last?.page,
-              let lastLineBounds
-        else { return values }
-        values.first?.annotations.first?.contents = note
-        if let marker = PDFHighlightAnnotations.noteMarker(lineBounds: lastLineBounds, style: style, highlightId: highlight.uuid, appearance: appearance) {
-            page.addAnnotation(marker)
-            values[lastIndex].annotations.append(marker)
-        }
-        return values
-    }
-
-    /// A fresh copy of the document with the highlights in their standard form and
-    /// the notes as their comments, for sharing. The pages on screen are untouched.
-    func annotatedExportDocument() -> PDFDocument? {
-        guard let document,
-              let copy = document.documentURL.flatMap(PDFDocument.init(url:)) ?? document.dataRepresentation().flatMap(PDFDocument.init(data:))
-        else { return nil }
-        if document.documentURL == nil {
-            // A serialized copy already holds the on-screen annotations.
-            for index in 0..<copy.pageCount {
-                guard let page = copy.page(at: index) else { continue }
-                page.annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }.forEach(page.removeAnnotation)
-            }
-        }
-        for highlight in highlightSources.values {
-            _ = Self.addAnnotations(for: highlight, to: copy, appearance: .export)
-        }
-        return copy
-    }
-
-    private func removeAnnotations(of highlightId: UUID) {
-        highlights.removeValue(forKey: highlightId)?.flatMap(\.annotations).forEach { annotation in
-            annotation.page?.removeAnnotation(annotation)
-        }
-    }
-    
-    func modifyHighlightStyle(highlightId: UUID, type: BookHighlightStyle) {
-        self.yabrPDFViewController?.annotationManager.modifyHighlightStyle(uuid: highlightId, type: type)
-    }
-    
-    func removeHighlight(highlight: PDFHighlight) {
-        highlightSources.removeValue(forKey: highlight.uuid)
-        removeAnnotations(of: highlight.uuid)
-    }
-    
 }
 
 @available(iOS 16.0, macCatalyst 16.0, *)

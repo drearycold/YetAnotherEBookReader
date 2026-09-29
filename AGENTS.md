@@ -266,8 +266,15 @@ FolioReader paths when the behavior is shared.
 
 ### PDF Reader
 
-`YabrPDFViewController` is a coordinator. Keep specialized behavior in the
-existing managers/extensions:
+`YabrPDFViewController` is a coordinator. It hosts its page view in a
+`PDFReaderSurface`, which owns what page views share:
+- the theme overlay, jump mask and loading cover;
+- the page-turn tap zones and the app's taps, plus the highlight edit menu;
+- the highlight annotations.
+
+Buffered neighbour pages are planned there (#54/#55). Read `pdfView` (the active
+page view) at the point of use, never store it, and observe the surface's
+notifications. Keep specialized behavior in the existing managers/extensions:
 
 - `PDFAnnotationManager`
 - `PDFBookmarkManager`
