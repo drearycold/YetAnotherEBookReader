@@ -878,7 +878,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(lastLine.bounds.contains(marker.bounds), "marker \(marker.bounds) inside last line \(lastLine.bounds)")
         XCTAssertEqual(marker.bounds.maxX, lastLine.bounds.maxX, accuracy: 0.01, "top-right corner")
         XCTAssertEqual(marker.bounds.maxY, lastLine.bounds.maxY, accuracy: 0.01, "top-right corner")
-        XCTAssertLessThanOrEqual(marker.bounds.width, PDFNoteMarker.maxSide + 0.01)
+        XCTAssertLessThanOrEqual(marker.bounds.width, PDFHighlightAnnotations.noteMarkerMaxSide + 0.01)
         XCTAssertEqual(marker.type, "Highlight", "rendered inside the page like the highlight")
         XCTAssertEqual(marker.color, lastLine.color)
         XCTAssertEqual(lines.first?.contents, "marked", "exported as the highlight's comment")
@@ -896,21 +896,24 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(noteMarkers(harness).isEmpty, "removed highlight removes the marker")
     }
 
-    /// The fixture highlight sits on the page's first lines, so a tab that read as
-    /// ink would raise the detected top edge.
+    /// The fixture highlight sits on the page's first lines, so a marker that read
+    /// as ink would raise the detected top edge.
     func testNoteMarkerDoesNotChangeMarginDetection() throws {
         let (harness, highlightId) = try makeHighlightHarness(style: .pink)
         let manager = harness.controller.annotationManager
 
-        for style in BookHighlightStyle.allCases {
-            manager.modifyHighlightStyle(uuid: highlightId, type: style)
-            manager.setNote(uuid: highlightId, note: nil)
-            let before = detectedBounds(harness, pageIndex: 0)
+        for theme in [PDFThemeMode.none, .dark] {
+            setTheme(harness, theme)
+            for style in BookHighlightStyle.allCases {
+                manager.modifyHighlightStyle(uuid: highlightId, type: style)
+                manager.setNote(uuid: highlightId, note: nil)
+                let before = detectedBounds(harness, pageIndex: 0)
 
-            manager.setNote(uuid: highlightId, note: "margin")
+                manager.setNote(uuid: highlightId, note: "margin")
 
-            XCTAssertEqual(noteMarkers(harness).count, 1)
-            XCTAssertEqual(detectedBounds(harness, pageIndex: 0), before, "\(style)")
+                XCTAssertEqual(noteMarkers(harness).count, 1)
+                XCTAssertEqual(detectedBounds(harness, pageIndex: 0), before, "\(theme) \(style)")
+            }
         }
     }
 
@@ -984,6 +987,144 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(highlightAnnotations.contains { $0.contents == "exported" })
         XCTAssertFalse(exported.annotations.contains { $0.isNoteMarker }, "no marker in the export")
         XCTAssertEqual(noteMarkers(harness).count, 1, "marker back on screen")
+    }
+
+    // MARK: - Dark-theme annotations
+
+    /// PDFKit multiplies markup annotations over the already-inverted dark page,
+    /// which hides their fill; dark draws highlights as translucent fills instead.
+    func testDarkThemeDrawsHighlightsAsFills() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "n")
+        let lightLines = lineAnnotations(harness, highlightId).map(\.bounds)
+
+        setTheme(harness, .dark)
+
+        let lines = lineAnnotations(harness, highlightId)
+        XCTAssertEqual(lines.map(\.bounds), lightLines, "same geometry")
+        for line in lines {
+            XCTAssertEqual(line.type, "Square")
+            let alpha = try XCTUnwrap(line.interiorColor).cgColor.alpha
+            XCTAssertTrue(alpha > 0 && alpha < 1, "translucent fill: \(alpha)")
+        }
+        let marker = try XCTUnwrap(noteMarkers(harness).first)
+        XCTAssertEqual(noteMarkers(harness).count, 1)
+        XCTAssertEqual(marker.type, "Square")
+        XCTAssertEqual(harness.pdfView.highlight(at: highlightCenter(harness, highlightId))?.0, highlightId, "still tappable")
+
+        setTheme(harness, .none)
+
+        XCTAssertTrue(lineAnnotations(harness, highlightId).allSatisfy { $0.type == "Highlight" })
+        XCTAssertEqual(noteMarkers(harness).first?.type, "Highlight")
+        XCTAssertEqual(harness.pdfView.highlights.count, 1)
+    }
+
+    func testDarkUnderlineIsABarAtTheBottomOfEachLine() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .underline)
+        let lightLines = lineAnnotations(harness, highlightId).map(\.bounds)
+
+        setTheme(harness, .dark)
+
+        let bars = lineAnnotations(harness, highlightId)
+        XCTAssertEqual(bars.count, lightLines.count)
+        for (bar, line) in zip(bars, lightLines) {
+            XCTAssertEqual(bar.type, "Square")
+            XCTAssertEqual(try XCTUnwrap(bar.interiorColor).cgColor.alpha, 1, accuracy: 0.01)
+            XCTAssertEqual(bar.bounds.minX, line.minX, accuracy: 0.01)
+            XCTAssertEqual(bar.bounds.width, line.width, accuracy: 0.01)
+            XCTAssertEqual(bar.bounds.minY, line.minY, accuracy: 0.01)
+            XCTAssertGreaterThanOrEqual(bar.bounds.height, 2, "PDFKit does not fill thinner squares")
+            XCTAssertLessThan(bar.bounds.height, line.height / 4)
+        }
+    }
+
+    /// The marker is sized from the text line, not from the dark underline bar.
+    func testDarkUnderlineNoteMarkerKeepsItsSize() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .underline)
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "n")
+        let lightMarker = try XCTUnwrap(noteMarkers(harness).first).bounds
+
+        setTheme(harness, .dark)
+
+        XCTAssertEqual(try XCTUnwrap(noteMarkers(harness).first).bounds, lightMarker)
+    }
+
+    /// Jump masks and dark page-turn covers are snapshots; they must show
+    /// highlights the way PDFView composites them, not inverted with the page.
+    func testDarkSnapshotShowsHighlightsAsOnScreen() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        setTheme(harness, .dark)
+        waitForJumpMaskToClear(harness)
+        let line = try XCTUnwrap(lineAnnotations(harness, highlightId).last)
+        let rect = harness.pdfView.convert(line.bounds, from: harness.page(0))
+
+        let image = harness.pdfView.viewportSnapshot(of: harness.page(0))
+        var sum = (0, 0, 0)
+        var count = 0
+        for i in 1...12 {
+            for j in 1...3 {
+                let (r, g, b) = try rgb(of: image, at: CGPoint(x: rect.minX + rect.width * CGFloat(i) / 13, y: rect.minY + rect.height * CGFloat(j) / 4))
+                sum = (sum.0 + r, sum.1 + g, sum.2 + b)
+                count += 1
+            }
+        }
+        let average = (sum.0 / count, sum.1 / count, sum.2 / count)
+        record("PDFDARKSNAPSHOT highlight average=\(average)")
+        XCTAssertGreaterThan(average.1, average.0 + 20, "green, not the inverted magenta: \(average)")
+        XCTAssertGreaterThan(average.1, average.2)
+    }
+
+    /// PDFView multiplies an opaque highlight colour over the page; `PDFPage.draw`
+    /// draws highlights paler, which showed as a colour shift when a mask faded.
+    func testLightSnapshotDrawsHighlightsAtFullColour() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        let line = try XCTUnwrap(lineAnnotations(harness, highlightId).last)
+        let rect = harness.pdfView.convert(line.bounds, from: harness.page(0))
+        let image = harness.pdfView.viewportSnapshot(of: harness.page(0))
+
+        var fill = [(Int, Int, Int)]()
+        for i in 1...40 {
+            for j in 1...3 {
+                let color = try rgb(of: image, at: CGPoint(x: rect.minX + rect.width * CGFloat(i) / 41, y: rect.minY + rect.height * CGFloat(j) / 4))
+                if color.1 > 140 { fill.append(color) }
+            }
+        }
+        XCTAssertGreaterThan(fill.count, 20)
+        let expected = UIColor.systemGreen.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).rgb255
+        let average = (fill.map(\.0).reduce(0, +) / fill.count, fill.map(\.1).reduce(0, +) / fill.count, fill.map(\.2).reduce(0, +) / fill.count)
+        record("PDFLIGHTSNAPSHOT fill=\(average) expected=\(expected)")
+        XCTAssertEqual(average.0, expected.0, accuracy: 12)
+        XCTAssertEqual(average.1, expected.1, accuracy: 12)
+        XCTAssertEqual(average.2, expected.2, accuracy: 12)
+    }
+
+    func testDarkAnnotatedExportWritesStandardAnnotations() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .green)
+        harness.controller.annotationManager.setNote(uuid: highlightId, note: "dark export")
+        setTheme(harness, .dark)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+        tempURLs.append(url)
+
+        XCTAssertTrue(harness.controller.writeAnnotatedPDF(to: url))
+
+        let exported = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+        XCTAssertTrue(exported.annotations.contains { $0.type == "Highlight" && $0.contents == "dark export" })
+        XCTAssertFalse(exported.annotations.contains { $0.type == "Square" }, "\(exported.annotations.map { $0.type ?? "" })")
+        XCTAssertFalse(exported.annotations.contains { $0.isNoteMarker })
+        XCTAssertTrue(lineAnnotations(harness, highlightId).allSatisfy { $0.type == "Square" }, "dark form back on screen")
+        XCTAssertEqual(noteMarkers(harness).count, 1)
+    }
+
+    private func lineAnnotations(_ harness: Harness, _ highlightId: UUID) -> [PDFAnnotation] {
+        (harness.pdfView.highlights[highlightId] ?? []).flatMap(\.annotations).filter { !$0.isNoteMarker }
+    }
+
+    private func setTheme(_ harness: Harness, _ themeMode: PDFThemeMode) {
+        var options = harness.controller.pdfOptions
+        guard options.themeMode != themeMode else { return }
+        options.themeMode = themeMode
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle(0.3)
     }
 
     private func noteMarkers(_ harness: Harness) -> [PDFAnnotation] {
@@ -1732,4 +1873,12 @@ private final class HighlightSpy: ReaderEngineDelegate {
         removed.append(highlightId)
     }
     func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {}
+}
+
+private extension UIColor {
+    var rgb255: (Int, Int, Int) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
+    }
 }

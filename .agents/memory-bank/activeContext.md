@@ -88,17 +88,34 @@ placement (content right of center, top offset / drift after page turns).
     `themedNavigationController`.
   - **Storage.** `PDFAnnotationManager.setNote` saves through `didAddHighlight`
     (same id, upsert). A blank note clears it.
-  - **On-page marker.** `PDFNoteMarker` is a small square highlight
-    annotation (same colour) in the top-right corner of the last line. PDFKit
-    renders it in the page like the highlight, so it reads as a darker patch
-    with the text readable. It doesn't change margin detection: detection counts
-    a pixel as ink only when every channel is below 200. Not visible in dark
-    mode, where highlights show only as tinted text.
+  - **On-page marker.** A small square in the top-right corner of the last
+    line, built by `PDFHighlightAnnotations.noteMarker`. In light and sepia it's
+    a highlight annotation in the same colour, so it reads as a darker patch
+    with the text readable. It doesn't change margin detection, which counts a
+    pixel as ink only when every channel is below 200.
   - **Rejected marker: custom `draw(with:in:)`.** PDFKit composites such
     annotations in a separate layer: on screen they are opaque, ignore the
     multiply blend, and skip the dark inversion.
-  - **Export.** Annotated export puts the note in the first line annotation's
-    `contents` and removes the markers while writing (`writeAnnotatedPDF`).
+  - **Export.** `annotatedExportDocument()` builds a fresh copy of the
+    original file with standard annotations; the note goes in the first line
+    annotation's `contents`, and there are no markers. The pages on screen are
+    untouched.
+- Dark-theme annotations: PDFView composites annotations over the page tile
+  after `PDFPage.draw` (so over the already-inverted dark page), and multiplies
+  markup annotations. In dark this left highlights as tinted text only, and
+  Underline / strike-out invisible.
+  - **Dark form.** `YabrPDFView.highlightAppearance` (`.dark`, set in
+    `applyThemePalette`) rebuilds highlights: translucent filled squares, a
+    2 pt bar for Underline (PDFKit doesn't fill a 1 pt square), and a bright
+    square marker. Squares are composited normally.
+  - **Snapshots.** Jump masks and dark page-turn covers use
+    `PDFPageWithBackground.drawAsDisplayed`. It draws the page content
+    (`drawPDFPage`), inverts in dark, then the annotations as PDFView does:
+    highlights as an opaque multiply fill. `PDFPage.draw` draws them paler.
+  - **Verified with `recordVideo`** on 26.5 and 18.5. Dark turns and toggles
+    show no colour change. On light and sepia jumps the snapshot text renders
+    slightly heavier than the tiles (it always did), and PDFKit draws on-screen
+    highlights ~1-2 px taller than their bounds.
   - **List-delete fix.** Deleting from the highlight list now goes through
     the annotation manager. It used to bypass `activeHighlights`, and deleting
     the last row of a section used `deleteRows` after removing the section.

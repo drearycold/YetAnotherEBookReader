@@ -40,6 +40,15 @@ class YabrPDFView: PDFView {
     var pagePrevButton: UIButton?
     
     var highlights = [UUID: [HighlightValue]]()
+    /// The highlights on the pages, to rebuild their annotations.
+    private var highlightSources = [UUID: PDFHighlight]()
+    /// How highlight annotations are drawn; switching rebuilds them.
+    var highlightAppearance = PDFHighlightAppearance.standard {
+        didSet {
+            guard highlightAppearance != oldValue else { return }
+            highlightSources.values.forEach(injectHighlight(highlight:))
+        }
+    }
     /// Highlight whose edit menu is showing.
     var highlightTapped: UUID?
 
@@ -489,69 +498,78 @@ extension BookHighlightStyle {
 // MARK: Highlights
 @available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFView {
+    /// Adds (or redraws) a highlight's annotations in the current appearance.
     func injectHighlight(highlight: PDFHighlight) {
-        highlight.pos.forEach { highlightPageLocation in
-            guard let highlightPage = self.document?.page(at: highlightPageLocation.page - 1),
-                  let highlightSubtype = BookHighlightStyle(rawValue: highlight.type)?.pdfAnnotationSubtype
-            else { return }
-            
-            if highlights[highlight.uuid] == nil {
-                highlights[highlight.uuid] = []
-            }
-            
-            highlightPageLocation.ranges.forEach { highlightPageRange in
-                guard let highlightSelection = self.document?.selection(from: highlightPage, atCharacterIndex: highlightPageRange.lowerBound, to: highlightPage, atCharacterIndex: highlightPageRange.upperBound)
-                else { return }
-                
-                var highlightValue = HighlightValue(selection: highlightSelection)
-                
-                highlightSelection.selectionsByLine().forEach { hightlightSelectionByLine in
-                    let annotation = PDFAnnotation(
-                        bounds: hightlightSelectionByLine.bounds(for: highlightPage),
-                        forType: highlightSubtype.0,
-                        withProperties: [PDFAnnotationKey.highlightId: highlight.uuid.uuidString]
-                    )
-                    annotation.color = highlightSubtype.1
-                    
-                    highlightPage.addAnnotation(annotation)
-                    highlightValue.annotations.append(annotation)
+        guard let document else { return }
+        removeAnnotations(of: highlight.uuid)
+        highlightSources[highlight.uuid] = highlight
+        let values = Self.addAnnotations(for: highlight, to: document, appearance: highlightAppearance)
+        if !values.isEmpty {
+            highlights[highlight.uuid] = values
+        }
+    }
+
+    /// Adds a highlight's annotations to `document`'s pages: one per line, the note
+    /// as the first line's comment (an exported PDF shows it on the highlight), and
+    /// a marker on the last line when there is a note.
+    private static func addAnnotations(for highlight: PDFHighlight, to document: PDFDocument, appearance: PDFHighlightAppearance) -> [HighlightValue] {
+        guard let style = BookHighlightStyle(rawValue: highlight.type) else { return [] }
+        var values = [HighlightValue]()
+        // Text line of the last annotation; a dark underline bar is only its bottom.
+        var lastLineBounds: CGRect?
+        for location in highlight.pos {
+            guard let page = document.page(at: location.page - 1) else { continue }
+            for range in location.ranges {
+                guard let selection = document.selection(from: page, atCharacterIndex: range.lowerBound, to: page, atCharacterIndex: range.upperBound)
+                else { continue }
+                var value = HighlightValue(selection: selection)
+                for line in selection.selectionsByLine() {
+                    let lineBounds = line.bounds(for: page)
+                    let annotation = PDFHighlightAnnotations.line(bounds: lineBounds, style: style, highlightId: highlight.uuid, appearance: appearance)
+                    page.addAnnotation(annotation)
+                    value.annotations.append(annotation)
+                    lastLineBounds = lineBounds
                 }
-                highlights[highlight.uuid]?.append(highlightValue)
+                values.append(value)
             }
-            
         }
-        addNote(of: highlight, highlightColor: BookHighlightStyle(rawValue: highlight.type)?.pdfAnnotationSubtype.1)
-    }
 
-    /// Puts the note on the highlight's first line annotation, where an exported PDF
-    /// shows it as the highlight's comment, and marks the last line.
-    private func addNote(of highlight: PDFHighlight, highlightColor: UIColor?) {
         guard let note = highlight.note, !note.isEmpty,
-              var values = highlights[highlight.uuid],
               let lastIndex = values.indices.last,
-              let lastLine = values[lastIndex].annotations.last,
-              let page = lastLine.page,
-              let highlightColor
-        else { return }
-
+              let page = values[lastIndex].annotations.last?.page,
+              let lastLineBounds
+        else { return values }
         values.first?.annotations.first?.contents = note
-
-        let marker = PDFNoteMarker.make(lineBounds: lastLine.bounds, color: highlightColor, highlightId: highlight.uuid)
-        page.addAnnotation(marker)
-        values[lastIndex].annotations.append(marker)
-        highlights[highlight.uuid] = values
+        if let marker = PDFHighlightAnnotations.noteMarker(lineBounds: lastLineBounds, style: style, highlightId: highlight.uuid, appearance: appearance) {
+            page.addAnnotation(marker)
+            values[lastIndex].annotations.append(marker)
+        }
+        return values
     }
 
-    /// Takes the note markers off their pages while `body` runs, so an annotated
-    /// export holds only standard highlight annotations.
-    func withoutNoteMarkers<T>(_ body: () -> T) -> T {
-        let markers = highlights.values.flatMap { $0.flatMap(\.annotations) }.compactMap { annotation -> (PDFAnnotation, PDFPage)? in
-            guard annotation.isNoteMarker, let page = annotation.page else { return nil }
-            return (annotation, page)
+    /// A fresh copy of the document with the highlights in their standard form and
+    /// the notes as their comments, for sharing. The pages on screen are untouched.
+    func annotatedExportDocument() -> PDFDocument? {
+        guard let document,
+              let copy = document.documentURL.flatMap(PDFDocument.init(url:)) ?? document.dataRepresentation().flatMap(PDFDocument.init(data:))
+        else { return nil }
+        if document.documentURL == nil {
+            // A serialized copy already holds the on-screen annotations.
+            for index in 0..<copy.pageCount {
+                guard let page = copy.page(at: index) else { continue }
+                page.annotations.filter { $0.value(forAnnotationKey: .highlightId) != nil }.forEach(page.removeAnnotation)
+            }
         }
-        markers.forEach { $0.1.removeAnnotation($0.0) }
-        defer { markers.forEach { $0.1.addAnnotation($0.0) } }
-        return body()
+        for highlight in highlightSources.values {
+            _ = Self.addAnnotations(for: highlight, to: copy, appearance: .export)
+        }
+        return copy
+    }
+
+    private func removeAnnotations(of highlightId: UUID) {
+        highlights.removeValue(forKey: highlightId)?.flatMap(\.annotations).forEach { annotation in
+            annotation.page?.removeAnnotation(annotation)
+        }
     }
     
     func modifyHighlightStyle(highlightId: UUID, type: BookHighlightStyle) {
@@ -559,11 +577,8 @@ extension YabrPDFView {
     }
     
     func removeHighlight(highlight: PDFHighlight) {
-        guard let highlightValue = highlights.removeValue(forKey: highlight.uuid) else { return }
-        
-        highlightValue.flatMap { $0.annotations }.forEach { annotation in
-            annotation.page?.removeAnnotation(annotation)
-        }
+        highlightSources.removeValue(forKey: highlight.uuid)
+        removeAnnotations(of: highlight.uuid)
     }
     
 }
@@ -666,7 +681,11 @@ extension YabrPDFView {
             context.setFillColor(gray: 1.0, alpha: 1.0)
             context.fill(box)
             context.concatenate(displayToPage)
-            page.draw(with: displayBox, to: context)
+            if let page = page as? PDFPageWithBackground {
+                page.drawAsDisplayed(with: displayBox, to: context)
+            } else {
+                page.draw(with: displayBox, to: context)
+            }
         }
     }
 
@@ -912,30 +931,81 @@ struct HighlightValue {
     var annotations: [PDFAnnotation] = []
 }
 
-/// Marks a highlight that has a note: a small square in the top-right corner of
-/// its last line. It is itself a highlight annotation in the highlight's colour,
-/// so PDFKit renders it inside the page like the highlight: stacked, it reads as
-/// a darker patch of the same hue, text under it stays readable, and margin crop
-/// never cuts it off. In dark mode highlights show only as tinted text, so the
-/// marker is not visible there. (A `draw(with:in:)` override is composited in a
-/// separate layer instead: opaque, and not inverted in dark mode.)
-@available(iOS 16.0, macCatalyst 16.0, *)
-enum PDFNoteMarker {
-    static let maxSide: CGFloat = 8
+/// How highlight annotations are drawn.
+enum PDFHighlightAppearance {
+    /// Markup annotations (highlight / underline), with note markers.
+    case standard
+    /// PDFKit composites markup annotations over the already-inverted dark page
+    /// with multiply, which leaves only tinted text (and no underline at all), so
+    /// dark uses filled squares, which it composites normally.
+    case dark
+    /// Standard annotations without markers, for an exported PDF.
+    case export
+}
 
-    static func make(lineBounds: CGRect, color: UIColor, highlightId: UUID) -> PDFAnnotation {
-        let side = min(lineBounds.height / 2, lineBounds.width, maxSide)
-        let marker = PDFAnnotation(
-            bounds: CGRect(x: lineBounds.maxX - side, y: lineBounds.maxY - side, width: side, height: side),
-            forType: .highlight,
-            withProperties: [
-                PDFAnnotationKey.highlightId: highlightId.uuidString,
-                PDFAnnotationKey.noteMarker: "1",
-            ]
-        )
-        marker.color = color
-        marker.isReadOnly = true
-        return marker
+/// Builds highlight annotations for a `PDFHighlightAppearance`.
+@available(iOS 16.0, macCatalyst 16.0, *)
+enum PDFHighlightAnnotations {
+    static let noteMarkerMaxSide: CGFloat = 8
+    static let darkFillAlpha: CGFloat = 0.35
+    static let darkMarkerAlpha: CGFloat = 0.9
+
+    static func line(bounds: CGRect, style: BookHighlightStyle, highlightId: UUID, appearance: PDFHighlightAppearance) -> PDFAnnotation {
+        let (subtype, color) = style.pdfAnnotationSubtype
+        let properties = [PDFAnnotationKey.highlightId: highlightId.uuidString]
+        switch appearance {
+        case .standard, .export:
+            let annotation = PDFAnnotation(bounds: bounds, forType: subtype, withProperties: properties)
+            annotation.color = color
+            return annotation
+        case .dark:
+            if subtype == .underline {
+                // PDFKit does not fill a square 1 pt tall.
+                let height = max(2, (bounds.height * 0.12).rounded())
+                return filledSquare(CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: height), color: darkColor(color), properties: properties)
+            }
+            return filledSquare(bounds, color: darkColor(color).withAlphaComponent(darkFillAlpha), properties: properties)
+        }
+    }
+
+    /// A small square in the top-right corner of the last line, drawn like the
+    /// highlight: a stacked highlight annotation reads as a darker patch of the
+    /// same hue with the text readable; in dark, a brighter filled square. It stays
+    /// inside the line, so margin crop never cuts it off.
+    static func noteMarker(lineBounds: CGRect, style: BookHighlightStyle, highlightId: UUID, appearance: PDFHighlightAppearance) -> PDFAnnotation? {
+        let side = min(lineBounds.height / 2, lineBounds.width, noteMarkerMaxSide)
+        let bounds = CGRect(x: lineBounds.maxX - side, y: lineBounds.maxY - side, width: side, height: side)
+        let color = style.pdfAnnotationSubtype.1
+        let properties = [
+            PDFAnnotationKey.highlightId: highlightId.uuidString,
+            PDFAnnotationKey.noteMarker: "1",
+        ]
+        switch appearance {
+        case .standard:
+            let marker = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: properties)
+            marker.color = color
+            marker.isReadOnly = true
+            return marker
+        case .dark:
+            return filledSquare(bounds, color: darkColor(color).withAlphaComponent(darkMarkerAlpha), properties: properties)
+        case .export:
+            return nil
+        }
+    }
+
+    private static func filledSquare(_ bounds: CGRect, color: UIColor, properties: [PDFAnnotationKey: Any]) -> PDFAnnotation {
+        let annotation = PDFAnnotation(bounds: bounds, forType: .square, withProperties: properties)
+        let border = PDFBorder()
+        border.lineWidth = 0
+        annotation.border = border
+        annotation.color = .clear
+        annotation.interiorColor = color
+        annotation.isReadOnly = true
+        return annotation
+    }
+
+    private static func darkColor(_ color: UIColor) -> UIColor {
+        color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
     }
 }
 

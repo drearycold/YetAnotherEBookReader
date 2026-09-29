@@ -59,9 +59,8 @@ extension YabrPDFViewController {
     }
 
     /// Writes the document with its highlights; notes travel as the highlights'
-    /// comments. Writing serializes the document; the page theme is not rendered.
+    /// comments. The page theme is not rendered.
     func writeAnnotatedPDF(to url: URL) -> Bool {
-        guard let document = pdfView.document else { return false }
-        return pdfView.withoutNoteMarkers { document.write(to: url) }
+        pdfView.annotatedExportDocument()?.write(to: url) == true
     }
 }

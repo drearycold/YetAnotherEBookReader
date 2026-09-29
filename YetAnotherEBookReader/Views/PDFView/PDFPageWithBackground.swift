@@ -52,6 +52,47 @@ class PDFPageWithBackground: PDFPage {
         Self.invert(CGRect(origin: .zero, size: rect.size), in: context)
     }
 
+    /// Draws the page the way PDFView shows it, for snapshots that stand in for the
+    /// page (jump mask, dark page-turn cover). PDFView draws annotations over the
+    /// page tile after `draw(with:to:)`, markup annotations (highlight, underline,
+    /// strike-out) with multiply; `draw(with:to:)` would include them in the dark
+    /// inversion and draws highlights paler than PDFView does.
+    func drawAsDisplayed(with box: PDFDisplayBox, to context: CGContext) {
+        guard let pageRef else {
+            draw(with: box, to: context)
+            return
+        }
+
+        let rect = bounds(for: box)
+        context.saveGState()
+        // Draw in page space, as `draw(with:to:)` does.
+        context.concatenate(transform(for: box))
+        context.clip(to: rect)
+        context.setFillColor(gray: 1.0, alpha: 1.0)
+        context.fill(rect)
+        // The page content alone; PDFKit's annotations are drawn below.
+        context.drawPDFPage(pageRef)
+        if drawsInverted {
+            Self.invert(rect, in: context)
+        }
+        for annotation in annotations where annotation.shouldDisplay {
+            context.saveGState()
+            switch annotation.type {
+            case "Highlight":
+                context.setBlendMode(.multiply)
+                context.setFillColor(annotation.color.withAlphaComponent(1).cgColor)
+                context.fill(annotation.bounds)
+            case "Underline", "StrikeOut", "Squiggly":
+                context.setBlendMode(.multiply)
+                annotation.draw(with: box, in: context)
+            default:
+                annotation.draw(with: box, in: context)
+            }
+            context.restoreGState()
+        }
+        context.restoreGState()
+    }
+
     /// Inverts to black, then caps text at 70% gray.
     private static func invert(_ rect: CGRect, in context: CGContext) {
         UIGraphicsPushContext(context)

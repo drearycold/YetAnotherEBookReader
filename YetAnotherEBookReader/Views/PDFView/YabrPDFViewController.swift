@@ -287,6 +287,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         pdfViewAux.applyTheme(palette)
         pdfView.invertsPagePlaceholders = palette.drawsInverted
         pdfViewAux.invertsPagePlaceholders = palette.drawsInverted
+        // Both views show the same pages, whose annotations `pdfView` owns.
+        pdfView.highlightAppearance = palette.drawsInverted ? .dark : .standard
     }
 }
 
