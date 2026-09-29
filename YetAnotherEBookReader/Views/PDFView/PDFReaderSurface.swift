@@ -15,9 +15,9 @@ extension Notification.Name {
     static let readerSurfaceDisplayBoxChanged = Notification.Name("YabrPDFReaderSurfaceDisplayBoxChanged")
 }
 
-/// Hosts the reader's page views and owns what they share. It holds one page view
-/// today; buffered neighbour pages are planned (issues #54 / #55), after which the
-/// active view can change.
+/// Hosts the reader's page views and owns what they share: the active page view
+/// and the buffers rendering its neighbours (issues #54 / #55). A turn onto a
+/// rendered buffer makes it the active view.
 ///
 /// Read `activeView` at the point of use and never keep a reference to it, and
 /// observe the surface's notifications rather than a page view's.
@@ -109,6 +109,11 @@ final class PDFReaderSurface: UIView {
     /// Called when a cover is removed; the buffer is free for another page. It may
     /// run during a page change, so defer heavy work.
     var onCoverEnded: (() -> Void)?
+    /// When each buffer was given its page; it is ready once it has drawn the page
+    /// at its own resolution since.
+    private var bufferShownAt: [ObjectIdentifier: CFTimeInterval] = [:]
+    /// The page a takeover made current, until `handlePageChange` consumes it.
+    private weak var takenOverPage: PDFPage?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -142,6 +147,7 @@ final class PDFReaderSurface: UIView {
     }
 
     private func relayNotifications(of pageView: YabrPDFView) {
+        relayObservers.forEach(NotificationCenter.default.removeObserver)
         let relays: [(Notification.Name, Notification.Name)] = [
             (.PDFViewPageChanged, .readerSurfacePageChanged),
             (.PDFViewScaleChanged, .readerSurfaceScaleChanged),
@@ -579,8 +585,7 @@ extension PDFReaderSurface {
         }
         while bufferViews.count < Self.bufferCount {
             let buffer = YabrPDFView()
-            buffer.isUserInteractionEnabled = false
-            buffer.accessibilityElementsHidden = true
+            setInteractive(false, buffer)
             installBuffer(buffer)
             bufferViews.append(buffer)
         }
@@ -669,11 +674,80 @@ extension PDFReaderSurface {
         buffer.autoScales = false
         buffer.backgroundColor = active.backgroundColor
         buffer.invertsPagePlaceholders = active.invertsPagePlaceholders
+        buffer.delegate = active.delegate
         buffer.layoutIfNeeded()
         if buffer.currentPage !== page {
             buffer.go(to: page)
+            bufferShownAt[ObjectIdentifier(buffer)] = CACurrentMediaTime()
         }
         buffer.applyViewport(viewport(page, buffer), on: page)
+    }
+
+    /// Whether a buffer holds `page`, fully rendered.
+    func hasRenderedBuffer(showing page: PDFPage) -> Bool {
+        bufferViews.contains { $0.currentPage === page && $0.document != nil && isRendered($0) }
+    }
+
+    /// Whether `buffer` has drawn its page at its own resolution since it was
+    /// given the page.
+    private func isRendered(_ buffer: YabrPDFView) -> Bool {
+        guard let pageNumber = buffer.currentPage?.pageRef?.pageNumber,
+              let lastDraw = drawLog?.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: buffer.scaleFactor * displayScale)
+        else { return false }
+        return lastDraw > (bufferShownAt[ObjectIdentifier(buffer)] ?? 0)
+    }
+
+    private var displayScale: CGFloat {
+        traitCollection.displayScale > 0 ? traitCollection.displayScale : UIScreen.main.scale
+    }
+
+    private func setInteractive(_ interactive: Bool, _ pageView: YabrPDFView) {
+        pageView.isUserInteractionEnabled = interactive
+        pageView.accessibilityElementsHidden = !interactive
+    }
+
+    /// Makes the buffer holding `page` the active view if it has finished
+    /// rendering at `viewport`: no re-render and no cover. The old active view
+    /// becomes a buffer; it already shows the new neighbour. Posts the page change.
+    /// Returns false (the caller turns the usual way) if no buffer is ready.
+    func takeOver(showing page: PDFPage, viewport: (PDFPage, YabrPDFView) -> PDFPageViewportFit) -> Bool {
+        guard let index = bufferViews.firstIndex(where: { $0.document === activeView.document && $0.currentPage === page && $0 !== coveringView })
+        else { return false }
+        let buffer = bufferViews[index]
+        // Re-apply in case the page's viewport changed since it was prepared (the
+        // same viewport is a no-op), then require tiles at that resolution.
+        buffer.applyViewport(viewport(page, buffer), on: page)
+        guard isRendered(buffer) else { return false }
+
+        endCover(notifies: false)
+        let old = activeView
+        highlightTapped = nil
+        old.yabrPDFViewController?.menuManager.dismissHighlightMenu()
+        if old.isFirstResponder {
+            old.resignFirstResponder()
+        }
+        old.clearSelection()
+
+        insertSubview(buffer, aboveSubview: old)
+        insertSubview(old, belowSubview: buffer)
+        setInteractive(false, old)
+        setInteractive(true, buffer)
+        bufferViews[index] = old
+        // The old active view's tiles are complete; it counts as rendered.
+        bufferShownAt[ObjectIdentifier(old)] = 0
+        bufferShownAt[ObjectIdentifier(buffer)] = nil
+        activeView = buffer
+        relayNotifications(of: buffer)
+
+        takenOverPage = page
+        NotificationCenter.default.post(name: .readerSurfacePageChanged, object: self)
+        return true
+    }
+
+    /// Whether the current page change came from `takeOver(showing:)`; clears it.
+    func consumeTakeover(of page: PDFPage) -> Bool {
+        defer { takenOverPage = nil }
+        return takenOverPage === page
     }
 
     /// Same scale and the same page point at the view's top left, within

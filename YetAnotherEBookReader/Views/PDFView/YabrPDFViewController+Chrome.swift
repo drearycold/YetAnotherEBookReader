@@ -116,28 +116,12 @@ extension YabrPDFViewController {
 
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
         pagePrevButton.addAction(UIAction(handler: { _ in
-            self.updatePageViewPositionHistory()
-            let forward = self.pdfView.displaysRTL
-            self.coverPageTurnIfNeeded(forward: forward)
-
-            if forward {
-                self.pdfView.goToNextPage(self.pagePrevButton)
-            } else {
-                self.pdfView.goToPreviousPage(self.pagePrevButton)
-            }
+            self.turnPage(forward: self.pdfView.displaysRTL)
         }), for: .primaryActionTriggered)
 
         pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
         pageNextButton.addAction(UIAction(handler: { _ in
-            self.updatePageViewPositionHistory()
-            let forward = !self.pdfView.displaysRTL
-            self.coverPageTurnIfNeeded(forward: forward)
-
-            if forward {
-                self.pdfView.goToNextPage(self.pagePrevButton)
-            } else {
-                self.pdfView.goToPreviousPage(self.pagePrevButton)
-            }
+            self.turnPage(forward: !self.pdfView.displaysRTL)
         }), for: .primaryActionTriggered)
 
         pageBackButton.setImage(UIImage(systemName: "arrow.uturn.left"), for: .normal)

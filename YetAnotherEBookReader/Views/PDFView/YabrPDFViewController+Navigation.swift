@@ -205,8 +205,13 @@ extension YabrPDFViewController {
         // A buffered neighbour already rendered at this viewport hides PDFKit's
         // low-resolution placeholder while the page's tiles render; under dark it
         // also replaces the page-change mask (explicit jumps keep theirs).
-        let coveredByBuffer = surface.coverWithBuffer(showing: curPage)
-        if isJumpTarget || (showsJumpMask && !coveredByBuffer) {
+        // A takeover already shows the page, fully rendered. Under dark only a
+        // rendered buffer replaces the mask (an unrendered one shows PDFKit's
+        // white placeholder).
+        let takenOver = surface.consumeTakeover(of: curPage)
+        let covered = !takenOver && surface.coverWithBuffer(showing: curPage)
+        let coveredByRenderedBuffer = takenOver || (covered && surface.hasRenderedBuffer(showing: curPage))
+        if isJumpTarget || (showsJumpMask && !coveredByRenderedBuffer) {
             surface.showJumpMask(for: curPage)
         }
         guard !viewport.restoresSavedPosition else { return }

@@ -272,9 +272,10 @@ FolioReader paths when the behavior is shared.
 - the page-turn tap zones and the app's taps, plus the highlight edit menu;
 - the highlight annotations.
 
-Buffered neighbour pages are planned there (#54/#55). Read `pdfView` (the active
-page view) at the point of use, never store it, and observe the surface's
-notifications. Keep specialized behavior in the existing managers/extensions:
+It also keeps the neighbour pages rendered in buffer page views (#54/#55). A
+page turn onto a rendered buffer makes that buffer the active page view, so the
+active view changes. Read `pdfView` (the active page view) at the point of use,
+never store it, and observe the surface's notifications. Keep specialized behavior in the existing managers/extensions:
 
 - `PDFAnnotationManager`
 - `PDFBookmarkManager`

@@ -263,19 +263,47 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         updateChromeContainerLayout()
     }
     
+    /// The page after (`forward`) or before the current one in document order.
+    func adjacentPage(forward: Bool) -> PDFPage? {
+        guard let document = pdfView.document, let page = pdfView.currentPage else { return nil }
+        let index = document.index(for: page) + (forward ? 1 : -1)
+        guard index >= 0, index < document.pageCount else { return nil }
+        return document.page(at: index)
+    }
+
+    /// Turns to the next (`forward`) or previous page in document order. A rendered
+    /// buffer of that page becomes the page view; otherwise PDFKit turns, covered
+    /// by a buffer or, under dark, a snapshot.
+    func turnPage(forward: Bool) {
+        updatePageViewPositionHistory()
+        if pdfView.displayMode == .singlePage,
+           let target = adjacentPage(forward: forward),
+           surface.takeOver(showing: target, viewport: { [unowned self] page, view in
+               singlePageViewport(for: page, in: view).fit
+           }) {
+            return
+        }
+
+        coverPageTurnIfNeeded(forward: forward)
+        if forward {
+            pdfView.goToNextPage(nil)
+        } else {
+            pdfView.goToPreviousPage(nil)
+        }
+    }
+
     /// Dark page turns: PDFKit's page transition starts before `handlePageChange`
     /// can cover it, so freeze the current page first; `handlePageChange` then
-    /// swaps in the new page. Not needed when the target page is buffered: its
-    /// buffer covers the page change exactly, and a snapshot's glyphs render a
-    /// little heavier than PDFKit's tiles, which shows as the mask fades.
+    /// swaps in the new page. Not needed when the target page's buffer has
+    /// rendered: it covers the page change exactly, and a snapshot's glyphs render
+    /// a little heavier than PDFKit's tiles, which shows as the mask fades. An
+    /// unrendered buffer would show PDFKit's white placeholder.
     func coverPageTurnIfNeeded(forward: Bool) {
         guard pdfOptions.themePalette.drawsInverted,
               pdfView.displayMode == .singlePage,
-              let document = pdfView.document,
               let page = pdfView.currentPage
         else { return }
-        let target = document.page(at: document.index(for: page) + (forward ? 1 : -1))
-        if let target, surface.bufferedPages.contains(where: { $0 === target }) {
+        if let target = adjacentPage(forward: forward), surface.hasRenderedBuffer(showing: target) {
             return
         }
         surface.showJumpMask(for: page)

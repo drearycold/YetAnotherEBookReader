@@ -526,12 +526,13 @@ final class YabrPDFMarginCropTests: XCTestCase {
     /// renders glyphs a little heavier than PDFKit, visible as it fades.
     func testBufferedDarkPageTurnShowsNoMask() throws {
         let harness = try makeJumpHarness(initialPage: 2, themeMode: .dark)
-        try waitForBuffers(harness, pages: [3, 1])
+        try waitForRenderedBuffers(harness, pages: [3, 1])
         let before = harness.surface.jumpMaskGeneration
 
+        let old = harness.pdfView
         harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
 
-        XCTAssertNotNil(harness.surface.coveringView)
+        XCTAssertTrue(harness.surface.coveringView != nil || harness.pdfView !== old)
         XCTAssertEqual(harness.surface.jumpMaskGeneration, before, "no freeze, no page-change mask")
         XCTAssertEqual(currentPageIndex(harness), 2)
     }
@@ -1221,40 +1222,107 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     // MARK: - Buffered neighbour pages (#54 / #55)
 
-    func testForwardTurnIsCoveredByTheNextPageBuffer() throws {
+    func testForwardTurnTakesOverTheRenderedNextBuffer() throws {
         let harness = try makeJumpHarness(initialPage: 3)
         let surface = harness.surface
-        try waitForBuffers(harness, pages: [4, 2])
+        try waitForRenderedBuffers(harness, pages: [4, 2])
+        let old = harness.pdfView
+        let next = try XCTUnwrap(surface.bufferViews.first { $0.currentPage?.pageRef?.pageNumber == 4 })
+        let masksBefore = surface.jumpMaskGeneration
 
         harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
 
-        // Same run-loop turn as the page change, so the same frame.
-        let cover = try XCTUnwrap(surface.coveringView, "page 4 was buffered")
-        let page = try XCTUnwrap(harness.pdfView.currentPage)
-        XCTAssertEqual(page.pageRef?.pageNumber, 4)
-        XCTAssertTrue(cover.currentPage === page)
+        // The rendered buffer is now the page view: no PDFKit turn, no cover.
+        XCTAssertTrue(harness.pdfView === next)
+        XCTAssertEqual(harness.pdfView.currentPage?.pageRef?.pageNumber, 4)
+        XCTAssertNil(surface.coveringView)
+        XCTAssertEqual(surface.jumpMaskGeneration, masksBefore)
+        XCTAssertEqual(harness.controller.pageIndicator.title(for: .normal), "4 / 5", "page change handled")
+        XCTAssertTrue(next.isUserInteractionEnabled)
+        XCTAssertFalse(old.isUserInteractionEnabled)
         let order = surface.subviews
-        let coverIndex = try XCTUnwrap(order.firstIndex { $0 === cover })
-        XCTAssertGreaterThan(coverIndex, try XCTUnwrap(order.firstIndex { $0 === harness.pdfView }), "in front of the page view")
-        XCTAssertLessThan(coverIndex, try XCTUnwrap(order.firstIndex { $0 === surface.jumpMaskView }), "below the overlays")
-        XCTAssertFalse(cover.isUserInteractionEnabled)
-        assertSameViewport(cover, harness.pdfView, page: page)
+        let nextIndex = try XCTUnwrap(order.firstIndex { $0 === next })
+        XCTAssertGreaterThan(nextIndex, try XCTUnwrap(order.firstIndex { $0 === old }))
+        XCTAssertLessThan(nextIndex, try XCTUnwrap(order.firstIndex { $0 === surface.jumpMaskView }))
+        XCTAssertTrue(surface.bufferViews.contains { $0 === old }, "the old page view is a buffer")
+        XCTAssertEqual(old.currentPage?.pageRef?.pageNumber, 3, "already showing the new previous page")
 
-        waitForCoverToEnd(harness)
-        let after = surface.subviews
-        XCTAssertLessThan(try XCTUnwrap(after.firstIndex { $0 === cover }), try XCTUnwrap(after.firstIndex { $0 === harness.pdfView }), "back behind")
+        // The new page view's notifications are relayed, the old one's are not.
+        var relayed = 0
+        let observer = NotificationCenter.default.addObserver(forName: .readerSurfaceScaleChanged, object: surface, queue: nil) { _ in relayed += 1 }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        NotificationCenter.default.post(name: .PDFViewScaleChanged, object: old)
+        NotificationCenter.default.post(name: .PDFViewScaleChanged, object: next)
+        XCTAssertEqual(relayed, 1)
+
         try waitForBuffers(harness, pages: [5, 3])
+        XCTAssertTrue(surface.bufferViews.contains { $0 === old && $0.currentPage?.pageRef?.pageNumber == 3 }, "kept for page 3")
     }
 
-    func testBackwardTurnIsCoveredByThePreviousPageBuffer() throws {
-        let harness = try makeJumpHarness(initialPage: 3)
+    func testTakeoverClearsTheOldSelection() throws {
+        let (harness, selection) = try makeTextHarness()
+        try waitForRenderedBuffers(harness, pages: [2])
+        let old = harness.pdfView
+        old.setCurrentSelection(selection, animate: false)
+
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+        XCTAssertTrue(harness.pdfView !== old)
+        XCTAssertNil(old.currentSelection)
+        XCTAssertNil(harness.pdfView.currentSelection)
+    }
+
+    /// Under dark, a buffer that has not rendered yet shows PDFKit's white
+    /// placeholder, so fast turns keep the snapshot masks.
+    func testDarkTurnOntoAnUnrenderedBufferKeepsTheMasks() throws {
+        let harness = try makeJumpHarness(initialPage: 3, themeMode: .dark)
         try waitForBuffers(harness, pages: [4, 2])
+        harness.surface.discardBuffers()
+        harness.controller.refreshPageBuffers()
+        let before = harness.surface.jumpMaskGeneration
+
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+        XCTAssertNotNil(harness.surface.coveringView)
+        XCTAssertEqual(harness.surface.jumpMaskGeneration, before + 2, "freeze, then the new page")
+    }
+
+    func testBackwardTurnTakesOverTheRenderedPreviousBuffer() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForRenderedBuffers(harness, pages: [4, 2])
+        let previous = try XCTUnwrap(harness.surface.bufferViews.first { $0.currentPage?.pageRef?.pageNumber == 2 })
 
         harness.controller.pagePrevButton.sendActions(for: .primaryActionTriggered)
 
-        let cover = try XCTUnwrap(harness.surface.coveringView)
-        XCTAssertEqual(cover.currentPage?.pageRef?.pageNumber, 2)
-        assertSameViewport(cover, harness.pdfView, page: try XCTUnwrap(harness.pdfView.currentPage))
+        XCTAssertTrue(harness.pdfView === previous)
+        XCTAssertEqual(harness.pdfView.currentPage?.pageRef?.pageNumber, 2)
+    }
+
+    /// A buffer that has not finished rendering does not take over; the turn is
+    /// PDFKit's, covered by the buffer.
+    func testTurnOntoAnUnrenderedBufferIsCovered() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForBuffers(harness, pages: [4, 2])
+        harness.surface.discardBuffers()
+        harness.controller.refreshPageBuffers()
+        let old = harness.pdfView
+
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+        XCTAssertTrue(harness.pdfView === old, "no takeover")
+        let cover = try XCTUnwrap(harness.surface.coveringView, "page 4 was buffered")
+        let page = try XCTUnwrap(harness.pdfView.currentPage)
+        XCTAssertEqual(page.pageRef?.pageNumber, 4)
+        XCTAssertTrue(cover.currentPage === page)
+        let order = harness.surface.subviews
+        let coverIndex = try XCTUnwrap(order.firstIndex { $0 === cover })
+        XCTAssertGreaterThan(coverIndex, try XCTUnwrap(order.firstIndex { $0 === harness.pdfView }), "in front of the page view")
+        XCTAssertLessThan(coverIndex, try XCTUnwrap(order.firstIndex { $0 === harness.surface.jumpMaskView }), "below the overlays")
+        assertSameViewport(cover, harness.pdfView, page: page)
+
+        waitForCoverToEnd(harness)
+        let after = harness.surface.subviews
+        XCTAssertLessThan(try XCTUnwrap(after.firstIndex { $0 === cover }), try XCTUnwrap(after.firstIndex { $0 === harness.pdfView }), "back behind")
     }
 
     func testJumpToAnUnbufferedPageIsNotCovered() throws {
@@ -1267,21 +1335,23 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(currentPageIndex(harness), 4)
     }
 
-    /// A page whose saved position differs from the buffer's is not covered: the
-    /// handover would jump.
+    /// A page whose saved position (here, scale) differs from the buffer's is not
+    /// taken over: the buffer's tiles are for the old scale.
     func testBufferAtAnotherViewportDoesNotCover() throws {
         let harness = try makeJumpHarness(initialPage: 3)
         try waitForBuffers(harness, pages: [4, 2])
         harness.controller.pageViewPositionHistory[4] = PageViewPosition(
-            scaler: harness.pdfView.scaleFactor * 1.3,
+            // Not near 1.0: PDFKit's first pass renders every page at 100% zoom.
+            scaler: harness.pdfView.scaleFactor * 1.6,
             point: CGPoint(x: 100, y: 500),
             viewSize: harness.pdfView.frame.size
         )
 
+        let old = harness.pdfView
         harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
 
         XCTAssertEqual(harness.pdfView.currentPage?.pageRef?.pageNumber, 4)
-        XCTAssertNil(harness.surface.coveringView)
+        XCTAssertTrue(harness.pdfView === old, "a buffer at another scale is not taken over")
     }
 
     func testScrollModeReleasesTheBuffers() throws {
@@ -1308,8 +1378,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
             XCTAssertTrue(buffer.invertsPagePlaceholders)
             XCTAssertEqual(buffer.backgroundColor, harness.pdfView.backgroundColor)
         }
+        let old = harness.pdfView
         harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
-        XCTAssertNotNil(harness.surface.coveringView, "re-rendered buffers cover in dark too")
+        XCTAssertTrue(harness.surface.coveringView != nil || harness.pdfView !== old, "re-rendered buffers cover or take over in dark too")
     }
 
     private func waitForBuffers(_ harness: Harness, pages: Set<Int>, file: StaticString = #filePath, line: UInt = #line) throws {
@@ -1319,6 +1390,18 @@ final class YabrPDFMarginCropTests: XCTestCase {
             settle(0.05)
         }
         XCTAssertEqual(buffered(), pages, "buffered pages", file: file, line: line)
+    }
+
+    private func waitForRenderedBuffers(_ harness: Harness, pages: Set<Int>, file: StaticString = #filePath, line: UInt = #line) throws {
+        try waitForBuffers(harness, pages: pages, file: file, line: line)
+        let deadline = Date().addingTimeInterval(3)
+        func rendered() -> Bool {
+            harness.surface.bufferedPages.allSatisfy { harness.surface.hasRenderedBuffer(showing: $0) }
+        }
+        while !rendered() && Date() < deadline {
+            settle(0.05)
+        }
+        XCTAssertTrue(rendered(), "buffers rendered", file: file, line: line)
     }
 
     private func waitForCoverToEnd(_ harness: Harness) {

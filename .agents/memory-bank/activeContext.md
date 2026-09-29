@@ -229,6 +229,25 @@ placement (content right of center, top offset / drift after page turns).
     - `buildTocList` runs on the main thread (it also raced on `tocList`).
 
     In the app only one document is open, and analysis is serial per document.
+  - **Step 3 done: takeover.** `turnPage(forward:)` (the prev/next buttons and
+    tap zones) first calls `surface.takeOver(showing:viewport:)`.
+    - **What it does.** A buffer holding the target page and already rendered
+      at its resolution (draw log newer than when it got the page) becomes the
+      active view. The old active view becomes a buffer that already shows the
+      new neighbour.
+    - **What moves.** Notification relay, interactivity and accessibility, the
+      delegate, selection (cleared) and the highlight menu (dismissed).
+    - **Page change.** The surface posts the page change itself;
+      `handlePageChange` consumes it (`consumeTakeover`), with no cover and no
+      mask.
+    - **Fallback.** Otherwise the PDFKit turn plus cover from step 2. Under
+      dark, only a rendered buffer replaces the masks: an unrendered one shows
+      PDFKit's white placeholder, which a recording caught on fast turns.
+    - **Recordings** (iOS 26.5): normal light and dark turns change once. Turns
+      faster than a buffer can render (~250 ms) fall back as before: light
+      shows the placeholder for a few frames, dark shows the snapshot masks.
+    - **Test trap.** A scale near 1.0 counts as rendered, because PDFKit's
+      first pass renders every page at 100% zoom.
   - **Consent prompts in tests.** Tests skip the ATT and ad-consent (UMP)
     prompts (`UITestingConfiguration.skipsConsentPrompts`: the UI-test launch
     argument or the unit-test host). Otherwise the UMP form covered the UI
