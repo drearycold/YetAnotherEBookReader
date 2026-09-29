@@ -97,6 +97,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         )
     }
 
+    func testConsentPromptsAreSkippedOnlyUnderTests() {
+        XCTAssertFalse(UITestingConfiguration.skipsConsentPrompts(arguments: [], environment: [:]), "the app asks")
+        XCTAssertTrue(UITestingConfiguration.skipsConsentPrompts(arguments: [UITestingConfiguration.mockLibraryArgument], environment: [:]), "UI tests")
+        XCTAssertTrue(UITestingConfiguration.skipsConsentPrompts(arguments: [], environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]), "unit-test host")
+        XCTAssertTrue(UITestingConfiguration.skipsConsentPrompts(), "this test process")
+    }
+
     func testUITestingEPUBFixtureCopiesToTheIsolatedBookCacheLocation() throws {
         let fileManager = FileManager.default
         let directory = fileManager.temporaryDirectory
