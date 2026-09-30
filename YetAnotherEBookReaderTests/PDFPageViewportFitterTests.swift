@@ -84,11 +84,23 @@ final class PDFPageViewportFitterTests: XCTestCase {
         XCTAssertEqual(shifted.width, base.width, accuracy: 0.001)
     }
 
-    func testVerticalTextStartsAtRightEdge() {
+    /// Wider than the view (Height on a portrait phone): the text starts at the
+    /// right margin.
+    func testVerticalTextWiderThanViewStartsAtRightEdge() {
         let fit = PDFPageViewportFitter.fit(input(autoScaler: .Height, readingDirection: .TtB_RtL))
         let placed = place(content, fit)
 
+        XCTAssertGreaterThan(placed.width, readable.width * 0.9)
         XCTAssertEqual(readable.maxX - placed.maxX, 19.5, accuracy: 0.001)
+        XCTAssertEqual(placed.midY, readable.midY, accuracy: 0.001)
+    }
+
+    /// Fitting the view (Page), vertical text is centered like horizontal text.
+    func testVerticalTextThatFitsIsCentered() {
+        let fit = PDFPageViewportFitter.fit(input(autoScaler: .Page, readingDirection: .TtB_RtL))
+        let placed = place(content, fit)
+
+        XCTAssertEqual(placed.midX, readable.midX, accuracy: 0.001)
         XCTAssertEqual(placed.midY, readable.midY, accuracy: 0.001)
     }
 

@@ -1294,11 +1294,10 @@ final class YabrPDFMarginCropTests: XCTestCase {
             let fitted = view.convert(page.bounds(for: .cropBox), from: page)
             let size = view.bounds.size
             if direction == .TtB_RtL {
-                // Vertical text starts at the right, also after Width left a saved
-                // top-left point that no longer applies once the content fits.
+                // Content that fits is centered, also after Width left a saved
+                // top-left point that no longer applies.
                 let readable = view.bounds.inset(by: view.safeAreaInsets)
-                let margin = readable.width * CGFloat(options.hMarginAutoScaler) / 100
-                XCTAssertEqual(contentInView(harness, pageIndex: 0).maxX, readable.maxX - margin, accuracy: 2, label)
+                XCTAssertEqual(contentInView(harness, pageIndex: 0).midX, readable.midX, accuracy: 2, label)
             }
 
             let inset = scrollView.adjustedContentInset

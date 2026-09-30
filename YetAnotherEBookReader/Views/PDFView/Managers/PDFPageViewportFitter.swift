@@ -76,9 +76,15 @@ enum PDFPageViewportFitter {
             viewAnchor.y = readable.minY + vMargin
             pageAnchor.x += input.pageBounds.width * CGFloat(input.marginOffsetPercent) / 100
         case .TtB_RtL:
-            // Vertical text starts at the right edge.
-            pageAnchor.x = content.maxX
-            viewAnchor.x = readable.maxX - hMargin
+            // Centered when it fits, otherwise vertical text starts at the
+            // leading (right) edge.
+            if fitsWidth {
+                pageAnchor.x = content.midX
+                viewAnchor.x = readable.midX
+            } else {
+                pageAnchor.x = content.maxX
+                viewAnchor.x = readable.maxX - hMargin
+            }
             if fitsHeight {
                 pageAnchor.y = content.midY
                 viewAnchor.y = readable.midY

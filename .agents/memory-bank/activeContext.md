@@ -299,6 +299,9 @@ placement (content right of center, top offset / drift after page turns).
     - **Stale saved axis.** Switching TtB_RtL from Width to Height kept the
       saved top-left x, which put the page at the left of the view. A saved
       axis is now kept only while the content overflows the view along it.
+    - **RtL centering.** TtB_RtL content that fits the width (e.g. Page fit on
+      an iPad in portrait) is now centered horizontally, mirroring LtR. Content
+      wider than the view still starts at the right margin.
     - **Test-deadlock recurrence.** Four extra window harnesses (3 pages each)
       tipped the PDFKit Vision / GCD-pool deadlock (main thread stuck in a
       `dispatch_group_wait` inside UIKit bounding-path layout). New layout
