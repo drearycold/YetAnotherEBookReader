@@ -20,7 +20,7 @@ class YabrPDFView: PDFView {
     
     /// Content inset added on top of PDFKit's own so a viewport anchor outside the
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
-    /// can be reached.
+    /// can be reached, and the page cannot be dragged away (negative).
     private(set) var viewportExtraInset = UIEdgeInsets.zero
     /// PDFKit's own page break margins, before `padPageBreakMargins(for:)`.
     private var defaultPageBreakMargins: UIEdgeInsets?
@@ -340,13 +340,14 @@ extension YabrPDFView {
             let current = convert(fit.pageAnchor, from: page)
             let dx = current.x - fit.viewAnchor.x
             let dy = current.y - fit.viewAnchor.y
-            guard abs(dx) > 0.25 || abs(dy) > 0.25 else { return }
+            guard abs(dx) > 0.25 || abs(dy) > 0.25 else { break }
 
             let target = CGPoint(x: scrollView.contentOffset.x + dx, y: scrollView.contentOffset.y + dy)
             extendInsetIfNeeded(scrollView, toReach: target)
             scrollView.setContentOffset(target, animated: false)
             layoutIfNeeded()
         }
+        confineScrollRange(scrollView, to: page)
     }
 
     /// Moves to exactly `other`'s scroll position when both lay the page out the
@@ -411,6 +412,48 @@ extension YabrPDFView {
         inset.right -= viewportExtraInset.right
         scrollView.contentInset = inset
         viewportExtraInset = .zero
+    }
+
+    /// Limits dragging to where the page belongs: along an axis where it fits the
+    /// view it stays inside it, otherwise it keeps covering the view. The padded
+    /// page break margins (which PDFKit applies twice per side) would let a page
+    /// be dragged almost off screen. The current placement stays reachable.
+    private func confineScrollRange(_ scrollView: UIScrollView, to page: PDFPage) {
+        let pageRect = scrollView.convert(convert(page.bounds(for: displayBox), from: page), from: self)
+        let offset = scrollView.contentOffset
+        let size = scrollView.bounds.size
+        let adjusted = scrollView.adjustedContentInset
+
+        /// The offsets along one axis that keep the page placed as described.
+        func range(pageMin: CGFloat, pageLength: CGFloat, viewLength: CGFloat, current: CGFloat) -> (CGFloat, CGFloat) {
+            let slack = viewLength - pageLength
+            // Page start in the view = pageMin - offset, between 0 and slack.
+            let lower = pageMin - max(0, slack)
+            let upper = pageMin - min(0, slack)
+            return (min(lower, current), max(upper, current))
+        }
+        let (minX, maxX) = range(pageMin: pageRect.minX, pageLength: pageRect.width, viewLength: size.width, current: offset.x)
+        let (minY, maxY) = range(pageMin: pageRect.minY, pageLength: pageRect.height, viewLength: size.height, current: offset.y)
+
+        // The scroll range is -adjusted.left ... contentSize + adjusted.right - size.
+        let change = UIEdgeInsets(
+            top: -minY - adjusted.top,
+            left: -minX - adjusted.left,
+            bottom: maxY + size.height - scrollView.contentSize.height - adjusted.bottom,
+            right: maxX + size.width - scrollView.contentSize.width - adjusted.right
+        )
+        guard change != .zero else { return }
+        var inset = scrollView.contentInset
+        inset.top += change.top
+        inset.left += change.left
+        inset.bottom += change.bottom
+        inset.right += change.right
+        scrollView.contentInset = inset
+        viewportExtraInset.top += change.top
+        viewportExtraInset.left += change.left
+        viewportExtraInset.bottom += change.bottom
+        viewportExtraInset.right += change.right
+        scrollView.contentOffset = offset
     }
 
     private func extendInsetIfNeeded(_ scrollView: UIScrollView, toReach target: CGPoint) {

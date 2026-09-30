@@ -17,6 +17,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     /// Landscape phone: a width-fitted page is taller than the view, so both the
     /// horizontal placement and the top margin are under our control.
     private static let landscape = CGSize(width: 844, height: 390)
+    private static let tabletLandscape = CGSize(width: 1000, height: 750)
 
     /// Detection works on a thumbnail, so allow a few PDF points of slack.
     private let detectTolerance: CGFloat = 3
@@ -1266,6 +1267,58 @@ final class YabrPDFMarginCropTests: XCTestCase {
             XCTAssertEqual(square.maxY, highlight.maxY, accuracy: 1.5, "rotation=\(rotation)")
             let underline = try redBounds(.underline)
             XCTAssertTrue(highlight.insetBy(dx: -1.5, dy: -1.5).contains(underline), "underline \(underline) outside \(highlight), rotation=\(rotation)")
+        }
+    }
+
+    // MARK: - Drag range
+
+    /// A page may be dragged only between the placements where it stays inside
+    /// the view (along an axis it fits) or keeps covering it (along an axis it
+    /// overflows), plus where the fit put it. PDFKit applies the padded page break
+    /// margins twice per side, which let a Height-fitted page leave the screen.
+    /// One harness for all configurations: more window-hosted documents tip the
+    /// test process's PDFKit Vision / GCD deadlock.
+    func testPageCannotBeDraggedOutOfView() throws {
+        let content = CGRect(x: 40, y: 50, width: 530, height: 690)
+        let harness = try makeHarness(pages: [PageSpec(content: content)], viewSize: Self.tabletLandscape)
+        for (scaler, direction) in [(PDFAutoScaler.Width, PDFReadDirection.LtR_TtB), (.Height, .TtB_RtL), (.Height, .LtR_TtB), (.Page, .TtB_RtL)] {
+            let label = "\(scaler) \(direction)"
+            var options = harness.controller.pdfOptions
+            options.selectedAutoScaler = scaler
+            options.readingDirection = direction
+            harness.controller.handleOptionsChange(pdfOptions: options)
+            settle(0.3)
+            let view = harness.pdfView
+            let page = try XCTUnwrap(view.currentPage)
+            let scrollView = try XCTUnwrap(view.documentScrollView)
+            let fitted = view.convert(page.bounds(for: .cropBox), from: page)
+            let size = view.bounds.size
+            if direction == .TtB_RtL {
+                // Vertical text starts at the right, also after Width left a saved
+                // top-left point that no longer applies once the content fits.
+                let readable = view.bounds.inset(by: view.safeAreaInsets)
+                let margin = readable.width * CGFloat(options.hMarginAutoScaler) / 100
+                XCTAssertEqual(contentInView(harness, pageIndex: 0).maxX, readable.maxX - margin, accuracy: 2, label)
+            }
+
+            let inset = scrollView.adjustedContentInset
+            let extremes = [
+                CGPoint(x: -inset.left, y: -inset.top),
+                CGPoint(x: scrollView.contentSize.width + inset.right - scrollView.bounds.width, y: scrollView.contentSize.height + inset.bottom - scrollView.bounds.height),
+            ]
+            for extreme in extremes {
+                scrollView.contentOffset = extreme
+                view.layoutIfNeeded()
+                let placed = view.convert(page.bounds(for: .cropBox), from: page)
+                func allowed(_ start: CGFloat, _ length: CGFloat, _ viewLength: CGFloat, _ fittedStart: CGFloat) -> Bool {
+                    let inside = length <= viewLength
+                        ? start >= -1 && start + length <= viewLength + 1
+                        : start <= 1 && start + length >= viewLength - 1
+                    return inside || abs(start - fittedStart) < 1
+                }
+                XCTAssertTrue(allowed(placed.minX, placed.width, size.width, fitted.minX), "\(label): x \(placed) fitted \(fitted)")
+                XCTAssertTrue(allowed(placed.minY, placed.height, size.height, fitted.minY), "\(label): y \(placed) fitted \(fitted)")
+            }
         }
     }
 

@@ -286,6 +286,23 @@ placement (content right of center, top offset / drift after page turns).
       (`presentationID != nil`); the book preview keeps UIKit's default.
     - **Not changed.** The placeholder detection's dependence on private layer
       names is already guarded by `testDarkInvertsPDFKitPagePlaceholders`.
+  - **Page dragged off screen (2026-09-30, iPad, TtB_RtL + Height).** Two causes:
+    - **Padding counted twice.** PDFKit applies `pageBreakMargins` twice per
+      side, so `padPageBreakMargins` (one view-excess per side, meant to keep
+      the page between flush left and flush right) let a narrower page be
+      dragged almost entirely off either edge.
+    - **Fix: `confineScrollRange`**, which runs after every `applyViewport`,
+      sets the scroll range (via `viewportExtraInset`, which may be negative).
+      Along an axis where the page fits the view it stays inside; otherwise it
+      keeps covering the view; the fitted placement stays reachable. A pinch
+      zoom keeps the old range until the next viewport.
+    - **Stale saved axis.** Switching TtB_RtL from Width to Height kept the
+      saved top-left x, which put the page at the left of the view. A saved
+      axis is now kept only while the content overflows the view along it.
+    - **Test-deadlock recurrence.** Four extra window harnesses (3 pages each)
+      tipped the PDFKit Vision / GCD-pool deadlock (main thread stuck in a
+      `dispatch_group_wait` inside UIKit bounding-path layout). New layout
+      tests should reuse one harness across configurations.
   - **Consent prompts in tests.** Tests skip the ATT and ad-consent (UMP)
     prompts (`UITestingConfiguration.skipsConsentPrompts`: the UI-test launch
     argument or the unit-test host). Otherwise the UMP form covered the UI

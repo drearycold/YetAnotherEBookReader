@@ -250,11 +250,13 @@ extension YabrPDFViewController {
         )
         let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
         let boundsForCropBox = page.bounds(for: .cropBox)
+        let contentBounds = PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox)
+        let readableRect = view.bounds.inset(by: view.safeAreaInsets)
         var fit = PDFPageViewportFitter.fit(
             PDFPageViewportFitter.Input(
-                contentBounds: PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox),
+                contentBounds: contentBounds,
                 pageBounds: boundsForCropBox,
-                readableRect: view.bounds.inset(by: view.safeAreaInsets),
+                readableRect: readableRect,
                 autoScaler: pdfOptions.selectedAutoScaler,
                 hMarginPercent: pdfOptions.hMarginAutoScaler,
                 vMarginPercent: pdfOptions.vMarginAutoScaler,
@@ -265,13 +267,17 @@ extension YabrPDFViewController {
         )
 
         // Keep the axis the reader already positioned (saved position, rotation, or
-        // an options change that only reset the other axis).
+        // an options change that only reset the other axis), if the content still
+        // needs scrolling along it. A saved top-left point is meaningless once the
+        // content fits: after switching TtB_RtL from Width to Height it would put
+        // the page at the left of the view.
+        let fitted = contentBounds.width > 0 && contentBounds.height > 0 ? contentBounds : boundsForCropBox
         if let pageHistory {
-            if !pageHistory.point.x.isNaN {
+            if !pageHistory.point.x.isNaN, fitted.width * fit.scale > readableRect.width + 0.5 {
                 fit.pageAnchor.x = pageHistory.point.x
                 fit.viewAnchor.x = view.bounds.minX
             }
-            if !pageHistory.point.y.isNaN {
+            if !pageHistory.point.y.isNaN, fitted.height * fit.scale > readableRect.height + 0.5 {
                 fit.pageAnchor.y = pageHistory.point.y
                 fit.viewAnchor.y = view.bounds.minY
             }
