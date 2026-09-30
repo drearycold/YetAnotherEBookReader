@@ -48,8 +48,10 @@ extension YabrPDFViewController {
         surface.showJumpMask(for: page)
         // Buffers hold tiles of the old theme; refilled after the page change.
         surface.discardBuffers()
+        isReattachingDocument = true
         pdfView.document = nil
         pdfView.document = document
+        isReattachingDocument = false
         pdfView.go(to: page)
         if pdfViewAux.document === document {
             pdfViewAux.document = nil
@@ -65,7 +67,9 @@ extension YabrPDFViewController {
         let newScale = pdfView.scaleFactor
         guard abs(pdfOptions.lastScale - newScale) > 0.0001 else { return }
 
+        isRecordingScale = true
         pdfOptions.lastScale = newScale
+        isRecordingScale = false
         print("handleScaleChange: \(pdfOptions.lastScale)")
     }
 

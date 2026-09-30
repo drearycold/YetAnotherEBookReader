@@ -21,7 +21,7 @@ class YabrPDFView: PDFView {
     /// Content inset added on top of PDFKit's own so a viewport anchor outside the
     /// normally scrollable range (e.g. top-aligning a page shorter than the view)
     /// can be reached.
-    private var viewportExtraInset = UIEdgeInsets.zero
+    private(set) var viewportExtraInset = UIEdgeInsets.zero
     /// PDFKit's own page break margins, before `padPageBreakMargins(for:)`.
     private var defaultPageBreakMargins: UIEdgeInsets?
 
@@ -267,7 +267,7 @@ extension YabrPDFView {
         layer.contents = inverted
     }
 
-    /// Same transform as `PDFPageWithBackground.draw`: invert, then cap at 70% gray.
+    /// Same transform as `PDFPageWithBackground.draw`.
     private static func invertedImage(_ image: CGImage) -> CGImage? {
         guard let context = CGContext(
             data: nil,
@@ -282,11 +282,7 @@ extension YabrPDFView {
         context.setFillColor(gray: 1, alpha: 1)
         context.fill(rect)
         context.draw(image, in: rect)
-        context.setBlendMode(.exclusion)
-        context.fill(rect)
-        context.setBlendMode(.darken)
-        context.setFillColor(gray: 0.7, alpha: 1)
-        context.fill(rect)
+        PDFPageWithBackground.invert(rect, in: context)
         return context.makeImage()
     }
 
@@ -397,8 +393,11 @@ extension YabrPDFView {
         layoutIfNeeded()
     }
 
-    /// Continuous mode lays pages out with PDFKit's own spacing.
+    /// Continuous mode lays pages out with PDFKit's own spacing and scroll range.
     func restoreDefaultPageBreakMargins() {
+        if let scrollView = documentScrollView {
+            resetViewportExtraInset(scrollView)
+        }
         guard let base = defaultPageBreakMargins, pageBreakMargins != base else { return }
         pageBreakMargins = base
     }

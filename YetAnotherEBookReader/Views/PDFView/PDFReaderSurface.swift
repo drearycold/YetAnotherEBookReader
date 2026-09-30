@@ -105,12 +105,15 @@ final class PDFReaderSurface: UIView {
     /// Where pages report finished draws; tells when the active view has drawn.
     weak var drawLog: PDFPageRenderTheme?
     private var coverStart: CFTimeInterval = 0
+    /// Tiles the covering buffer had not drawn yet when it came in front. It draws
+    /// them too, so the active view has drawn them only on their second draw.
+    private(set) var coverOwedTiles: Set<PDFPageTile> = []
     private var coverTimer: Timer?
     /// Called when a cover is removed; the buffer is free for another page. It may
     /// run during a page change, so defer heavy work.
     var onCoverEnded: (() -> Void)?
-    /// When each buffer was given its page; it is ready once it has drawn the page
-    /// at its own resolution since.
+    /// When each buffer was given its page or scale; it is ready once it has drawn
+    /// the tiles it shows since.
     private var bufferShownAt: [ObjectIdentifier: CFTimeInterval] = [:]
     /// The page a takeover made current, until `handlePageChange` consumes it.
     private weak var takenOverPage: PDFPage?
@@ -195,11 +198,32 @@ extension PDFReaderSurface {
         showJumpMask(image: activeView.viewportSnapshot(of: page))
     }
 
+    /// Covers the view with what it shows now, then fades out like a jump mask.
+    /// Copies the screen instead of drawing `page` again; a mask still showing
+    /// stays (the page under it may not have rendered yet).
+    func freezeWithJumpMask(showing page: PDFPage) {
+        if isJumpMaskVisible {
+            jumpMaskGeneration += 1
+            jumpMaskView.layer.removeAllAnimations()
+            jumpMaskView.alpha = 1
+            scheduleJumpMaskFade(generation: jumpMaskGeneration)
+            return
+        }
+        guard let snapshot = (coveringView ?? activeView).snapshotView(afterScreenUpdates: false) else {
+            showJumpMask(for: page)
+            return
+        }
+        showJumpMask(image: nil)
+        snapshot.frame = jumpMaskView.bounds
+        snapshot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        jumpMaskView.addSubview(snapshot)
+    }
+
     /// A plain page-coloured cover while the reader appears, before the first page
     /// is positioned. Replaced by the first jump mask, or faded by
     /// `finishLoadingCover()`.
     func showLoadingCover() {
-        jumpMaskView.image = nil
+        clearJumpMask()
         jumpMaskView.layer.removeAllAnimations()
         jumpMaskView.alpha = 1
         jumpMaskGeneration += 1
@@ -212,7 +236,8 @@ extension PDFReaderSurface {
         scheduleJumpMaskFade(generation: jumpMaskGeneration)
     }
 
-    private func showJumpMask(image: UIImage) {
+    private func showJumpMask(image: UIImage?) {
+        clearJumpMask()
         jumpMaskView.image = image
         jumpMaskView.layer.removeAllAnimations()
         jumpMaskView.alpha = 1
@@ -229,10 +254,15 @@ extension PDFReaderSurface {
                 self.jumpMaskView.alpha = 0
             } completion: { _ in
                 if self.jumpMaskGeneration == generation {
-                    self.jumpMaskView.image = nil
+                    self.clearJumpMask()
                 }
             }
         }
+    }
+
+    private func clearJumpMask() {
+        jumpMaskView.image = nil
+        jumpMaskView.subviews.forEach { $0.removeFromSuperview() }
     }
 
     /// Page view < jump mask < theme overlay < tap zone labels.
@@ -623,7 +653,7 @@ extension PDFReaderSurface {
             endCover()
         }
         guard coveringView == nil,
-              let buffer = bufferViews.first(where: { $0.document === activeView.document && $0.currentPage === page }),
+              let buffer = bufferViews.first(where: { $0.currentPage === page && showsLikeActiveView($0) }),
               // The same fit can land a few pixels apart depending on how each view
               // got there (iOS 18 lays pages out asynchronously); take the active
               // view's exact position. A shift this small stays within the
@@ -636,6 +666,8 @@ extension PDFReaderSurface {
         insertSubview(buffer, aboveSubview: activeView)
         coveringView = buffer
         coverStart = CACurrentMediaTime()
+        let drawn = tileDrawCounts(of: buffer, page: page, after: bufferShownAt[ObjectIdentifier(buffer)] ?? 0)
+        coverOwedTiles = shownTiles(of: buffer, page: page).filter { drawn[$0] == nil }
         coverTimer?.invalidate()
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self else {
@@ -676,25 +708,60 @@ extension PDFReaderSurface {
         buffer.invertsPagePlaceholders = active.invertsPagePlaceholders
         buffer.delegate = active.delegate
         buffer.layoutIfNeeded()
+        let scale = buffer.scaleFactor
         if buffer.currentPage !== page {
             buffer.go(to: page)
             bufferShownAt[ObjectIdentifier(buffer)] = CACurrentMediaTime()
         }
         buffer.applyViewport(viewport(page, buffer), on: page)
+        if abs(buffer.scaleFactor - scale) > 0.0005 {
+            // Tiles of this page at the new scale may be from long ago, or another view.
+            bufferShownAt[ObjectIdentifier(buffer)] = CACurrentMediaTime()
+        }
     }
 
     /// Whether a buffer holds `page`, fully rendered.
     func hasRenderedBuffer(showing page: PDFPage) -> Bool {
-        bufferViews.contains { $0.currentPage === page && $0.document != nil && isRendered($0) }
+        bufferViews.contains { $0.currentPage === page && showsLikeActiveView($0) && isRendered($0) }
     }
 
-    /// Whether `buffer` has drawn its page at its own resolution since it was
-    /// given the page.
+    /// Whether `buffer` has drawn every tile it shows since it was given its page.
     private func isRendered(_ buffer: YabrPDFView) -> Bool {
-        guard let pageNumber = buffer.currentPage?.pageRef?.pageNumber,
-              let lastDraw = drawLog?.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: buffer.scaleFactor * displayScale)
+        guard let page = buffer.currentPage else { return false }
+        return hasDrawn(buffer, page: page, after: bufferShownAt[ObjectIdentifier(buffer)] ?? 0)
+    }
+
+    /// Whether every tile `view` shows of `page` finished drawing after `time`, the
+    /// `twice` ones twice. The draw log does not know which view drew: another
+    /// view drawing the same page at the same scale would count.
+    private func hasDrawn(_ view: YabrPDFView, page: PDFPage, after time: CFTimeInterval, twice: Set<PDFPageTile> = []) -> Bool {
+        guard let drawLog, let pageNumber = page.pageRef?.pageNumber else { return false }
+        let tiles = shownTiles(of: view, page: page)
+        // PDFKit hands a drawn tile to its layer a moment later, so the page's
+        // draws at this scale must also have gone quiet.
+        guard !tiles.isEmpty,
+              let lastDraw = drawLog.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: view.scaleFactor * displayScale),
+              lastDraw > time,
+              CACurrentMediaTime() - lastDraw > 0.06
         else { return false }
-        return lastDraw > (bufferShownAt[ObjectIdentifier(buffer)] ?? 0)
+        let counts = tileDrawCounts(of: view, page: page, after: time)
+        // Draws that are not PDFKit's usual tiles: settle for the quiet.
+        return counts.isEmpty || tiles.allSatisfy { counts[$0, default: 0] >= (twice.contains($0) ? 2 : 1) }
+    }
+
+    /// The PDFKit tiles of `page` that `view` shows at its scale.
+    func shownTiles(of view: YabrPDFView, page: PDFPage) -> Set<PDFPageTile> {
+        let box = view.displayBox
+        let boxSize = page.bounds(for: box).applying(CGAffineTransform(rotationAngle: CGFloat(page.rotation) * .pi / 180)).size
+        let visible = view.convert(view.bounds, to: page)
+            .applying(page.transform(for: box))
+            .intersection(CGRect(origin: .zero, size: CGSize(width: abs(boxSize.width), height: abs(boxSize.height))))
+        return PDFPageTile.tiles(covering: visible, pixelsPerPoint: view.scaleFactor * displayScale)
+    }
+
+    private func tileDrawCounts(of view: YabrPDFView, page: PDFPage, after time: CFTimeInterval) -> [PDFPageTile: Int] {
+        guard let drawLog, let pageNumber = page.pageRef?.pageNumber else { return [:] }
+        return drawLog.tileDrawCounts(ofPage: pageNumber, pixelsPerPoint: view.scaleFactor * displayScale, after: time)
     }
 
     private var displayScale: CGFloat {
@@ -711,7 +778,7 @@ extension PDFReaderSurface {
     /// becomes a buffer; it already shows the new neighbour. Posts the page change.
     /// Returns false (the caller turns the usual way) if no buffer is ready.
     func takeOver(showing page: PDFPage, viewport: (PDFPage, YabrPDFView) -> PDFPageViewportFit) -> Bool {
-        guard let index = bufferViews.firstIndex(where: { $0.document === activeView.document && $0.currentPage === page && $0 !== coveringView })
+        guard let index = bufferViews.firstIndex(where: { $0.currentPage === page && $0 !== coveringView && showsLikeActiveView($0) })
         else { return false }
         let buffer = bufferViews[index]
         // Re-apply in case the page's viewport changed since it was prepared (the
@@ -739,9 +806,25 @@ extension PDFReaderSurface {
         activeView = buffer
         relayNotifications(of: buffer)
 
+        if abs(buffer.scaleFactor - old.scaleFactor) > 0.0001 {
+            NotificationCenter.default.post(name: .readerSurfaceScaleChanged, object: self)
+        }
         takenOverPage = page
         NotificationCenter.default.post(name: .readerSurfacePageChanged, object: self)
         return true
+    }
+
+    /// Whether `buffer` shows the active view's document laid out the same way.
+    /// Options changes reach the buffers only when they are next refreshed.
+    private func showsLikeActiveView(_ buffer: YabrPDFView) -> Bool {
+        let active = activeView
+        return buffer.document != nil
+            && buffer.document === active.document
+            && active.displayMode == .singlePage
+            && buffer.displayDirection == active.displayDirection
+            && buffer.displaysRTL == active.displaysRTL
+            && buffer.displayBox == active.displayBox
+            && buffer.invertsPagePlaceholders == active.invertsPagePlaceholders
     }
 
     /// Whether the current page change came from `takeOver(showing:)`; clears it.
@@ -761,20 +844,14 @@ extension PDFReaderSurface {
         return abs(pointA.x - pointB.x) <= tolerance && abs(pointA.y - pointB.y) <= tolerance
     }
 
-    /// Ends the cover once the active view has drawn the page at its own
-    /// resolution and gone quiet, or after a timeout (tiles still cached from
-    /// before are not redrawn).
+    /// Ends the cover once the active view has drawn the tiles it shows, or after
+    /// a timeout (tiles still cached from before are not redrawn).
     private func checkCoverHandover() {
-        guard let page = coveringView?.currentPage, let pageNumber = page.pageRef?.pageNumber else {
+        guard let page = coveringView?.currentPage else {
             endCover()
             return
         }
-        let now = CACurrentMediaTime()
-        let elapsed = now - coverStart
-        let displayScale = activeView.traitCollection.displayScale > 0 ? activeView.traitCollection.displayScale : UIScreen.main.scale
-        let lastDraw = drawLog?.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: activeView.scaleFactor * displayScale) ?? 0
-        let drewSinceCover = lastDraw > coverStart
-        if elapsed > 1.0 || (drewSinceCover && now - lastDraw > 0.06) {
+        if CACurrentMediaTime() - coverStart > 1.0 || hasDrawn(activeView, page: page, after: coverStart, twice: coverOwedTiles) {
             endCover()
         }
     }
@@ -785,6 +862,7 @@ extension PDFReaderSurface {
         guard let buffer = coveringView else { return }
         insertSubview(buffer, belowSubview: activeView)
         coveringView = nil
+        coverOwedTiles = []
         if notifies {
             onCoverEnded?()
         }

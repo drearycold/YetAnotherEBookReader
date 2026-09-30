@@ -58,16 +58,21 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// In ReaderWorkspaceView the reader sits below the status bar, which is drawn
-    /// over the workspace's black background (its top toolbar on iPad, the black
-    /// safe area on iPhone). Readers' own themes never reach the status bar there,
-    /// so it is always light.
+    /// In ReaderWorkspaceView (readers with a presentation) the reader sits below
+    /// the status bar, which is drawn over the workspace's black background (its
+    /// top toolbar on iPad, the black safe area on iPhone). Readers' own themes
+    /// never reach the status bar there, so it is always light. Elsewhere (book
+    /// preview) the top reader decides.
+    private var isInReaderWorkspace: Bool {
+        presentationID != nil
+    }
+
     override var childForStatusBarStyle: UIViewController? {
-        nil
+        isInReaderWorkspace ? nil : super.childForStatusBarStyle
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        .lightContent
+        isInReaderWorkspace ? .lightContent : super.preferredStatusBarStyle
     }
     
     func alert(alertItem: AlertItem) {

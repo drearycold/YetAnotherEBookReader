@@ -66,9 +66,20 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// Page number (1-based) of a pending jump; `handlePageChange` shows the jump
     /// mask once that page's viewport is applied.
     var pendingJumpMaskPage: Int?
+    /// Set while `invalidateRenderedPages` re-attaches the document; PDFKit's page
+    /// changes meanwhile are not the reader's.
+    var isReattachingDocument = false
+    /// Set while `handleScaleChange` stores the page view's scale.
+    var isRecordingScale = false
     
     @Published var pdfOptions = PDFPreferenceValue() {
         didSet {
+            if isRecordingScale {
+                // PDFKit rescaled (every fitted page turn): only remember the scale.
+                yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
+                return
+            }
+
             applyThemePalette()
 
             let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
@@ -306,7 +317,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         if let target = adjacentPage(forward: forward), surface.hasRenderedBuffer(showing: target) {
             return
         }
-        surface.showJumpMask(for: page)
+        surface.freezeWithJumpMask(showing: page)
     }
 
     /// Call before navigating to a different page by a jump (TOC, history, slider,

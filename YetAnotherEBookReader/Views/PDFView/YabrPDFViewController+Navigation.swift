@@ -133,6 +133,8 @@ extension YabrPDFViewController {
     }
 
     @objc func handlePageChange(notification: Notification) {
+        // Re-attaching shows the first page for a moment.
+        guard !isReattachingDocument else { return }
         var titleLabel = initialPosition?.chapterName
         guard let curPage = pdfView.currentPage else { return }
 
@@ -214,9 +216,10 @@ extension YabrPDFViewController {
         if isJumpTarget || (showsJumpMask && !coveredByRenderedBuffer) {
             surface.showJumpMask(for: curPage)
         }
-        guard !viewport.restoresSavedPosition else { return }
-
-        updatePageViewPositionHistory()
+        // A restored position is already in the history.
+        if !viewport.restoresSavedPosition {
+            updatePageViewPositionHistory()
+        }
         updateReadingProgress()
     }
 

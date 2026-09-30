@@ -209,11 +209,11 @@ placement (content right of center, top offset / drift after page turns).
       - It then copies the active view's exact inset and offset
         (`alignScrollPosition`). The same fit can land 1-4 px apart depending
         on how each view got there, most on iOS 18.
-    - **Handover.** The cover ends once the active view has drawn the page at
-      its own resolution and then been quiet for 60 ms (timeout 1 s).
-      `PDFPageRenderTheme` logs draws per page and resolution. PDFKit first
-      draws a new page at 100% zoom (the old blurry/heavy intermediate), then
-      at `scaleFactor x screen scale`.
+    - **Handover.** The cover ends once the active view has drawn every tile it
+      shows (timeout 1 s). PDFKit first draws a new page at 100% zoom (the old
+      blurry/heavy intermediate), then at `scaleFactor x screen scale`.
+      (Superseded detail: it used to wait for any draw plus 60 ms of quiet; see
+      the review fixes below.)
     - **Dark.** Buffered dark turns skip the freeze and page-change snapshot
       masks: a snapshot's glyphs render heavier than tiles, visible as the mask
       faded.
@@ -231,9 +231,9 @@ placement (content right of center, top offset / drift after page turns).
     In the app only one document is open, and analysis is serial per document.
   - **Step 3 done: takeover.** `turnPage(forward:)` (the prev/next buttons and
     tap zones) first calls `surface.takeOver(showing:viewport:)`.
-    - **What it does.** A buffer holding the target page and already rendered
-      at its resolution (draw log newer than when it got the page) becomes the
-      active view. The old active view becomes a buffer that already shows the
+    - **What it does.** A buffer holding the target page, laid out like the
+      active view and with every tile it shows drawn since it got the page,
+      becomes the active view. The old active view becomes a buffer that already shows the
       new neighbour.
     - **What moves.** Notification relay, interactivity and accessibility, the
       delegate, selection (cleared) and the highlight menu (dismissed).
@@ -248,6 +248,44 @@ placement (content right of center, top offset / drift after page turns).
       shows the placeholder for a few frames, dark shows the snapshot masks.
     - **Test trap.** A scale near 1.0 counts as rendered, because PDFKit's
       first pass renders every page at 100% zoom.
+  - **Review fixes (2026-09-30)**, from a peer review of `main...79ed2e96`:
+    - **Tile-level draw log.** All page views' tiles render on one queue
+      (`PDFKit.PDFTilePool.workQueue`), so a draw cannot be tied to a view.
+      Tiles can be identified, though (experiment, identical on iOS 18.5 and
+      26.5):
+      - Tiles are 1024 px squares with a 1 px border, anchored at the display
+        box origin; tile (c, r) draws with ctm translation (1 - 1024c, 1 - 1024r).
+      - PDFKit draws the visible tiles plus a ring of margin tiles.
+      - `PDFPageTile` and `PDFPageRenderTheme.tileDrawCounts` implement this.
+    - **What uses it.** "Rendered" means every tile the view shows has drawn
+      since the buffer got its page or a new scale. It used to mean a single
+      draw, so a half-rendered buffer could take over.
+    - **Cover handover.** A covering buffer that had not finished counts as
+      owing its missing tiles (`coverOwedTiles`); the active view has drawn
+      those only on their second draw.
+    - **Fallback.** Draws off the grid (another OS or Catalyst tile size) fall
+      back to "any draw plus 60 ms quiet". `testRenderedPageDrawsArePDFKitTiles`
+      guards the grid.
+    - **Takeover also** posts a scale change (so `lastScale` follows) and skips
+      buffers laid out differently (direction, RTL, box) until they are
+      refreshed.
+    - **Snapshots.** `drawAsDisplayed` now draws PDFKit annotations in box space
+      (`PDFAnnotation.draw(with:in:)` applies the box transform itself). Before,
+      underlines and dark squares were offset on pages with a non-zero crop
+      origin. `invertedImage` shares `PDFPageWithBackground.invert`.
+    - **Dark freeze.** It copies the screen (`snapshotView(afterScreenUpdates:
+      false)`), or keeps a mask that is still showing, instead of drawing the
+      page again.
+    - **Scale changes.** `lastScale` changes from `handleScaleChange`
+      (`isRecordingScale`) only persist; they no longer restyle the chrome.
+    - **Continuous mode** drops the viewport's extra inset.
+    - **Progress.** It is reported for restored positions too. The transient
+      first page during `invalidateRenderedPages` is ignored
+      (`isReattachingDocument`); the old early return had hidden it.
+    - **Status bar.** It is light only in the reader workspace
+      (`presentationID != nil`); the book preview keeps UIKit's default.
+    - **Not changed.** The placeholder detection's dependence on private layer
+      names is already guarded by `testDarkInvertsPDFKitPagePlaceholders`.
   - **Consent prompts in tests.** Tests skip the ATT and ad-consent (UMP)
     prompts (`UITestingConfiguration.skipsConsentPrompts`: the UI-test launch
     argument or the unit-test host). Otherwise the UMP form covered the UI

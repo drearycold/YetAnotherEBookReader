@@ -17,6 +17,9 @@ final class PDFPageRenderTheme: @unchecked Sendable {
 
     /// Last finished draw per page and resolution bucket (see `drawKey`).
     private var lastDrawEnd: [Int: [Int: CFTimeInterval]] = [:]
+    /// The last finished draws of each PDFKit tile, per page and resolution bucket.
+    private var tileDrawEnds: [Int: [Int: [PDFPageTile: [CFTimeInterval]]]] = [:]
+    private static let keptDrawsPerTile = 2
 
     var drawsInverted: Bool {
         get {
@@ -31,14 +34,40 @@ final class PDFPageRenderTheme: @unchecked Sendable {
         }
     }
 
-    /// Records that a page finished drawing at `pixelsPerPoint` (a PDFKit tile, or
-    /// a thumbnail). PDFKit renders a newly shown page twice: quickly at 100% zoom,
+    /// Records that a page finished drawing with `ctm` (a PDFKit tile, or a
+    /// thumbnail). PDFKit renders a newly shown page twice: quickly at 100% zoom,
     /// then at the view's own resolution, which is what it finally shows.
-    func noteDraw(ofPage pageNumber: Int, pixelsPerPoint: CGFloat) {
+    func noteDraw(ofPage pageNumber: Int, ctm: CGAffineTransform) {
         let now = CACurrentMediaTime()
+        let key = Self.drawKey(hypot(ctm.a, ctm.b))
         lock.lock()
-        lastDrawEnd[pageNumber, default: [:]][Self.drawKey(pixelsPerPoint)] = now
-        lock.unlock()
+        defer { lock.unlock() }
+        lastDrawEnd[pageNumber, default: [:]][key] = now
+        if let tile = PDFPageTile(drawnWith: ctm) {
+            var ends = tileDrawEnds[pageNumber, default: [:]][key, default: [:]][tile, default: []]
+            ends.append(now)
+            tileDrawEnds[pageNumber, default: [:]][key, default: [:]][tile] = Array(ends.suffix(Self.keptDrawsPerTile))
+        }
+    }
+
+    /// How many times each PDFKit tile of the page finished drawing at about
+    /// `pixelsPerPoint` after `time` (`CACurrentMediaTime`), counting at most the
+    /// last two draws of a tile.
+    func tileDrawCounts(ofPage pageNumber: Int, pixelsPerPoint: CGFloat, after time: CFTimeInterval) -> [PDFPageTile: Int] {
+        let key = Self.drawKey(pixelsPerPoint)
+        lock.lock()
+        defer { lock.unlock() }
+        guard let buckets = tileDrawEnds[pageNumber] else { return [:] }
+        var counts = [PDFPageTile: Int]()
+        for bucket in [key - 1, key, key + 1] {
+            for (tile, ends) in buckets[bucket] ?? [:] {
+                let count = ends.filter { $0 > time }.count
+                if count > 0 {
+                    counts[tile, default: 0] += count
+                }
+            }
+        }
+        return counts
     }
 
     /// When the page last finished drawing at about `pixelsPerPoint`
@@ -54,6 +83,48 @@ final class PDFPageRenderTheme: @unchecked Sendable {
     /// 2% buckets.
     private static func drawKey(_ pixelsPerPoint: CGFloat) -> Int {
         Int((log(max(pixelsPerPoint, 0.01)) / log(1.02)).rounded())
+    }
+}
+
+/// A tile PDFKit renders a page in: 1024 device pixels square with a 1 pixel
+/// border, in the displayed box's space (origin at its bottom left). Tile
+/// (column, row) is drawn with the box origin at (1 - 1024 column, 1 - 1024 row).
+/// The same on iOS 18 and 26.
+struct PDFPageTile: Hashable {
+    var column: Int
+    var row: Int
+
+    private static let size: CGFloat = 1024
+    private static let border: CGFloat = 1
+
+    /// The tile a draw with `ctm` renders; nil for other draws (thumbnails).
+    init?(drawnWith ctm: CGAffineTransform) {
+        let column = ((Self.border - ctm.tx) / Self.size).rounded()
+        let row = ((Self.border - ctm.ty) / Self.size).rounded()
+        // Within a hundredth of a pixel of the grid.
+        guard abs(ctm.b) < 0.0001, abs(ctm.c) < 0.0001, ctm.a > 0, ctm.d > 0,
+              abs(Self.border - column * Self.size - ctm.tx) < 0.01,
+              abs(Self.border - row * Self.size - ctm.ty) < 0.01
+        else { return nil }
+        self.column = Int(column)
+        self.row = Int(row)
+    }
+
+    init(column: Int, row: Int) {
+        self.column = column
+        self.row = row
+    }
+
+    /// The tiles that show `rect` (in box space, points) at `pixelsPerPoint`.
+    static func tiles(covering rect: CGRect, pixelsPerPoint: CGFloat) -> Set<PDFPageTile> {
+        guard !rect.isNull, !rect.isEmpty, pixelsPerPoint > 0 else { return [] }
+        // Half a pixel in, so a tile merely touching an edge is not counted.
+        func index(_ points: CGFloat, inset: CGFloat) -> Int {
+            Int(((points * pixelsPerPoint + inset + border) / size).rounded(.down))
+        }
+        let columns = index(rect.minX, inset: 0.5)...max(index(rect.minX, inset: 0.5), index(rect.maxX, inset: -0.5))
+        let rows = index(rect.minY, inset: 0.5)...max(index(rect.minY, inset: 0.5), index(rect.maxY, inset: -0.5))
+        return Set(columns.flatMap { column in rows.map { PDFPageTile(column: column, row: $0) } })
     }
 }
 
@@ -79,8 +150,7 @@ class PDFPageWithBackground: PDFPage {
         super.draw(with: box, to: context)
         defer {
             if let pageNumber = pageRef?.pageNumber {
-                let ctm = context.ctm
-                renderTheme?.noteDraw(ofPage: pageNumber, pixelsPerPoint: hypot(ctm.a, ctm.b))
+                renderTheme?.noteDraw(ofPage: pageNumber, ctm: context.ctm)
             }
         }
 
@@ -113,6 +183,9 @@ class PDFPageWithBackground: PDFPage {
         if drawsInverted {
             Self.invert(rect, in: context)
         }
+        // `PDFAnnotation.draw(with:in:)` applies the box transform itself, like
+        // `draw(with:to:)`, so it is given box space.
+        let boxToPage = transform(for: box).inverted()
         for annotation in annotations where annotation.shouldDisplay {
             context.saveGState()
             switch annotation.type {
@@ -122,8 +195,10 @@ class PDFPageWithBackground: PDFPage {
                 context.fill(annotation.bounds)
             case "Underline", "StrikeOut", "Squiggly":
                 context.setBlendMode(.multiply)
+                context.concatenate(boxToPage)
                 annotation.draw(with: box, in: context)
             default:
+                context.concatenate(boxToPage)
                 annotation.draw(with: box, in: context)
             }
             context.restoreGState()
@@ -131,8 +206,9 @@ class PDFPageWithBackground: PDFPage {
         context.restoreGState()
     }
 
-    /// Inverts to black, then caps text at 70% gray.
-    private static func invert(_ rect: CGRect, in context: CGContext) {
+    /// Inverts to black, then caps text at 70% gray. Also used for PDFKit's page
+    /// placeholders, which must match the tiles.
+    static func invert(_ rect: CGRect, in context: CGContext) {
         UIGraphicsPushContext(context)
         context.saveGState()
 

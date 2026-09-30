@@ -1220,6 +1220,55 @@ final class YabrPDFMarginCropTests: XCTestCase {
         settle(0.1)
     }
 
+    /// Snapshots draw PDFKit's own annotations at the same place as the highlight
+    /// fill, which is drawn directly, also when the crop box does not start at the
+    /// page origin or the page is rotated.
+    func testSnapshotAnnotationsLineUpWithHighlightsOnCroppedPages() throws {
+        let target = CGRect(x: 200, y: 300, width: 100, height: 40)
+        for rotation in [0, 90] {
+            let url = try makePDF(pages: [PageSpec(content: CGRect(x: 0, y: 0, width: 1, height: 1))])
+            let document = try XCTUnwrap(PDFDocument(url: url))
+            let pageClass = PageWithBackgroundDelegate()
+            document.delegate = pageClass
+            let page = try XCTUnwrap(document.page(at: 0) as? PDFPageWithBackground)
+            page.setBounds(CGRect(x: 40, y: 60, width: 500, height: 700), for: .cropBox)
+            page.rotation = rotation
+
+            func redBounds(_ type: PDFAnnotationSubtype) throws -> CGRect {
+                for annotation in page.annotations { page.removeAnnotation(annotation) }
+                let annotation = PDFAnnotation(bounds: target, forType: type, withProperties: nil)
+                annotation.color = .red
+                if type == .square { annotation.interiorColor = .red }
+                page.addAnnotation(annotation)
+                let size = page.bounds(for: .cropBox).applying(CGAffineTransform(rotationAngle: CGFloat(rotation) * .pi / 180)).size
+                let width = Int(abs(size.width).rounded()), height = Int(abs(size.height).rounded())
+                let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                page.drawAsDisplayed(with: .cropBox, to: context)
+                let data = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+                var red = CGRect.null
+                for y in 0..<height {
+                    for x in 0..<width {
+                        let offset = y * context.bytesPerRow + x * 4
+                        if data[offset] > 200 && data[offset + 1] < 80 {
+                            red = red.union(CGRect(x: x, y: y, width: 1, height: 1))
+                        }
+                    }
+                }
+                XCTAssertFalse(red.isNull, "\(type.rawValue) not drawn, rotation=\(rotation)")
+                return red
+            }
+
+            let highlight = try redBounds(.highlight)
+            let square = try redBounds(.square)
+            XCTAssertEqual(square.minX, highlight.minX, accuracy: 1.5, "rotation=\(rotation)")
+            XCTAssertEqual(square.minY, highlight.minY, accuracy: 1.5, "rotation=\(rotation)")
+            XCTAssertEqual(square.maxX, highlight.maxX, accuracy: 1.5, "rotation=\(rotation)")
+            XCTAssertEqual(square.maxY, highlight.maxY, accuracy: 1.5, "rotation=\(rotation)")
+            let underline = try redBounds(.underline)
+            XCTAssertTrue(highlight.insetBy(dx: -1.5, dy: -1.5).contains(underline), "underline \(underline) outside \(highlight), rotation=\(rotation)")
+        }
+    }
+
     // MARK: - Buffered neighbour pages (#54 / #55)
 
     func testForwardTurnTakesOverTheRenderedNextBuffer() throws {
@@ -1333,6 +1382,152 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
         XCTAssertNil(harness.surface.coveringView)
         XCTAssertEqual(currentPageIndex(harness), 4)
+    }
+
+    /// The engine is told about every page change, including a return to a page
+    /// whose position was saved.
+    func testTurningBackToAVisitedPageReportsIt() throws {
+        let harness = try makeJumpHarness()
+        pressNext(harness)
+        pressNext(harness)
+        let spy = PositionSpy()
+        harness.controller.readerEngineDelegate = spy
+
+        pressPrev(harness)
+
+        XCTAssertEqual(currentPageIndex(harness), 1)
+        XCTAssertEqual(spy.pageNumbers.last, 2)
+    }
+
+    /// Pages fitted at different scales: the scale of a page view that takes over
+    /// becomes the reader's last scale, as when PDFKit rescales on a turn.
+    func testTakeoverUpdatesTheLastScale() throws {
+        let wide = PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))
+        let narrow = PageSpec(content: CGRect(x: 156, y: 96, width: 300, height: 600))
+        let harness = try makeHarness(pages: [wide, narrow, wide], viewSize: Self.portrait)
+        waitForJumpMaskToClear(harness)
+        try waitForRenderedBuffers(harness, pages: [2])
+        let old = harness.pdfView
+        let next = try XCTUnwrap(harness.surface.bufferViews.first { $0.currentPage?.pageRef?.pageNumber == 2 })
+        XCTAssertNotEqual(next.scaleFactor, old.scaleFactor, accuracy: 0.01, "precondition")
+
+        pressNext(harness)
+
+        XCTAssertTrue(harness.pdfView === next)
+        XCTAssertEqual(harness.controller.pdfOptions.lastScale, next.scaleFactor, accuracy: 0.0001)
+    }
+
+    /// Options reach the buffers only when they are next refreshed; until then a
+    /// buffer laid out differently neither takes over nor covers.
+    func testBufferLaidOutDifferentlyIsNotUsed() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForRenderedBuffers(harness, pages: [4, 2])
+        let old = harness.pdfView
+        old.displaysRTL = true
+        XCTAssertFalse(harness.surface.hasRenderedBuffer(showing: harness.page(3)))
+
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+        XCTAssertTrue(harness.pdfView === old, "no takeover")
+        XCTAssertNil(harness.surface.coveringView)
+    }
+
+    /// PDFKit draws the same tiles for every view at a scale and the draw log does
+    /// not know which view drew; the tiles an unrendered covering buffer still
+    /// draws are not taken for the page view's.
+    func testCoverByAnUnrenderedBufferOwesItsTiles() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForBuffers(harness, pages: [4, 2])
+        harness.surface.discardBuffers()
+        harness.controller.refreshPageBuffers()
+
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+        let cover = try XCTUnwrap(harness.surface.coveringView)
+        let page = try XCTUnwrap(cover.currentPage)
+        let shown = harness.surface.shownTiles(of: cover, page: page)
+        XCTAssertFalse(harness.surface.coverOwedTiles.isEmpty)
+        XCTAssertTrue(harness.surface.coverOwedTiles.isSubset(of: shown))
+    }
+
+    func testCoverByARenderedBufferOwesNothing() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForRenderedBuffers(harness, pages: [4, 2])
+
+        let slider = harness.controller.pageSlider
+        slider.maximumValue = 5
+        slider.value = 4
+        slider.sendActions(for: .valueChanged)
+
+        XCTAssertNotNil(harness.surface.coveringView)
+        XCTAssertEqual(harness.surface.coverOwedTiles, [])
+    }
+
+    /// Guards the PDFKit tile layout the buffers depend on (see `PDFPageTile`): a
+    /// rendered page's draws must be recognised as the tiles its view shows.
+    func testRenderedPageDrawsArePDFKitTiles() throws {
+        let harness = try makeJumpHarness()
+        settle(0.5)
+        let view = harness.pdfView
+        let page = try XCTUnwrap(view.currentPage)
+        let pageNumber = try XCTUnwrap(page.pageRef?.pageNumber)
+        let shown = harness.surface.shownTiles(of: view, page: page)
+        let counts = harness.controller.pageRenderTheme.tileDrawCounts(
+            ofPage: pageNumber,
+            pixelsPerPoint: view.scaleFactor * view.traitCollection.displayScale,
+            after: 0
+        )
+
+        XCTAssertFalse(shown.isEmpty)
+        XCTAssertTrue(shown.isSubset(of: Set(counts.keys)), "PDFKit tile layout changed: shown \(shown), drawn \(counts.keys)")
+    }
+
+    func testTileGrid() {
+        XCTAssertEqual(PDFPageTile(drawnWith: CGAffineTransform(a: 3, b: 0, c: 0, d: 3, tx: 1, ty: -1023)), PDFPageTile(column: 0, row: 1))
+        XCTAssertEqual(PDFPageTile(drawnWith: CGAffineTransform(a: 6, b: 0, c: 0, d: 6, tx: -2047, ty: -4095)), PDFPageTile(column: 2, row: 4))
+        XCTAssertNil(PDFPageTile(drawnWith: CGAffineTransform(a: 0.5, b: 0, c: 0, d: 0.5, tx: 0, ty: 0)), "a thumbnail")
+
+        // A whole 612 x 792 page at 3 pixels per point: 1836 x 2376 pixels.
+        XCTAssertEqual(PDFPageTile.tiles(covering: CGRect(x: 0, y: 0, width: 612, height: 792), pixelsPerPoint: 3).count, 6)
+        // Zoomed in (as PDFKit drew it): columns 0...1, rows 1...3.
+        let zoomed = PDFPageTile.tiles(covering: CGRect(x: 92, y: 229.5, width: 195, height: 422), pixelsPerPoint: 6)
+        XCTAssertEqual(zoomed, Set((0...1).flatMap { column in (1...3).map { PDFPageTile(column: column, row: $0) } }))
+        XCTAssertEqual(PDFPageTile.tiles(covering: .null, pixelsPerPoint: 3), [])
+    }
+
+    func testDrawLogCountsTileDraws() {
+        let log = PDFPageRenderTheme()
+        let tile = CGAffineTransform(a: 3, b: 0, c: 0, d: 3, tx: 1, ty: 1)
+        log.noteDraw(ofPage: 1, ctm: tile)
+        usleep(1000)
+        let between = CACurrentMediaTime()
+        usleep(1000)
+        log.noteDraw(ofPage: 1, ctm: tile)
+        log.noteDraw(ofPage: 1, ctm: CGAffineTransform(a: 3, b: 0, c: 0, d: 3, tx: -1023, ty: 1))
+        log.noteDraw(ofPage: 1, ctm: CGAffineTransform(a: 2, b: 0, c: 0, d: 2, tx: 1, ty: 1))
+
+        XCTAssertEqual(log.tileDrawCounts(ofPage: 1, pixelsPerPoint: 3, after: 0), [PDFPageTile(column: 0, row: 0): 2, PDFPageTile(column: 1, row: 0): 1])
+        XCTAssertEqual(log.tileDrawCounts(ofPage: 1, pixelsPerPoint: 3, after: between), [PDFPageTile(column: 0, row: 0): 1, PDFPageTile(column: 1, row: 0): 1])
+        XCTAssertEqual(log.tileDrawCounts(ofPage: 2, pixelsPerPoint: 3, after: 0), [:])
+    }
+
+    /// A viewport past PDFKit's scroll range (here the page's bottom edge at the
+    /// view's top) is reached with extra inset; continuous mode must not keep it.
+    func testScrollModeDropsTheViewportExtraInset() throws {
+        let harness = try makeJumpHarness()
+        let page = try XCTUnwrap(harness.pdfView.currentPage)
+        harness.pdfView.applyViewport(
+            PDFPageViewportFit(scale: harness.pdfView.scaleFactor, pageAnchor: CGPoint(x: 0, y: 0), viewAnchor: .zero),
+            on: page
+        )
+        XCTAssertNotEqual(harness.pdfView.viewportExtraInset, .zero, "precondition")
+
+        var options = harness.controller.pdfOptions
+        options.pageMode = .Scroll
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+
+        XCTAssertEqual(harness.pdfView.viewportExtraInset, .zero)
     }
 
     /// A page whose saved position (here, scale) differs from the buffer's is not
@@ -2106,4 +2301,9 @@ private extension UIColor {
         getRed(&r, green: &g, blue: &b, alpha: &a)
         return (Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
     }
+}
+
+@available(iOS 16.0, macCatalyst 16.0, *)
+private final class PageWithBackgroundDelegate: NSObject, PDFDocumentDelegate {
+    func classForPage() -> AnyClass { PDFPageWithBackground.self }
 }
