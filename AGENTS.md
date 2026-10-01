@@ -66,6 +66,26 @@ Mac Catalyst build command:
 xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages build
 ```
 
+### Simulator Set
+
+Keep one iPhone and one iPad per major iOS version; do not create extra device
+models. Look UDIDs up with `xcrun simctl list devices available` rather than
+hard-coding them.
+
+| iOS | iPhone | iPad |
+|---|---|---|
+| 17.5 | none | iPad Pro (10.5-inch) |
+| 18.5 | iPhone 16 | iPad mini (A17 Pro) |
+| 26.5 | iPhone 17 | iPad mini (A17 Pro) |
+
+- `name=iPhone 17` in the commands above resolves to the iOS 26.5 device. For
+  iOS 18 runs pass `platform=iOS Simulator,id=<iPhone 16 UDID>`.
+- When a simulator runtime is removed in Xcode, its devices stay on disk as
+  `unavailable`. Clear them with `xcrun simctl delete unavailable`.
+- If a delete fails with "Operation not permitted", QuickLook thumbnails under
+  `data/.DocumentRevisions-V100` are read-only directories. Run
+  `chmod -R u+w <device dir>` on the device directory, then delete it again.
+
 If a full test run is too expensive for the change, run the narrowest relevant
 test target or class first, then state exactly what was and was not verified.
 
