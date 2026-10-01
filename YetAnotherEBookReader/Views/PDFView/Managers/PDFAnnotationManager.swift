@@ -11,7 +11,7 @@ class PDFAnnotationManager {
     private weak var surface: PDFReaderSurface?
     private var pdfView: YabrPDFView? { surface?.activeView }
     weak var delegate: ReaderEngineDelegate?
-    private var bookId: String
+    private(set) var bookId: String
     
     private var activeHighlights = [UUID: ReaderEngineHighlight]()
 

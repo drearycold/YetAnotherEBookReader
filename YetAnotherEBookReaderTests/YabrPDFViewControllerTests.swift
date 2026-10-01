@@ -446,6 +446,15 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(repository.savedPDFPreferences, [PDFPreferenceValue()])
     }
 
+    /// Highlights are saved under the id they are read back with (the book's
+    /// annotation id), not the shelf identity, or the highlight list and the next
+    /// open never see them.
+    func testHighlightsAreSavedUnderTheAnnotationBookId() throws {
+        let controller = YabrPDFViewController()
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil, key: "shelf-key")
+        XCTAssertEqual(controller.annotationManager.bookId, "pref-shelf-key")
+    }
+
     func testSharePDFOriginalCreatesTemporaryFileAndPresentsActivityController() throws {
         let pdfURL = try makePDFURL(name: "share-original", pageCount: 1)
         let controller = SpyYabrPDFViewController()
@@ -560,6 +569,8 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
             return author
         case "Key":
             return key
+        case "PrefId":
+            return "pref-\(key)"
         default:
             return nil
         }

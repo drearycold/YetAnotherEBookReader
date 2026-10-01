@@ -52,7 +52,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     var initialPosition: ReaderEnginePosition?
     
     lazy var annotationManager: PDFAnnotationManager = {
-        let bookId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Key") ?? ""
+        // The id the highlights are read back with, not the shelf identity.
+        let bookId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "PrefId") ?? ""
         return PDFAnnotationManager(surface: surface, delegate: readerEngineDelegate, bookId: bookId)
     }()
     lazy var bookmarkManager = PDFBookmarkManager(surface: surface, metaSource: yabrPDFMetaSource)

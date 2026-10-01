@@ -207,7 +207,13 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             )
             let ret = pdfViewController.open()
             if ret == 0 {
-                // Load and apply initial highlights for PDF
+                // Load and apply initial highlights for PDF, recovering the ones
+                // saved under the shelf identity first.
+                container.annotationRepository.refileHighlights(
+                    fromBookId: book.inShelfId,
+                    toBookId: book.bookPrefId,
+                    readerName: ReaderType.YabrPDF.rawValue
+                )
                 let highlights = container.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
                 pdfViewController.applyHighlights(highlights)
                 

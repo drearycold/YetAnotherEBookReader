@@ -50,6 +50,9 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
             return book.authors.first!
         case "Key":
             return book.inShelfId
+        case "PrefId":
+            // Annotations are stored under this id (see `yabrPDFHighlights`).
+            return book.bookPrefId
         default:
             return nil
         }
