@@ -168,6 +168,101 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(nav.overrideUserInterfaceStyle, .light)
     }
 
+    /// Search is its own sheet, opened from the nav bar as in FolioReader, and it
+    /// keeps its query and results between presentations.
+    func testSearchHasItsOwnButtonAndKeepsItsState() throws {
+        let pdfURL = try makePDFURL(name: "search-button", pageCount: 2)
+        let controller = SpyYabrPDFViewController()
+        let metaSource = MockYabrPDFMetaSource(pdfURL: pdfURL)
+        controller.yabrPDFMetaSource = metaSource
+        XCTAssertEqual(controller.open(), 0)
+        controller.loadViewIfNeeded()
+
+        let left = try XCTUnwrap(controller.navigationItem.leftBarButtonItems)
+        XCTAssertEqual(left.map(\.title), ["Navigations", "Annotations", "Search"])
+        XCTAssertEqual(left.last?.image, UIImage(systemName: "magnifyingglass"))
+
+        controller.presentSearch()
+        let nav = try XCTUnwrap(controller.capturedPresentedViewController as? UINavigationController)
+        XCTAssertTrue(nav.viewControllers.first === controller.searchList)
+        XCTAssertEqual(controller.searchList.title, "Search")
+        XCTAssertNotNil(controller.searchList.navigationItem.leftBarButtonItem, "Close")
+        XCTAssertTrue(controller.searchList.pdfViewController === controller, "works without a page VC parent")
+        XCTAssertTrue((controller.searchList.yabrPDFMetaSource as AnyObject?) === metaSource)
+
+        controller.searchList.searchBar.text = "Page"
+        controller.searchList.currentQuery = "Page"
+        nav.viewControllers = []
+        controller.presentSearch()
+        let reopened = try XCTUnwrap(controller.capturedPresentedViewController as? UINavigationController)
+        XCTAssertTrue(reopened.viewControllers.first === controller.searchList, "the same list")
+        XCTAssertEqual(controller.searchList.searchBar.text, "Page")
+        XCTAssertEqual(controller.searchList.currentQuery, "Page")
+    }
+
+    /// As FolioReader's history: newest first, one entry per query regardless
+    /// of case and diacritics, at most 100.
+    func testSearchHistory() {
+        var history = PDFSearchHistory()
+        history.record("Boolean")
+        history.record("  index ")
+        history.record("café")
+        history.record("CAFE")
+        history.record("   ")
+        XCTAssertEqual(history.queries, ["CAFE", "index", "Boolean"])
+
+        history.remove("index")
+        XCTAssertEqual(history.queries, ["CAFE", "Boolean"])
+
+        (0..<120).forEach { history.record("q\($0)") }
+        XCTAssertEqual(history.queries.count, PDFSearchHistory.maxCount)
+        XCTAssertEqual(history.queries.first, "q119")
+    }
+
+    /// An empty search bar lists this session's searches; picking one searches
+    /// it again; opening a result records its query. The history lives with
+    /// the reader's search list, so reopening the sheet keeps it.
+    func testSearchListShowsHistoryWhenEmpty() throws {
+        let controller = SpyYabrPDFViewController()
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: try makePDFURL(name: "search-history", pageCount: 1))
+        XCTAssertEqual(controller.open(), 0)
+        let list = controller.searchList
+        list.loadViewIfNeeded()
+        XCTAssertTrue(list.history.isEmpty, "nothing carried over from earlier sessions")
+
+        list.currentQuery = "inverted index"
+        list.recordCurrentQuery()
+        list.currentQuery = "posting"
+        list.recordCurrentQuery()
+        list.currentQuery = ""
+        list.tableView.reloadData()
+
+        XCTAssertTrue(list.isShowingHistory)
+        XCTAssertEqual(list.tableView(list.tableView, numberOfRowsInSection: 0), 2)
+        let first = list.tableView(list.tableView, cellForRowAt: IndexPath(row: 0, section: 0))
+        XCTAssertEqual((first.contentConfiguration as? UIListContentConfiguration)?.text, "posting")
+
+        list.tableView(list.tableView, didSelectRowAt: IndexPath(row: 1, section: 0))
+        XCTAssertEqual(list.searchBar.text, "inverted index")
+        XCTAssertEqual(list.currentQuery, "inverted index")
+        XCTAssertFalse(list.isShowingHistory)
+
+        controller.presentSearch()
+        XCTAssertEqual(controller.searchList.history, ["posting", "inverted index"])
+    }
+
+    func testAnnotationsSheetHasNoSearchTab() {
+        let controller = SpyYabrPDFViewController()
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil)
+        let annotations = YabrPDFAnnotationPageVC()
+        annotations.pdfViewController = controller
+        annotations.yabrPDFMetaSource = controller.yabrPDFMetaSource
+        annotations.loadViewIfNeeded()
+
+        XCTAssertEqual(annotations.segmentedControlItems, ["Bookmark", "Highlight"])
+        XCTAssertFalse(annotations.viewList.contains { $0 is YabrPDFSearchList })
+    }
+
     /// A chapter's first page belongs to that chapter only; the last chapter and
     /// pages before the first chapter do not index past the outline list.
     func testCurrentChapterIsUniqueAtChapterBoundaries() {

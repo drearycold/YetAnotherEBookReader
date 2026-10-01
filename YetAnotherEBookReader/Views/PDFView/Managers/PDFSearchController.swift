@@ -34,3 +34,30 @@ class PDFSearchController: NSObject {
         }
     }
 }
+
+/// Recent search queries, newest first, as FolioReader's
+/// `FolioReaderSearchHistoryStore`: a query is kept once (case and diacritics
+/// ignored), and only the last `maxCount`. Held for the reader session only,
+/// as FolioReader's history is in this app (its preference provider does not
+/// persist it).
+struct PDFSearchHistory: Equatable {
+    static let maxCount = 100
+
+    private(set) var queries: [String] = []
+
+    mutating func record(_ rawQuery: String) {
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        queries.removeAll { Self.isEquivalent($0, query) }
+        queries.insert(query, at: 0)
+        queries = Array(queries.prefix(Self.maxCount))
+    }
+
+    mutating func remove(_ query: String) {
+        queries.removeAll { $0 == query }
+    }
+
+    private static func isEquivalent(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+}

@@ -13,11 +13,21 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
     var isSearching = false
     var currentQuery: String = ""
     let activityIndicator = UIActivityIndicatorView(style: .large)
+
+    static let historyCellIdentifier = "io.github.drearycold.DSReader.Cell.SearchHistory"
+    /// This reader session's queries (the list lives as long as the reader).
+    var searchHistory = PDFSearchHistory()
+    var history: [String] { searchHistory.queries }
+    /// As FolioReader: an empty search bar lists the recent searches.
+    var isShowingHistory: Bool {
+        (searchBar.text ?? "").isEmpty && !isSearching
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         self.tableView.register(YabrPDFSearchListCell.self, forCellReuseIdentifier: kReuseCellIdentifier)
+        self.tableView.register(UITableViewCell.self, forCellReuseIdentifier: Self.historyCellIdentifier)
         
         searchBar.delegate = self
         searchBar.placeholder = "Search in PDF"
@@ -45,6 +55,19 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         ])
     }
     
+    /// Kept once a result of it is opened, as FolioReader records queries.
+    func recordCurrentQuery() {
+        searchHistory.record(currentQuery)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // A new search starts typing; a kept one shows its results.
+        if currentQuery.isEmpty {
+            searchBar.becomeFirstResponder()
+        }
+    }
+
     // MARK: - UISearchBarDelegate
     
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
@@ -70,8 +93,9 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         if searchText.isEmpty {
             self.searchResults.removeAll()
             self.currentQuery = ""
-            self.tableView.reloadData()
         }
+        // Switches between the recent searches and the results.
+        self.tableView.reloadData()
     }
     
     // MARK: - Table view data source
@@ -81,10 +105,44 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        if isShowingHistory {
+            return history.count
+        }
         return isSearching ? 0 : searchResults.count
+    }
+
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        guard isShowingHistory, !history.isEmpty,
+              let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: kReuseHeaderFooterIdentifier)
+        else { return nil }
+        let style = listStyle
+        var content = headerView.defaultContentConfiguration()
+        content.text = "Recent Searches"
+        content.textProperties.color = style.secondaryText
+        content.textProperties.font = style.captionFont
+        headerView.contentConfiguration = content
+        var background = UIBackgroundConfiguration.listPlainHeaderFooter()
+        background.backgroundColor = style.background
+        headerView.backgroundConfiguration = background
+        return headerView
+    }
+
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        isShowingHistory && !history.isEmpty ? UITableView.automaticDimension : 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if isShowingHistory {
+            let cell = tableView.dequeueReusableCell(withIdentifier: Self.historyCellIdentifier, for: indexPath)
+            let style = listStyle
+            var content = cell.defaultContentConfiguration()
+            content.text = history[indexPath.row]
+            content.textProperties.font = style.bodyFont
+            content.textProperties.color = style.text
+            cell.contentConfiguration = content
+            cell.backgroundColor = .clear
+            return cell
+        }
         let cell = tableView.dequeueReusableCell(withIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFSearchListCell
         
         guard indexPath.row < searchResults.count else { return cell }
@@ -137,12 +195,35 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
     // MARK: - Table view delegate
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        if isShowingHistory {
+            guard indexPath.row < history.count else { return }
+            tableView.deselectRow(at: indexPath, animated: true)
+            searchBar.text = history[indexPath.row]
+            searchBarSearchButtonClicked(searchBar)
+            return
+        }
         guard indexPath.row < searchResults.count else { return }
         let selection = searchResults[indexPath.row]
-        
+        recordCurrentQuery()
+
         yabrPDFView?.go(to: selection)
         yabrPDFView?.setCurrentSelection(selection, animate: true)
         
         self.dismiss(animated: true)
+    }
+
+    override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard isShowingHistory, indexPath.row < history.count else { return nil }
+        let query = history[indexPath.row]
+        let delete = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, completion in
+            guard let self else { return completion(false) }
+            self.searchHistory.remove(query)
+            tableView.deleteRows(at: [indexPath], with: .fade)
+            if self.history.isEmpty {
+                tableView.reloadData()
+            }
+            completion(true)
+        }
+        return UISwipeActionsConfiguration(actions: [delete])
     }
 }

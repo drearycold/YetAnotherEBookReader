@@ -25,7 +25,6 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     
     let bookmarkViewController = YabrPDFBookmarkList()
     let highlightViewController = YabrPDFHighlightList()
-    let searchViewController = YabrPDFSearchList()
     let referenceViewController = YabrPDFReferenceList()
 
     var index: Int = 0
@@ -46,12 +45,12 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        viewList = [bookmarkViewController, highlightViewController, searchViewController]
+        // Search has its own button (`YabrPDFViewController.presentSearch`).
+        viewList = [bookmarkViewController, highlightViewController]
         bookmarkViewController.didMove(toParent: self)
         highlightViewController.didMove(toParent: self)
-        searchViewController.didMove(toParent: self)
-        
-        segmentedControlItems = ["Bookmark", "Highlight", "Search"]
+
+        segmentedControlItems = ["Bookmark", "Highlight"]
         
         if self.yabrPDFMetaSource?.yabrPDFReferenceText(yabrPDFView) != nil {
             viewList.append(referenceViewController)

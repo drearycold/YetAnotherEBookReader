@@ -10,17 +10,22 @@ import UIKit
 
 @available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFTableViewController: UITableViewController {
+    /// The reader of a list presented on its own (search), outside the
+    /// Annotations / Navigations pages.
+    weak var hostController: YabrPDFViewController?
+
     var pdfViewController: YabrPDFViewController? {
         (self.parent as? YabrPDFAnnotationPageVC)?.pdfViewController
         ?? (self.parent as? YabrPDFNavigationPageVC)?.pdfViewController
+        ?? hostController
     }
     var yabrPDFView: YabrPDFView? {
-        (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFView
-        ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFView
+        pdfViewController?.pdfView
     }
     var yabrPDFMetaSource: YabrPDFMetaSource? {
         (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFMetaSource
         ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFMetaSource
+        ?? hostController?.yabrPDFMetaSource
     }
     /// The reader theme's list look (FolioReader's colours and fonts).
     var listStyle: PDFThemePalette.ListStyle {

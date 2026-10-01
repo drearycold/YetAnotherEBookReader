@@ -59,6 +59,14 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     lazy var bookmarkManager = PDFBookmarkManager(surface: surface, metaSource: yabrPDFMetaSource)
     lazy var searchController = PDFSearchController(surface: surface, metaSource: yabrPDFMetaSource)
     lazy var menuManager = PDFMenuManager(controller: self)
+    /// The search sheet's list, kept while the reader is open so reopening
+    /// shows the last query and its results, as FolioReader's search does.
+    lazy var searchList: YabrPDFSearchList = {
+        let list = YabrPDFSearchList()
+        list.hostController = self
+        list.title = "Search"
+        return list
+    }()
     let marginCropController = PDFMarginCropController()
 
     /// Read by `PDFPageWithBackground.draw` on PDFKit's render threads.

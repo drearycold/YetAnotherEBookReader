@@ -320,6 +320,15 @@ extension YabrPDFViewController {
     }
 
     /// Sheets presented from the reader take the reader theme's nav bar.
+    /// The search sheet; it keeps its query and results between presentations.
+    func presentSearch() {
+        let list = searchList
+        list.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", primaryAction: UIAction { [weak list] _ in
+            list?.dismiss(animated: true)
+        })
+        present(themedNavigationController(rootViewController: list), animated: true)
+    }
+
     /// Sheets look like FolioReader's: the sheet surface, accent bar buttons.
     func themedNavigationController(rootViewController: UIViewController) -> UINavigationController {
         let palette = pdfOptions.themePalette
@@ -376,7 +385,11 @@ extension YabrPDFViewController {
                 let nav = self.themedNavigationController(rootViewController: annotationController)
 
                 self.present(nav, animated: true)
-            }))
+            })),
+            // FolioReader's order: contents, bookmarks, search.
+            UIBarButtonItem(title: "Search", image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in
+                self?.presentSearch()
+            })
         ], animated: true)
 
         let shareOriginalPDF = UIAction(title: "Original PDF") { [self] action in
