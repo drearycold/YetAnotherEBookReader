@@ -24,17 +24,14 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         searchBar.sizeToFit()
         searchBar.searchBarStyle = .default
         
-        if let bgColor = backgroundColor {
-            searchBar.barTintColor = bgColor
-            searchBar.backgroundColor = bgColor
-            searchBar.tintColor = textColor
-            searchBar.searchTextField.textColor = textColor
-            searchBar.searchTextField.backgroundColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-                yabrPDFView,
-                UIColor(white: 0.2, alpha: 1.0),
-                UIColor(white: 0.9, alpha: 1.0)
-            )
-        }
+        // The field takes the system colours of the sheet's interface style.
+        let style = listStyle
+        searchBar.barTintColor = style.background
+        searchBar.backgroundColor = style.background
+        searchBar.backgroundImage = UIImage()
+        searchBar.tintColor = style.accent
+        searchBar.searchTextField.textColor = style.text
+        searchBar.searchTextField.font = style.bodyFont
         
         self.tableView.tableHeaderView = searchBar
         
@@ -93,13 +90,8 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         guard indexPath.row < searchResults.count else { return cell }
         let selection = searchResults[indexPath.row]
         
-        let textColor = self.textColor ?? UIColor.black
-        let pageColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor(white: 0.7, alpha: 1.0),
-            UIColor.darkGray
-        ) ?? UIColor.darkGray
-        
+        let style = listStyle
+
         if let page = selection.pages.first, let pageNum = page.pageRef?.pageNumber {
             var pageTitle = "Page \(pageNum)"
             if let outlineLabel = yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: pageNum)?.label, !outlineLabel.isEmpty {
@@ -109,22 +101,20 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         } else {
             cell.pageLabel.text = "Unknown Page"
         }
-        cell.pageLabel.textColor = pageColor
-        
-        // Generate snippet preview
-        let previewText = getPreview(for: selection, query: currentQuery)
-        let attributed = NSMutableAttributedString(attributedString: previewText)
-        let fullRange = NSRange(location: 0, length: attributed.length)
-        attributed.addAttribute(.foregroundColor, value: textColor, range: fullRange)
-        
-        cell.snippetLabel.attributedText = attributed
+        cell.pageLabel.font = style.captionFont
+        cell.pageLabel.textColor = style.secondaryText
+
+        cell.snippetLabel.attributedText = getPreview(for: selection, query: currentQuery, style: style)
         
         return cell
     }
     
-    private func getPreview(for selection: PDFSelection, query: String) -> NSAttributedString {
+    /// The match in context, marked as FolioReader's search marks it: heavier
+    /// and in the accent colour.
+    private func getPreview(for selection: PDFSelection, query: String, style: PDFThemePalette.ListStyle) -> NSAttributedString {
+        let base: [NSAttributedString.Key: Any] = [.font: style.bodyFont, .foregroundColor: style.text]
         guard let previewSelection = selection.copy() as? PDFSelection else {
-            return NSAttributedString(string: selection.string ?? "")
+            return NSAttributedString(string: selection.string ?? "", attributes: base)
         }
         previewSelection.extend(atStart: 25)
         previewSelection.extend(atEnd: 75)
@@ -133,10 +123,13 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         let fullText = previewSelection.string ?? ""
         let cleanText = fullText.replacingOccurrences(of: "\n", with: " ")
         
-        let attributed = NSMutableAttributedString(string: cleanText)
+        let attributed = NSMutableAttributedString(string: cleanText, attributes: base)
         let range = (cleanText as NSString).range(of: query, options: .caseInsensitive)
         if range.location != NSNotFound {
-            attributed.addAttribute(.font, value: UIFont.boldSystemFont(ofSize: 14), range: range)
+            attributed.addAttributes([
+                .font: UIFont(name: "Avenir-Black", size: style.bodyFont.pointSize) ?? .boldSystemFont(ofSize: style.bodyFont.pointSize),
+                .foregroundColor: style.accent,
+            ], range: range)
         }
         return attributed
     }

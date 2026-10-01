@@ -320,11 +320,13 @@ extension YabrPDFViewController {
     }
 
     /// Sheets presented from the reader take the reader theme's nav bar.
+    /// Sheets look like FolioReader's: the sheet surface, accent bar buttons.
     func themedNavigationController(rootViewController: UIViewController) -> UINavigationController {
         let palette = pdfOptions.themePalette
-        palette.apply(to: rootViewController.navigationItem)
+        palette.applySheet(to: rootViewController.navigationItem)
         let nav = UINavigationController(rootViewController: rootViewController)
-        palette.apply(to: nav.navigationBar)
+        nav.overrideUserInterfaceStyle = palette.listStyle.userInterfaceStyle
+        nav.navigationBar.tintColor = palette.listStyle.accent
         return nav
     }
 

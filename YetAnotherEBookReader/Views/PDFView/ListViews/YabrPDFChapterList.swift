@@ -45,23 +45,37 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         }
     }
     
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        
-        guard let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber else { return }
-
-        var outlineIndex = outlines.endIndex - 1
-        for i in outlines.indices {
-            if (outlines[i].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
-               (outlines[i+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
-                outlineIndex = i
+    /// The chapter being read: the last outline that starts on or before
+    /// `currentPage` (pages are 1-based). A chapter's first page belongs to it
+    /// only, not also to the one before. `nil` before the first chapter.
+    static func currentIndex(startPages: [Int?], currentPage: Int) -> Int? {
+        var current: Int?
+        for (index, start) in startPages.enumerated() {
+            guard let start else { continue }
+            if start <= currentPage {
+                current = index
+            } else if current != nil {
                 break
             }
         }
-        
-        guard outlineIndex >= 0 else { return }
-        
-        self.tableView.scrollToRow(at: IndexPath(row: outlineIndex, section: 0), at: .middle, animated: true)
+        return current
+    }
+
+    var currentOutlineIndex: Int? {
+        guard let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber else { return nil }
+        return Self.currentIndex(
+            startPages: outlines.map { $0.destination?.page?.pageRef?.pageNumber },
+            currentPage: currentPageNumber
+        )
+    }
+
+    /// The list is built for one presentation; the page does not change under it.
+    private lazy var currentRow: Int? = currentOutlineIndex
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard let index = currentRow else { return }
+        self.tableView.scrollToRow(at: IndexPath(row: index, section: 0), at: .middle, animated: true)
     }
     
     // MARK: - Table view data source
@@ -78,7 +92,6 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         let cell = tableView.dequeueReusableCell(withIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFChapterListCell
 
         let outline = outlines[indexPath.row]
-        let isSection = outline.numberOfChildren > 0
 
         var outlineLevel = 0
         var outlineParent = outline.parent
@@ -86,33 +99,14 @@ class YabrPDFChapterList: YabrPDFTableViewController {
             outlineLevel += 1
             outlineParent = outlineParent?.parent
         }
-        
-        let indentCount = max(outlineLevel - 1, 0)
-        cell.indexLabel.text = Array.init(repeating: " ", count: indentCount * 2).joined() + (outline.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "No Label")
-        cell.indexLabel.textColor = textColor
 
-        if let pageNumber = outline.destination?.page?.pageRef?.pageNumber {
-            cell.pageLabel.text = "p. \(pageNumber)"
-        } else {
-            cell.pageLabel.text = ""
-        }
-        cell.pageLabel.textColor = .darkGray
-        
-        // TODO: Mark current reading chapter
-        
-        cell.layoutMargins = UIEdgeInsets.zero
-        cell.preservesSuperviewLayoutMargins = false
-        cell.contentView.backgroundColor = isSection ? UIColor(white: 0.7, alpha: 0.1) : UIColor.clear
-        cell.backgroundColor = UIColor.clear
-        
-        if indexPath.row + 1 == outlines.endIndex {
-            cell.backgroundColor = .lightGray
-        } else if let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber,
-                  (outlines[indexPath.row].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
-                  (outlines[indexPath.row+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
-            cell.backgroundColor = .lightGray
-        }
-        
+        cell.configure(
+            title: outline.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "No Label",
+            page: outline.destination?.page?.pageRef?.pageNumber,
+            level: max(outlineLevel - 1, 0),
+            isCurrent: indexPath.row == currentRow,
+            style: listStyle
+        )
         return cell
     }
     

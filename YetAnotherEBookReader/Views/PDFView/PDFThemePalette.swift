@@ -110,12 +110,15 @@ extension PDFThemePalette {
         return background.alpha > 0 ? UIColor(cgColor: background) : .systemBackground
     }
 
-    /// The nav bar of a sheet, on `sheetBackground`.
+    /// The nav bar of a sheet, on `sheetBackground`, titled like FolioReader's
+    /// list sheets.
     func applySheet(to navigationItem: UINavigationItem) {
         let appearance = navigationBarAppearance()
         if background.alpha > 0 {
             appearance.backgroundColor = sheetBackground
         }
+        let style = listStyle
+        appearance.titleTextAttributes = [.foregroundColor: style.text, .font: style.titleFont()]
         navigationItem.standardAppearance = appearance
         navigationItem.scrollEdgeAppearance = appearance
         navigationItem.compactAppearance = appearance
@@ -137,5 +140,94 @@ extension PDFThemePalette {
 
     func apply(to navigationBar: UINavigationBar) {
         navigationBar.tintColor = barTintColor
+    }
+}
+
+// MARK: - Lists
+
+extension PDFThemePalette {
+    /// The look of the Navigations / Annotations lists. FolioReader's menu
+    /// colours and fonts (`FolioReaderConfig`), so both readers' lists match;
+    /// only the dark sheet differs: raised grey instead of black, or it would
+    /// merge with the black page.
+    struct ListStyle {
+        let background: UIColor
+        let text: UIColor
+        let secondaryText: UIColor
+        let separator: UIColor
+        /// Text over a highlight fill: under dark the page's light text (the dim
+        /// fill under FolioReader's grey falls short of a readable contrast).
+        let highlightText: UIColor
+        /// FolioReader's `tintColor` / `menuTextColorSelected`: the current item,
+        /// the selected segment, bar buttons, search matches.
+        let accent: UIColor
+        let userInterfaceStyle: UIUserInterfaceStyle
+        let isDark: Bool
+
+        /// FolioReader's chapter titles: Avenir-Light, 1.5 pt smaller per level.
+        func titleFont(level: Int = 0) -> UIFont {
+            Self.avenir("Avenir-Light", size: 17 - 1.5 * CGFloat(min(level, 4)))
+        }
+        var bodyFont: UIFont { Self.avenir("Avenir-Light", size: 16) }
+        /// Dates and page labels.
+        var captionFont: UIFont { Self.avenir("Avenir-Medium", size: 12) }
+
+        /// How a highlight is marked in a list: under dark the page's dim fill
+        /// (FolioReader's 0.9 fill would wash the light text out).
+        @available(iOS 16.0, macCatalyst 16.0, *)
+        func highlightFill(_ style: BookHighlightStyle) -> UIColor {
+            isDark ? PDFHighlightAnnotations.darkColor(for: style) : BookHighlightStyle.colorForStyle(style.rawValue)
+        }
+
+        /// FolioReader's list tabs: the accent behind the selected segment.
+        func apply(to segmentedControl: UISegmentedControl) {
+            segmentedControl.selectedSegmentTintColor = accent
+            segmentedControl.setTitleTextAttributes([.foregroundColor: text], for: .selected)
+            segmentedControl.setTitleTextAttributes([.foregroundColor: text.withAlphaComponent(0.7)], for: .normal)
+        }
+
+        private static func avenir(_ name: String, size: CGFloat) -> UIFont {
+            UIFont(name: name, size: size) ?? .systemFont(ofSize: size)
+        }
+
+        static func srgb(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
+            UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: alpha
+            )
+        }
+    }
+
+    var listStyle: ListStyle {
+        let text: UIColor
+        let secondaryText: UIColor
+        // FolioReader's `menuTextColor` grey (4.5:1 on white) is too faint on the
+        // tints, which fade their own text instead; all reach 4.5:1.
+        switch themeMode {
+        case .none:
+            text = .black
+            secondaryText = ListStyle.srgb(0x767676)
+        case .serpia:
+            text = ListStyle.srgb(0x5F4B32)
+            secondaryText = text.withAlphaComponent(0.85)
+        case .forest:
+            text = ListStyle.srgb(0x37453F)
+            secondaryText = text.withAlphaComponent(0.85)
+        case .dark:
+            text = ListStyle.srgb(0xB6B6B6)
+            secondaryText = text.withAlphaComponent(0.75)
+        }
+        return ListStyle(
+            background: sheetBackground,
+            text: text,
+            secondaryText: secondaryText,
+            separator: drawsInverted ? UIColor(white: 0.5, alpha: 0.2) : ListStyle.srgb(0xD7D7D7),
+            highlightText: drawsInverted ? UIColor(white: 0.92, alpha: 1) : text,
+            accent: ListStyle.srgb(0x6ACC50),
+            userInterfaceStyle: drawsInverted ? .dark : .light,
+            isDark: drawsInverted
+        )
     }
 }

@@ -74,25 +74,18 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
             return cell
         }
 
+        let style = listStyle
         cell.dateLabel.text = dateFormatter.string(from: bookmark.date).uppercased()
-        cell.dateLabel.textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor(white: 5, alpha: 0.3),
-            UIColor.lightGray
-        )
-        cell.titleLabel.textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor.lightGray,
-            UIColor.black
-        )
+        cell.dateLabel.font = style.captionFont
+        cell.dateLabel.textColor = style.secondaryText
+        cell.titleLabel.font = style.bodyFont
+        cell.titleLabel.textColor = style.text
         cell.titleLabel.text = bookmark.title
-        
-        cell.titleField.textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor.lightGray,
-            UIColor.black
-        )
-        
+
+        cell.titleField.font = style.bodyFont
+        cell.titleField.textColor = style.text
+        cell.titleSaveButton.setTitleColor(style.accent, for: .normal)
+
         cell.titleField.text = bookmark.title
         cell.titleField.sizeToFit()
         
@@ -109,28 +102,6 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
         return cell
     }
 
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        guard let bookmark = sectionBookmarks[sections[indexPath.section]]?[indexPath.row] else {
-            return 0.0
-        }
-
-        let cleanString = bookmark.title
-        let text = NSMutableAttributedString(string: cleanString)
-        let range = NSRange(location: 0, length: text.length)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 3
-        text.addAttribute(NSAttributedString.Key.paragraphStyle, value: paragraph, range: range)
-        text.addAttribute(NSAttributedString.Key.font, value: UIFont(name: "Avenir-Light", size: 16)!, range: range)
-
-        let s = text.boundingRect(with: CGSize(width: view.frame.width-40, height: CGFloat.greatestFiniteMagnitude),
-                                  options: [NSStringDrawingOptions.usesLineFragmentOrigin, NSStringDrawingOptions.usesFontLeading],
-                                  context: nil)
-
-        let totalHeight = s.size.height + 66
-        
-        return totalHeight
-    }
-    
     // MARK: - Table view delegate
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

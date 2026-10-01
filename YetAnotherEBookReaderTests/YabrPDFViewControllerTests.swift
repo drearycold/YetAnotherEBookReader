@@ -161,7 +161,108 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
         XCTAssertTrue(nav.viewControllers.first === root)
         XCTAssertEqual(root.navigationItem.standardAppearance?.backgroundColor?.cgColor.components, controller.pdfOptions.fillColor.components)
-        XCTAssertEqual(nav.navigationBar.tintColor, .darkText)
+        // FolioReader's sheets: accent bar buttons, titles in the theme's text colour.
+        let style = controller.pdfOptions.themePalette.listStyle
+        XCTAssertEqual(nav.navigationBar.tintColor, style.accent)
+        XCTAssertEqual(root.navigationItem.standardAppearance?.titleTextAttributes[.foregroundColor] as? UIColor, style.text)
+        XCTAssertEqual(nav.overrideUserInterfaceStyle, .light)
+    }
+
+    /// A chapter's first page belongs to that chapter only; the last chapter and
+    /// pages before the first chapter do not index past the outline list.
+    func testCurrentChapterIsUniqueAtChapterBoundaries() {
+        let starts: [Int?] = [31, 38, 40]
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: starts, currentPage: 38), 1)
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: starts, currentPage: 39), 1)
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: starts, currentPage: 37), 0)
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: starts, currentPage: 581), 2)
+        XCTAssertNil(YabrPDFChapterList.currentIndex(startPages: starts, currentPage: 30))
+        XCTAssertNil(YabrPDFChapterList.currentIndex(startPages: [], currentPage: 1))
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: [nil, 10, 20], currentPage: 15), 1, "outlines without a page are skipped")
+        XCTAssertEqual(YabrPDFChapterList.currentIndex(startPages: [10, 10, 20], currentPage: 10), 1, "the deepest of outlines on the same page")
+    }
+
+    func testChapterCellMarksCurrentInAccentAndIndentsByLevel() {
+        let style = PDFThemePalette(themeMode: .serpia).listStyle
+        let cell = YabrPDFChapterListCell(style: .default, reuseIdentifier: nil)
+
+        cell.configure(title: "Boolean retrieval", page: 38, level: 0, isCurrent: true, style: style)
+        XCTAssertEqual(cell.indexLabel.textColor, style.accent)
+        XCTAssertEqual(cell.pageLabel.text, "p. 38")
+        XCTAssertEqual(cell.indexLeadingConstraint.constant, YabrPDFChapterListCell.baseIndent)
+        XCTAssertNil(cell.contentView.backgroundColor, "no row background, as in FolioReader")
+
+        cell.configure(title: "An example", page: 40, level: 2, isCurrent: false, style: style)
+        XCTAssertEqual(cell.indexLabel.textColor, style.text)
+        XCTAssertEqual(cell.indexLeadingConstraint.constant, YabrPDFChapterListCell.baseIndent + 2 * YabrPDFChapterListCell.indentPerLevel)
+        XCTAssertEqual(cell.indexLabel.font.pointSize, 14)
+    }
+
+    /// Under dark a listed highlight uses the page's dim fill, so its text stays
+    /// readable; rows grow with the text and the note.
+    func testHighlightCellIsReadableAndSelfSizing() throws {
+        let style = PDFThemePalette(themeMode: .dark).listStyle
+        let fill = style.highlightFill(.yellow)
+        XCTAssertEqual(components(fill, style: .dark).3, PDFHighlightAnnotations.darkFillAlpha, accuracy: 0.01)
+        let fillOverSheet = UIColor(
+            red: components(fill, style: .dark).0 * PDFHighlightAnnotations.darkFillAlpha + components(style.background, style: .dark).0 * (1 - PDFHighlightAnnotations.darkFillAlpha),
+            green: components(fill, style: .dark).1 * PDFHighlightAnnotations.darkFillAlpha + components(style.background, style: .dark).1 * (1 - PDFHighlightAnnotations.darkFillAlpha),
+            blue: components(fill, style: .dark).2 * PDFHighlightAnnotations.darkFillAlpha + components(style.background, style: .dark).2 * (1 - PDFHighlightAnnotations.darkFillAlpha),
+            alpha: 1
+        )
+        XCTAssertGreaterThanOrEqual(contrast(style.highlightText, fillOverSheet, style: .dark), 4.5)
+
+        let cell = YabrPDFHighlightListCell(style: .default, reuseIdentifier: nil)
+        func height(_ highlight: PDFHighlight) -> CGFloat {
+            cell.configure(highlight: highlight, date: "TODAY", style: style)
+            return cell.contentView.systemLayoutSizeFitting(
+                CGSize(width: 400, height: 0),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height
+        }
+        let short = PDFHighlight(uuid: UUID(), pos: [], type: BookHighlightStyle.yellow.rawValue, content: "Short", note: nil, date: Date())
+        var long = short
+        long.content = String(repeating: "A long highlighted passage that wraps. ", count: 8)
+        let shortHeight = height(short)
+        XCTAssertTrue(cell.noteLabel.isHidden)
+        let longHeight = height(long)
+        XCTAssertGreaterThan(longHeight, shortHeight + 40, "the whole passage shows")
+        long.note = "A thought"
+        XCTAssertGreaterThan(height(long), longHeight)
+        XCTAssertFalse(cell.noteLabel.isHidden)
+        let attributes = cell.highlightLabel.attributedText?.attributes(at: 0, effectiveRange: nil)
+        XCTAssertEqual(attributes?[.backgroundColor] as? UIColor, fill)
+    }
+
+    /// Thumbnails look like the page: inverted under dark, tinted to the theme
+    /// colour under sepia and forest.
+    func testThumbnailRendersLikeThePage() throws {
+        let document = try XCTUnwrap(PDFDocument(url: makePDFURL(name: "thumbnail", pageCount: 1)))
+        let page = try XCTUnwrap(document.page(at: 0))
+        /// The blank bottom-right corner, 0...255 per channel.
+        func corner(_ image: UIImage) throws -> (Int, Int, Int) {
+            let cgImage = try XCTUnwrap(image.cgImage)
+            var pixel = [UInt8](repeating: 0, count: 4)
+            let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+            let context = try XCTUnwrap(CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(cgImage, in: CGRect(x: -CGFloat(cgImage.width) + 4, y: -2, width: CGFloat(cgImage.width), height: CGFloat(cgImage.height)))
+            return (Int(pixel[0]), Int(pixel[1]), Int(pixel[2]))
+        }
+        func render(_ theme: PDFThemeMode) throws -> (Int, Int, Int) {
+            try corner(YabrPDFThumbnailList.renderThumbnail(of: page, size: CGSize(width: 90, height: 120), palette: PDFThemePalette(themeMode: theme)))
+        }
+        let none = try render(.none)
+        XCTAssertGreaterThan(min(none.0, none.1, none.2), 240)
+        let dark = try render(.dark)
+        XCTAssertLessThan(max(dark.0, dark.1, dark.2), 20)
+        for theme in [PDFThemeMode.serpia, .forest] {
+            let tinted = try render(theme)
+            let background = try XCTUnwrap(PDFThemePalette(themeMode: theme).background.components)
+            XCTAssertEqual(Double(tinted.0), Double(background[0] * 255), accuracy: 3, "\(theme) \(tinted)")
+            XCTAssertEqual(Double(tinted.1), Double(background[1] * 255), accuracy: 3, "\(theme) \(tinted)")
+            XCTAssertEqual(Double(tinted.2), Double(background[2] * 255), accuracy: 3, "\(theme) \(tinted)")
+        }
     }
 
     func testApplyPreferencesMapsReaderEnginePreferencesToPDFOptions() {

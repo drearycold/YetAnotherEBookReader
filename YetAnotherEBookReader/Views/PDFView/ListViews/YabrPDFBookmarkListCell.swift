@@ -29,7 +29,7 @@ class YabrPDFBookmarkListCell: UITableViewCell {
         dateLabel.font = .systemFont(ofSize: 12)
         
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.numberOfLines = 1
+        titleLabel.numberOfLines = 0
         
         titleField.translatesAutoresizingMaskIntoConstraints = false
         titleField.isHidden = true
@@ -55,14 +55,14 @@ class YabrPDFBookmarkListCell: UITableViewCell {
         )
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-[title]-|",
+                withVisualFormat: "H:|-15-[title]-15-|",
                 metrics: nil,
                 views: views
             )
         )
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-[titleField]-|",
+                withVisualFormat: "H:|-15-[titleField]-15-|",
                 metrics: nil,
                 views: views
             )
@@ -70,7 +70,7 @@ class YabrPDFBookmarkListCell: UITableViewCell {
         
         titleLabelConstraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "V:|-[date]-[title]-|",
+                withVisualFormat: "V:|-12-[date]-6-[title]-12-|",
                 metrics: nil,
                 views: views
             )
@@ -86,6 +86,11 @@ class YabrPDFBookmarkListCell: UITableViewCell {
         
         contentView.addConstraints(constraints)
         contentView.addConstraints(titleLabelConstraints)
+        // The field edits in place of the label.
+        NSLayoutConstraint.activate([
+            titleField.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            titleSaveButton.centerYAnchor.constraint(equalTo: dateLabel.centerYAnchor),
+        ])
         
         layoutMargins = UIEdgeInsets.zero
         preservesSuperviewLayoutMargins = false

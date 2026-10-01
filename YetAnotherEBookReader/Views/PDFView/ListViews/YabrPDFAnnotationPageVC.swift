@@ -69,7 +69,8 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
         self.delegate = self
         self.dataSource = self
 
-        self.view.backgroundColor = UIColor.white
+        let listStyle = (pdfViewController?.pdfOptions.themePalette ?? PDFThemePalette(themeMode: .none)).listStyle
+        self.view.backgroundColor = listStyle.background
         if index >= viewList.count {
             index = 0
         }
@@ -85,13 +86,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
 
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", style: .plain, target: self, action: #selector(dismiss))
         
-        if let fillColor = pdfViewController?.pdfOptions.fillColor {
-            segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
-        }
-        
-        if let textColor = bookmarkViewController.textColor {
-            segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
-        }
+        listStyle.apply(to: segmentedControl)
     }
 
     override func viewWillAppear(_ animated: Bool) {

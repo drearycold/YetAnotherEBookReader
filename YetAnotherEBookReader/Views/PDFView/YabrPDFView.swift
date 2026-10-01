@@ -294,8 +294,9 @@ extension YabrPDFView {
         layer.contents = inverted
     }
 
-    /// Same transform as `PDFPageWithBackground.draw`.
-    private static func invertedImage(_ image: CGImage) -> CGImage? {
+    /// Same transform as `PDFPageWithBackground.draw`. Thread-safe (thumbnails
+    /// render off the main thread).
+    nonisolated static func invertedImage(_ image: CGImage) -> CGImage? {
         guard let context = CGContext(
             data: nil,
             width: image.width,

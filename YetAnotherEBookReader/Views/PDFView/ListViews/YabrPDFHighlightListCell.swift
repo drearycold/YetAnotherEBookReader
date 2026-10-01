@@ -13,71 +13,62 @@ class YabrPDFHighlightListCell: UITableViewCell {
     let dateLabel: UILabel = .init()
     let highlightLabel: UILabel = .init()
     let noteLabel: UILabel = .init()
-    
+    private let stack = UIStackView()
+
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
-        
+
         backgroundColor = UIColor.clear
         layoutMargins = UIEdgeInsets.zero
         preservesSuperviewLayoutMargins = false
-        
-        dateLabel.translatesAutoresizingMaskIntoConstraints = false
-        dateLabel.font = .systemFont(ofSize: 12)
-        
-        highlightLabel.translatesAutoresizingMaskIntoConstraints = false
-        highlightLabel.font = .systemFont(ofSize: 13)
-        highlightLabel.numberOfLines = 2
-        
-        noteLabel.translatesAutoresizingMaskIntoConstraints = false
-        noteLabel.numberOfLines = 2
-        noteLabel.font = .systemFont(ofSize: 14)
-        noteLabel.textColor = .gray
 
-        contentView.addSubview(dateLabel)
-        contentView.addSubview(highlightLabel)
-        contentView.addSubview(noteLabel)
+        // As FolioReader's highlight list: the date above the whole marked text.
+        highlightLabel.numberOfLines = 0
+        noteLabel.numberOfLines = 3
 
-//        dateLabel.frame = CGRect(x: 20, y: 20, width: view.frame.width-40, height: dateLabel.frame.height)
-//        highlightLabel.frame = CGRect(x: 20, y: 46, width: view.frame.width-40, height: highlightLabel.frame.height)
-//        noteLabel.frame = CGRect(x: 20, y: 46 + highlightLabel.frame.height + 10, width: view.frame.width-40, height: noteLabel.frame.height)
+        stack.axis = .vertical
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        [dateLabel, highlightLabel, noteLabel].forEach(stack.addArrangedSubview)
+        stack.setCustomSpacing(8, after: highlightLabel)
+        contentView.addSubview(stack)
 
-        var constraints = [NSLayoutConstraint]()
-        let views = ["date": dateLabel, "content": highlightLabel, "note": noteLabel]
-        
-        constraints.append(
-            contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-15-[date]-15-|",
-                metrics: nil,
-                views: views
-            )
-        )
-        constraints.append(
-            contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-[content]-|",
-                metrics: nil,
-                views: views
-            )
-        )
-        constraints.append(
-            contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-[note]-|",
-                metrics: nil,
-                views: views
-            )
-        )
-        
-        constraints.append(
-            contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "V:|-[date]-[content]-[note]-|",
-                metrics: nil,
-                views: views
-            )
-        )
-        
-        contentView.addConstraints(constraints)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 15),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -15),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+        ])
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(highlight: PDFHighlight, date: String, style: PDFThemePalette.ListStyle) {
+        dateLabel.text = date
+        dateLabel.font = style.captionFont
+        dateLabel.textColor = style.secondaryText
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        var attributes: [NSAttributedString.Key: Any] = [
+            .paragraphStyle: paragraph,
+            .font: style.bodyFont,
+            .foregroundColor: style.highlightText,
+        ]
+        let highlightStyle = BookHighlightStyle(rawValue: highlight.type) ?? .yellow
+        if highlightStyle == .underline {
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            attributes[.underlineColor] = style.highlightFill(.underline)
+        } else {
+            attributes[.backgroundColor] = style.highlightFill(highlightStyle)
+        }
+        highlightLabel.attributedText = NSAttributedString(string: highlight.content, attributes: attributes)
+
+        noteLabel.text = highlight.note
+        noteLabel.font = style.bodyFont.withSize(14)
+        noteLabel.textColor = style.secondaryText
+        noteLabel.isHidden = highlight.note == nil
     }
 }

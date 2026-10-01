@@ -47,7 +47,7 @@ class YabrPDFSearchListCell: UITableViewCell {
         )
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "V:|-10-[page]-[snippet]-10-|",
+                withVisualFormat: "V:|-12-[page]-6-[snippet]-12-|",
                 metrics: nil,
                 views: views
             )
