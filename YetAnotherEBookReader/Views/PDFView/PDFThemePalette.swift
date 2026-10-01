@@ -101,6 +101,27 @@ extension PDFThemePalette {
         return appearance
     }
 
+    /// The surface of sheets over the page. The dark page is black, so dark
+    /// sheets use the raised system surface, or they would merge with it.
+    var sheetBackground: UIColor {
+        if drawsInverted {
+            return UIColor.secondarySystemBackground.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
+        }
+        return background.alpha > 0 ? UIColor(cgColor: background) : .systemBackground
+    }
+
+    /// The nav bar of a sheet, on `sheetBackground`.
+    func applySheet(to navigationItem: UINavigationItem) {
+        let appearance = navigationBarAppearance()
+        if background.alpha > 0 {
+            appearance.backgroundColor = sheetBackground
+        }
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationItem.compactAppearance = appearance
+        navigationItem.compactScrollEdgeAppearance = appearance
+    }
+
     /// Bar button tint, matching the reader chrome.
     var barTintColor: UIColor {
         drawsInverted ? .lightText : .darkText

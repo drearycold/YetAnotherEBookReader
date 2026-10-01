@@ -37,7 +37,8 @@ final class YabrPDFNoteEditorViewController: UIViewController {
 
         if let palette {
             overrideUserInterfaceStyle = palette.drawsInverted ? .dark : .light
-            view.backgroundColor = palette.background.alpha > 0 ? UIColor(cgColor: palette.background) : .systemBackground
+            view.backgroundColor = palette.sheetBackground
+            palette.applySheet(to: navigationItem)
         } else {
             view.backgroundColor = .systemBackground
         }
@@ -90,13 +91,18 @@ final class YabrPDFNoteEditorViewController: UIViewController {
         dismiss(animated: true)
     }
 
-    private func quotedText() -> NSAttributedString {
+    /// The quote marked as the page shows the highlight: under dark, the page's
+    /// dim fill with primary text (a bright fill would wash the light text out).
+    func quotedText() -> NSAttributedString {
         let text = quote.replacingOccurrences(of: "\n", with: " ")
+        let dark = palette?.drawsInverted ?? false
         var attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.preferredFont(forTextStyle: .subheadline),
-            .foregroundColor: UIColor.secondaryLabel,
+            .foregroundColor: dark ? UIColor.label : UIColor.secondaryLabel,
         ]
-        let color = BookHighlightStyle.colorForStyle(style.rawValue, nightMode: palette?.drawsInverted ?? false)
+        let color = dark
+            ? PDFHighlightAnnotations.darkColor(for: style)
+            : BookHighlightStyle.colorForStyle(style.rawValue)
         if style == .underline {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
             attributes[.underlineColor] = color

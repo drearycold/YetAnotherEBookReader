@@ -286,6 +286,35 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(saved, ["a note", nil], "blank clears the note")
     }
 
+    /// Under dark the quote is marked like the dark page marks it (a dim fill
+    /// under primary text), and the sheet is raised off the black page.
+    func testNoteEditorUnderDarkKeepsQuoteReadableAndSheetDistinct() throws {
+        let palette = PDFThemePalette(themeMode: .dark)
+        let editor = YabrPDFNoteEditorViewController(quote: "Quoted text", style: .yellow, note: nil, palette: palette)
+        editor.loadViewIfNeeded()
+        let dark = UITraitCollection(userInterfaceStyle: .dark)
+
+        let attributes = editor.quotedText().attributes(at: 0, effectiveRange: nil)
+        let fill = try XCTUnwrap(attributes[.backgroundColor] as? UIColor)
+        XCTAssertEqual(fill.cgColor.alpha, PDFHighlightAnnotations.darkFillAlpha, accuracy: 0.01, "dim, like the page")
+        let text = try XCTUnwrap(attributes[.foregroundColor] as? UIColor)
+        XCTAssertEqual(text.resolvedColor(with: dark), UIColor.label.resolvedColor(with: dark))
+
+        let sheet = try XCTUnwrap(editor.view.backgroundColor)
+        XCTAssertEqual(sheet, palette.sheetBackground)
+        var white: CGFloat = 0
+        sheet.getWhite(&white, alpha: nil)
+        XCTAssertGreaterThan(white, 0.05, "not the page's black")
+        XCTAssertEqual(editor.navigationItem.standardAppearance?.backgroundColor, sheet, "the bar matches the sheet")
+
+        // Light themes keep the page colour and the full-strength mark.
+        let sepia = YabrPDFNoteEditorViewController(quote: "Q", style: .yellow, note: nil, palette: PDFThemePalette(themeMode: .serpia))
+        sepia.loadViewIfNeeded()
+        XCTAssertEqual(sepia.view.backgroundColor?.cgColor.components, PDFThemePalette(themeMode: .serpia).background.components)
+        let sepiaFill = try XCTUnwrap(sepia.quotedText().attributes(at: 0, effectiveRange: nil)[.backgroundColor] as? UIColor)
+        XCTAssertEqual(sepiaFill.cgColor.alpha, 1, accuracy: 0.01)
+    }
+
     func testHighlightListSwipeOffersNoteAndDeletesThroughAnnotationManager() throws {
         let controller = SpyYabrPDFViewController()
         let metaSource = MockYabrPDFMetaSource(pdfURL: nil)

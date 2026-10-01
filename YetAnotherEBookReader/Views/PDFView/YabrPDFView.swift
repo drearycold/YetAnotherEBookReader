@@ -595,6 +595,13 @@ enum PDFHighlightAnnotations {
     private static func darkColor(_ color: UIColor) -> UIColor {
         color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
     }
+
+    /// How a dark page shows `style`: a dim fill (an underline is opaque), so
+    /// light text over it stays readable.
+    static func darkColor(for style: BookHighlightStyle) -> UIColor {
+        let color = darkColor(style.pdfAnnotationSubtype.1)
+        return style == .underline ? color : color.withAlphaComponent(darkFillAlpha)
+    }
 }
 
 @available(iOS 16.0, macCatalyst 16.0, *)
