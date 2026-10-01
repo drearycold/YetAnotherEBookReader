@@ -8,7 +8,7 @@ placement (content right of center, top offset / drift after page turns).
 ## Current Branch Notes
 
 - Auto-hiding bars (FolioReader style):
-  - **Behaviour.** A page turn (`turnPage`) and a drag of the page view on
+  - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on
     PDFKit's scroll-view pan, added in `YabrPDFView.layoutSubviews`.
     A plain page tap toggles them (`surface.onPageTap` → `requestBarToggle`):

@@ -211,6 +211,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         surface.onUserScroll = { [weak self] in
             self?.setReaderBarsHidden(true, animated: true)
         }
+        // Turning with the toolbar's arrows keeps the toolbar, and the bars, up.
+        surface.onTapZonePageTurn = { [weak self] in
+            self?.setReaderBarsHidden(true, animated: true)
+        }
         surface.onPageTap = { [weak self] in
             self?.requestBarToggle()
         }
@@ -301,7 +305,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// buffer of that page becomes the page view; otherwise PDFKit turns, covered
     /// by a buffer or, under dark, a snapshot.
     func turnPage(forward: Bool) {
-        setReaderBarsHidden(true, animated: true)
         updatePageViewPositionHistory()
         if pdfView.displayMode == .singlePage,
            let target = adjacentPage(forward: forward),

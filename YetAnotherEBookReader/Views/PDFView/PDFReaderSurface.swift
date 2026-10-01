@@ -114,6 +114,8 @@ final class PDFReaderSurface: UIView {
     var onCoverEnded: (() -> Void)?
     /// The user began dragging the page view on screen.
     var onUserScroll: (() -> Void)?
+    /// A tap zone turns the page (the toolbar's arrow buttons do not report).
+    var onTapZonePageTurn: (() -> Void)?
     /// A tap on the page that did nothing else (no highlight, selection, menu or
     /// link).
     var onPageTap: (() -> Void)?
@@ -405,9 +407,9 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
         guard tapZonesEnabled, sender.state == .ended else { return }
         let location = sender.location(in: self)
         if doubleTapLeftLabel.frame.contains(location) || singleTapLeftLabel.frame.contains(location) {
-            pagePrevButton?.sendActions(for: .primaryActionTriggered)
+            turnPageFromTapZone(next: false)
         } else if doubleTapRightLabel.frame.contains(location) || singleTapRightLabel.frame.contains(location) {
-            pageNextButton?.sendActions(for: .primaryActionTriggered)
+            turnPageFromTapZone(next: true)
         }
     }
 
@@ -415,10 +417,17 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
         guard tapZonesEnabled, sender.state == .ended else { return }
         let location = sender.location(in: self)
         if singleTapLeftLabel.frame.contains(location) {
-            pagePrevButton?.sendActions(for: .primaryActionTriggered)
+            turnPageFromTapZone(next: false)
         } else if singleTapRightLabel.frame.contains(location) {
-            pageNextButton?.sendActions(for: .primaryActionTriggered)
+            turnPageFromTapZone(next: true)
         }
+    }
+
+    /// Turns like the toolbar's arrow buttons; only a tap-zone turn is reading,
+    /// which `onTapZonePageTurn` reports.
+    func turnPageFromTapZone(next: Bool) {
+        onTapZonePageTurn?()
+        (next ? pageNextButton : pagePrevButton)?.sendActions(for: .primaryActionTriggered)
     }
 
     @objc private func highlightTappedGesture(sender: UITapGestureRecognizer) {

@@ -1384,7 +1384,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
-    func testPageTurnHidesBarsAndKeepsTopMargin() throws {
+    /// The toolbar's arrows keep the bars up (the toolbar stays under the
+    /// finger); a tap-zone turn hides them. The top margin is the same either way.
+    func testTapZoneTurnHidesBarsButToolbarArrowsDoNot() throws {
         let content = CGRect(x: 81, y: 96, width: 450, height: 600)
         let harness = try makeHarness(
             pages: Array(repeating: PageSpec(content: content), count: 4),
@@ -1393,16 +1395,23 @@ final class YabrPDFMarginCropTests: XCTestCase {
         )
         let nav = try XCTUnwrap(harness.controller.navigationController)
         pressNext(harness)
-        settle(0.5)
-        XCTAssertTrue(nav.isNavigationBarHidden)
-        XCTAssertTrue(nav.isToolbarHidden)
-        assertTopMargin(harness, pageIndex: 1)
-        pressNext(harness)
         settle(0.3)
-        assertTopMargin(harness, pageIndex: 2)
+        XCTAssertFalse(nav.isNavigationBarHidden, "toolbar arrow")
+        XCTAssertFalse(nav.isToolbarHidden, "toolbar arrow")
+        assertTopMargin(harness, pageIndex: 1)
         pressPrev(harness)
         settle(0.3)
+        XCTAssertFalse(nav.isToolbarHidden, "toolbar arrow")
+        assertTopMargin(harness, pageIndex: 0)
+
+        harness.surface.turnPageFromTapZone(next: true)
+        settle(0.5)
+        XCTAssertTrue(nav.isNavigationBarHidden, "tap zone")
+        XCTAssertTrue(nav.isToolbarHidden, "tap zone")
         assertTopMargin(harness, pageIndex: 1)
+        harness.surface.turnPageFromTapZone(next: true)
+        settle(0.3)
+        assertTopMargin(harness, pageIndex: 2)
     }
 
     func testDraggingThePageHidesBars() throws {
