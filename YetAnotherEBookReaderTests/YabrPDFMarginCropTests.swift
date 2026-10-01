@@ -1296,7 +1296,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             if direction == .TtB_RtL {
                 // Content that fits is centered, also after Width left a saved
                 // top-left point that no longer applies.
-                let readable = view.bounds.inset(by: view.safeAreaInsets)
+                let readable = view.bounds.inset(by: harness.controller.pageLayoutInsets)
                 XCTAssertEqual(contentInView(harness, pageIndex: 0).midX, readable.midX, accuracy: 2, label)
             }
 
@@ -1318,6 +1318,191 @@ final class YabrPDFMarginCropTests: XCTestCase {
                 XCTAssertTrue(allowed(placed.minX, placed.width, size.width, fitted.minX), "\(label): x \(placed) fitted \(fitted)")
                 XCTAssertTrue(allowed(placed.minY, placed.height, size.height, fitted.minY), "\(label): y \(placed) fitted \(fitted)")
             }
+        }
+    }
+
+    // MARK: - Reader bars
+
+    /// The page is fitted to the area without the nav bar and toolbar, which
+    /// float over it.
+    func testPageFitsAreaWithoutBars() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            inNavigationController: true
+        )
+        let nav = try XCTUnwrap(harness.controller.navigationController)
+        XCTAssertFalse(harness.controller.readerBarsHidden, "the reader opens with its bars shown")
+        XCTAssertEqual(harness.controller.pageLayoutInsets, nav.view.safeAreaInsets)
+        XCTAssertGreaterThan(harness.pdfView.safeAreaInsets.top, harness.controller.pageLayoutInsets.top, "the nav bar is not in the page's area")
+        XCTAssertGreaterThan(harness.pdfView.safeAreaInsets.bottom, harness.controller.pageLayoutInsets.bottom, "the toolbar is not in the page's area")
+        assertTopMargin(harness, pageIndex: 0)
+        assertHorizontalWidthFit(harness, pageIndex: 0)
+    }
+
+    /// Showing or hiding the bars leaves the page exactly where it is, in both
+    /// page and continuous mode.
+    func testHidingBarsKeepsPagePlacement() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: content), count: 3),
+            viewSize: Self.portrait,
+            inNavigationController: true
+        )
+        let nav = try XCTUnwrap(harness.controller.navigationController)
+
+        for mode in [PDFLayoutMode.Page, .Scroll] {
+            var options = harness.controller.pdfOptions
+            options.pageMode = mode
+            harness.controller.handleOptionsChange(pdfOptions: options)
+            settle(0.3)
+
+            func placement() throws -> [String: CGFloat] {
+                let view = harness.pdfView
+                let page = try XCTUnwrap(view.currentPage)
+                let scrollView = try XCTUnwrap(view.documentScrollView)
+                let rect = view.convert(page.bounds(for: .cropBox), from: page)
+                return [
+                    "x": rect.minX, "y": rect.minY, "w": rect.width, "h": rect.height,
+                    "scale": view.scaleFactor,
+                    "offsetX": scrollView.contentOffset.x, "offsetY": scrollView.contentOffset.y,
+                    "insetTop": scrollView.adjustedContentInset.top, "insetBottom": scrollView.adjustedContentInset.bottom,
+                    "safeTop": view.safeAreaInsets.top, "safeBottom": view.safeAreaInsets.bottom,
+                ]
+            }
+            let shown = try placement()
+            for hidden in [true, false, true, false] {
+                harness.controller.setReaderBarsHidden(hidden, animated: true)
+                settle(0.6)
+                XCTAssertEqual(nav.isNavigationBarHidden, hidden, "\(mode)")
+                XCTAssertEqual(nav.isToolbarHidden, hidden, "\(mode)")
+                let now = try placement()
+                for (key, value) in shown {
+                    XCTAssertEqual(now[key] ?? .nan, value, accuracy: 0.5, "\(mode) hidden=\(hidden) \(key): \(now) vs \(shown)")
+                }
+            }
+        }
+    }
+
+    func testPageTurnHidesBarsAndKeepsTopMargin() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: content), count: 4),
+            viewSize: Self.portrait,
+            inNavigationController: true
+        )
+        let nav = try XCTUnwrap(harness.controller.navigationController)
+        pressNext(harness)
+        settle(0.5)
+        XCTAssertTrue(nav.isNavigationBarHidden)
+        XCTAssertTrue(nav.isToolbarHidden)
+        assertTopMargin(harness, pageIndex: 1)
+        pressNext(harness)
+        settle(0.3)
+        assertTopMargin(harness, pageIndex: 2)
+        pressPrev(harness)
+        settle(0.3)
+        assertTopMargin(harness, pageIndex: 1)
+    }
+
+    func testDraggingThePageHidesBars() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            inNavigationController: true
+        )
+        let buffer = YabrPDFView()
+        harness.surface.pageViewDidBeginDragging(buffer)
+        XCTAssertFalse(harness.controller.readerBarsHidden, "only the page view on screen counts")
+
+        harness.surface.pageViewDidBeginDragging(harness.pdfView)
+        XCTAssertTrue(harness.controller.readerBarsHidden)
+    }
+
+    /// As in FolioReader: a tap hides shown bars at once and shows hidden ones
+    /// after a moment, unless a selection starts meanwhile.
+    func testTapTogglesBars() throws {
+        // Real text, so a selection can be made.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let book = try BookPageGenerator.make(pageCount: 2, pageSize: Self.pageSize, in: directory)
+        tempURLs.append(book.url)
+        let harness = try makeHarness(
+            pages: book.bodyRects.map { PageSpec(content: $0) },
+            viewSize: Self.portrait,
+            pdfURL: book.url,
+            inNavigationController: true
+        )
+        let controller = harness.controller
+        let center = CGPoint(x: harness.pdfView.bounds.midX, y: harness.pdfView.bounds.midY)
+
+        XCTAssertFalse(harness.pdfView.handleTap(at: center), "a plain tap is free for the bars")
+        controller.requestBarToggle()
+        XCTAssertTrue(controller.readerBarsHidden, "shown bars hide at once")
+        settle(0.4)
+
+        controller.requestBarToggle()
+        XCTAssertTrue(controller.readerBarsHidden, "hidden bars wait")
+        settle(YabrPDFViewController.barRevealDelay + 0.3)
+        XCTAssertFalse(controller.readerBarsHidden)
+
+        // A double tap selects a word: the reveal is dropped.
+        controller.setReaderBarsHidden(true, animated: false)
+        controller.requestBarToggle()
+        let page = try XCTUnwrap(harness.pdfView.currentPage)
+        harness.pdfView.currentSelection = page.selection(for: page.bounds(for: .cropBox))
+        XCTAssertNotNil(harness.pdfView.currentSelection)
+        NotificationCenter.default.post(name: .PDFViewSelectionChanged, object: harness.pdfView)
+        settle(YabrPDFViewController.barRevealDelay + 0.3)
+        XCTAssertTrue(controller.readerBarsHidden)
+
+        // A tap that clears a selection does only that.
+        XCTAssertTrue(harness.pdfView.handleTap(at: center))
+        XCTAssertNil(harness.pdfView.currentSelection)
+    }
+
+    /// PDF Options hides the bars so the page it changes shows in full, and
+    /// closing it brings back whatever was there before.
+    func testOptionsHidesBarsUntilDismissed() throws {
+        let harness = try makeHarness(
+            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+            viewSize: Self.portrait,
+            inNavigationController: true
+        )
+        let controller = harness.controller
+        let nav = try XCTUnwrap(controller.navigationController)
+        let before = contentInView(harness, pageIndex: 0)
+
+        for barsHiddenBefore in [false, true] {
+            controller.setReaderBarsHidden(barsHiddenBefore, animated: false)
+            settle(0.3)
+
+            controller.presentOptions()
+            settle(0.8)
+            let options = try XCTUnwrap(controller.presentedViewController, "hidden=\(barsHiddenBefore)")
+            XCTAssertTrue(nav.isNavigationBarHidden)
+            XCTAssertTrue(nav.isToolbarHidden)
+            XCTAssertEqual(contentInView(harness, pageIndex: 0).minY, before.minY, accuracy: 0.5, "the page stays put")
+            XCTAssertEqual(contentInView(harness, pageIndex: 0).minX, before.minX, accuracy: 0.5, "the page stays put")
+
+            let popover = try XCTUnwrap(options.popoverPresentationController)
+            XCTAssertTrue(popover.sourceView === controller.view, "not anchored to the hidden Options button")
+            XCTAssertEqual(popover.permittedArrowDirections, [])
+            let sheet = popover.adaptiveSheetPresentationController
+            XCTAssertEqual(sheet.detents.map(\.identifier), [.medium, .large])
+            XCTAssertEqual(sheet.largestUndimmedDetentIdentifier, .medium)
+
+            // The page stays usable below the sheet; its taps leave the bars hidden.
+            controller.requestBarToggle()
+            settle(YabrPDFViewController.barRevealDelay + 0.3)
+            XCTAssertTrue(nav.isNavigationBarHidden)
+
+            options.dismiss(animated: false)
+            settle(0.6)
+            XCTAssertNil(controller.presentedViewController)
+            XCTAssertFalse(controller.isPresentingOptions)
+            XCTAssertEqual(nav.isNavigationBarHidden, barsHiddenBefore)
+            XCTAssertEqual(nav.isToolbarHidden, barsHiddenBefore)
         }
     }
 
@@ -1979,7 +2164,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     /// The content block should start `vMarginAutoScaler`% of the readable height
-    /// below the top bar (the top safe-area inset).
+    /// below the top of the area without the reader's bars.
     private func assertTopMargin(_ harness: Harness, pageIndex: Int, label: String = "", file: StaticString = #filePath, line: UInt = #line) {
         let options = harness.controller.pdfOptions
         let bounds = readableRect(harness)
@@ -2014,8 +2199,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         )
     }
 
+    /// The area the page is fitted to; the reader's bars float over it.
     private func readableRect(_ harness: Harness) -> CGRect {
-        harness.pdfView.bounds.inset(by: harness.pdfView.safeAreaInsets)
+        harness.pdfView.bounds.inset(by: harness.controller.pageLayoutInsets)
     }
 
     private func contentInView(_ harness: Harness, pageIndex: Int) -> CGRect {

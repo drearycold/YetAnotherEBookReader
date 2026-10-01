@@ -251,7 +251,7 @@ extension YabrPDFViewController {
         let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
         let boundsForCropBox = page.bounds(for: .cropBox)
         let contentBounds = PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox)
-        let readableRect = view.bounds.inset(by: view.safeAreaInsets)
+        let readableRect = view.bounds.inset(by: pageLayoutInsets)
         var fit = PDFPageViewportFitter.fit(
             PDFPageViewportFitter.Input(
                 contentBounds: contentBounds,

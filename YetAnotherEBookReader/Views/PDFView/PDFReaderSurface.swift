@@ -112,6 +112,11 @@ final class PDFReaderSurface: UIView {
     /// Called when a cover is removed; the buffer is free for another page. It may
     /// run during a page change, so defer heavy work.
     var onCoverEnded: (() -> Void)?
+    /// The user began dragging the page view on screen.
+    var onUserScroll: (() -> Void)?
+    /// A tap on the page that did nothing else (no highlight, selection, menu or
+    /// link).
+    var onPageTap: (() -> Void)?
     /// When each buffer was given its page or scale; it is ready once it has drawn
     /// the tiles it shows since.
     private var bufferShownAt: [ObjectIdentifier: CFTimeInterval] = [:]
@@ -420,7 +425,15 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
         guard sender.state == .ended else { return }
         // Taps on a highlight belong to `highlightMenuTapGestureRecognizer`.
         guard highlight(at: sender.location(in: self)) == nil else { return }
-        activeView.handleTap(at: sender.location(in: activeView))
+        if !activeView.handleTap(at: sender.location(in: activeView)) {
+            onPageTap?()
+        }
+    }
+
+    /// The user began dragging `pageView`'s document.
+    func pageViewDidBeginDragging(_ pageView: YabrPDFView) {
+        guard pageView === activeView else { return }
+        onUserScroll?()
     }
 
     @objc private func highlightMenuTappedGesture(sender: UITapGestureRecognizer) {

@@ -7,6 +7,32 @@ placement (content right of center, top offset / drift after page turns).
 
 ## Current Branch Notes
 
+- Auto-hiding bars (FolioReader style):
+  - **Behaviour.** A page turn (`turnPage`) and a drag of the page view on
+    screen hide the nav bar and toolbar. The drag is detected by a target on
+    PDFKit's scroll-view pan, added in `YabrPDFView.layoutSubviews`.
+    A plain page tap toggles them (`surface.onPageTap` → `requestBarToggle`):
+    - shown bars hide at once;
+    - hidden bars show after `barRevealDelay` (0.3 s). The reveal is cancelled
+      when a selection appears (a double tap selects a word).
+    - `handleTap` returns whether the tap was used: a menu dismissed, a
+      selection cleared, or a link followed.
+  - **Layout.** The page is fitted to `pageLayoutInsets`, the navigation
+    controller's own safe area without its bars, so the bars float over it.
+    This supersedes "the top margin starts below the nav bar" below.
+  - **No movement.** `setReaderBarsHidden` moves the bars' share of the safe
+    area into `additionalSafeAreaInsets` while they are hidden. The page views'
+    safe area, PDFKit's scroll insets and the placement don't change.
+  - **Verified.** A recording shows the area between the bars unchanged at
+    codec-noise level across toggles.
+  - **PDF Options** (`presentOptions`) hides the bars while it is open and
+    restores their previous state on dismissal (`DismissAwareHostingController`).
+    - It is a popover anchored at the top right of the view with no arrow,
+      because the Options button hides with the bar.
+    - On compact width it is the popover's adaptive sheet: medium/large detents,
+      undimmed at medium, so the page shows above it.
+    - Page taps don't toggle the bars while it is open.
+    - No `fixedSize()`: it clipped the options in the sheet.
 - Viewport fix landed (uncommitted): `PDFPageViewportFitter` (pure, in
   `Views/PDFView/Managers/`) computes scale + per-axis page/view anchors inside
   the readable rect (`pdfView.bounds` minus safe area, so the top margin starts

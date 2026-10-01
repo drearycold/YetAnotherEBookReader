@@ -25,6 +25,20 @@ final class PDFOptionViewModel: ObservableObject {
     }
 }
 
+/// Reports its dismissal however it happens: a tap outside, a swipe down, or
+/// in code.
+final class DismissAwareHostingController<Content: View>: UIHostingController<Content> {
+    var onDismiss: (() -> Void)?
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed {
+            onDismiss?()
+            onDismiss = nil
+        }
+    }
+}
+
 struct PDFOptionView: View {
     @ObservedObject var model: PDFOptionViewModel
     

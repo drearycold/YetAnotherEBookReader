@@ -71,6 +71,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     var isReattachingDocument = false
     /// Set while `handleScaleChange` stores the page view's scale.
     var isRecordingScale = false
+    /// A tap's pending reveal of the hidden bars; see `requestBarToggle`.
+    var pendingBarReveal: DispatchWorkItem?
+    static let barRevealDelay: TimeInterval = 0.3
+    /// PDF Options is open; the bars stay hidden until it closes.
+    var isPresentingOptions = false
     
     @Published var pdfOptions = PDFPreferenceValue() {
         didSet {
@@ -200,6 +205,16 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         surface.onCoverEnded = { [weak self] in
             DispatchQueue.main.async { self?.refreshPageBuffers() }
         }
+        // The bars float over the page (see `pageLayoutInsets`); keep the view
+        // under them whatever their appearance.
+        extendedLayoutIncludesOpaqueBars = true
+        surface.onUserScroll = { [weak self] in
+            self?.setReaderBarsHidden(true, animated: true)
+        }
+        surface.onPageTap = { [weak self] in
+            self?.requestBarToggle()
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(handleSelectionChangeForBars(_:)), name: .PDFViewSelectionChanged, object: nil)
 
         configureReaderChrome()
         configureSelectionMenus()
@@ -286,6 +301,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// buffer of that page becomes the page view; otherwise PDFKit turns, covered
     /// by a buffer or, under dark, a snapshot.
     func turnPage(forward: Bool) {
+        setReaderBarsHidden(true, animated: true)
         updatePageViewPositionHistory()
         if pdfView.displayMode == .singlePage,
            let target = adjacentPage(forward: forward),

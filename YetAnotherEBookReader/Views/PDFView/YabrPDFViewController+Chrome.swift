@@ -210,6 +210,115 @@ extension YabrPDFViewController {
         chromeContainerHeightConstraint?.constant = ChromeMetrics.height
     }
 
+    // MARK: Bars
+
+    /// The insets the page is fitted to: the navigation controller's own safe
+    /// area, which leaves out its bars. The bars float over the page and hide
+    /// while reading, so showing or hiding them never moves it.
+    var pageLayoutInsets: UIEdgeInsets {
+        navigationController?.view.safeAreaInsets ?? view.safeAreaInsets
+    }
+
+    var readerBarsHidden: Bool {
+        navigationController?.isNavigationBarHidden ?? false
+    }
+
+    /// Hides or shows the nav bar and toolbar. While they are hidden their share
+    /// of the safe area moves into `additionalSafeAreaInsets`, so the page views'
+    /// safe area, and with it PDFKit's scroll insets and the page placement,
+    /// stays the same.
+    func setReaderBarsHidden(_ hidden: Bool, animated: Bool) {
+        cancelPendingBarReveal()
+        guard let nav = navigationController, nav.isNavigationBarHidden != hidden else { return }
+        if hidden {
+            let insets = view.safeAreaInsets
+            let base = pageLayoutInsets
+            nav.setNavigationBarHidden(true, animated: animated)
+            nav.setToolbarHidden(true, animated: animated)
+            additionalSafeAreaInsets = UIEdgeInsets(
+                top: max(0, insets.top - base.top),
+                left: 0,
+                bottom: max(0, insets.bottom - base.bottom),
+                right: 0
+            )
+        } else {
+            additionalSafeAreaInsets = .zero
+            nav.setNavigationBarHidden(false, animated: animated)
+            nav.setToolbarHidden(false, animated: animated)
+        }
+    }
+
+    /// A tap on the page, as in FolioReader: shown bars hide at once; hidden ones
+    /// show after a moment, unless the tap turns out to start a selection
+    /// (a double tap selects a word) or the page moves first.
+    func requestBarToggle() {
+        // Options keeps the bars hidden; its iPhone sheet leaves the page usable.
+        guard !isPresentingOptions else {
+            cancelPendingBarReveal()
+            return
+        }
+        guard !readerBarsHidden else {
+            cancelPendingBarReveal()
+            let reveal = DispatchWorkItem { [weak self] in
+                self?.pendingBarReveal = nil
+                self?.setReaderBarsHidden(false, animated: true)
+            }
+            pendingBarReveal = reveal
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.barRevealDelay, execute: reveal)
+            return
+        }
+        setReaderBarsHidden(true, animated: true)
+    }
+
+    /// PDF Options, with the bars hidden so the page they change shows in full:
+    /// a popover at the top right, or on compact width a sheet that leaves the
+    /// top half of the page visible. Closing it restores the bars.
+    func presentOptions() {
+        let optionViewModel = PDFOptionViewModel(preferences: pdfOptions) { [weak self] updatedPreferences in
+            guard let self else { return }
+            self.updatePageViewPositionHistory()
+            self.handleOptionsChange(pdfOptions: updatedPreferences)
+        }
+        // Not `fixedSize()`: the sheet is shorter than the options, which scroll.
+        let optionViewController = DismissAwareHostingController(rootView: PDFOptionView(model: optionViewModel))
+        optionViewController.preferredContentSize = CGSize(width: 340, height: 700)
+        optionViewController.modalPresentationStyle = .popover
+
+        let barsWereHidden = readerBarsHidden
+        isPresentingOptions = true
+        setReaderBarsHidden(true, animated: true)
+        optionViewController.onDismiss = { [weak self] in
+            self?.isPresentingOptions = false
+            self?.setReaderBarsHidden(barsWereHidden, animated: true)
+        }
+
+        if let popover = optionViewController.popoverPresentationController {
+            // The Options button hides with the nav bar, so the popover is not
+            // anchored to it.
+            popover.sourceView = view
+            popover.sourceRect = CGRect(x: view.bounds.maxX - 16, y: pageLayoutInsets.top + 8, width: 1, height: 1)
+            popover.permittedArrowDirections = []
+
+            let sheet = popover.adaptiveSheetPresentationController
+            sheet.detents = [.medium(), .large()]
+            sheet.largestUndimmedDetentIdentifier = .medium
+            sheet.prefersGrabberVisible = true
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+        }
+
+        present(optionViewController, animated: true)
+    }
+
+    func cancelPendingBarReveal() {
+        pendingBarReveal?.cancel()
+        pendingBarReveal = nil
+    }
+
+    @objc func handleSelectionChangeForBars(_ notification: Notification) {
+        guard notification.object as? YabrPDFView === pdfView, pdfView.currentSelection != nil else { return }
+        cancelPendingBarReveal()
+    }
+
     /// Sheets presented from the reader take the reader theme's nav bar.
     func themedNavigationController(rootViewController: UIViewController) -> UINavigationController {
         let palette = pdfOptions.themePalette
@@ -286,20 +395,8 @@ extension YabrPDFViewController {
             UIBarButtonItem(
                 title: "Options",
                 image: UIImage(systemName: "doc.badge.gearshape"),
-                primaryAction: UIAction { _ in
-                    let optionViewModel = PDFOptionViewModel(preferences: self.pdfOptions) { [weak self] updatedPreferences in
-                        guard let self else { return }
-                        self.updatePageViewPositionHistory()
-                        self.handleOptionsChange(pdfOptions: updatedPreferences)
-                    }
-                    let optionView = PDFOptionView(model: optionViewModel)
-
-                    let optionViewController = UIHostingController(rootView: optionView.fixedSize())
-                    optionViewController.preferredContentSize = CGSize(width: 340, height: 700)
-                    optionViewController.modalPresentationStyle = .popover
-                    optionViewController.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItems?[1]
-
-                    self.present(optionViewController, animated: true, completion: nil)
+                primaryAction: UIAction { [weak self] _ in
+                    self?.presentOptions()
                 }
             ),
             shareBarButtonItem

@@ -45,6 +45,27 @@ class YabrPDFView: PDFView {
         let observations: [NSKeyValueObservation]
     }
 
+    /// PDFKit's internal scroll view, whose drags are reported to the surface.
+    private weak var observedScrollView: UIScrollView?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        observeDocumentDragging()
+    }
+
+    /// PDFKit creates its scroll view with the document, so this runs on layout.
+    private func observeDocumentDragging() {
+        guard observedScrollView?.superview == nil, let scrollView = documentScrollView else { return }
+        scrollView.panGestureRecognizer.addTarget(self, action: #selector(documentPanned(_:)))
+        observedScrollView = scrollView
+    }
+
+    /// The scroll view's own pan: dragging a selection handle does not start it.
+    @objc private func documentPanned(_ recognizer: UIPanGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        surface?.pageViewDidBeginDragging(self)
+    }
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         // Selecting a whole PDF is slow and never what a reader wants.
         if action == #selector(UIResponderStandardEditActions.selectAll(_:)) {
@@ -97,21 +118,25 @@ class YabrPDFView: PDFView {
     }
     
     /// A tap off any highlight: dismisses the highlight menu, clears the selection,
-    /// and follows link annotations.
-    func handleTap(at tapLocation: CGPoint) {
+    /// and follows link annotations. Returns whether the tap did any of these.
+    @discardableResult
+    func handleTap(at tapLocation: CGPoint) -> Bool {
+        let dismissedMenu = surface?.highlightTapped != nil
         surface?.highlightTapped = nil
         yabrPDFViewController?.menuManager.dismissHighlightMenu()
+        let hadSelection = currentSelection != nil
 
         let aoi = self.areaOfInterest(for: tapLocation)
         guard aoi.contains(.annotationArea) else {
             self.currentSelection = nil
-            return
+            return dismissedMenu || hadSelection
         }
 
         if self.currentSelection != nil {
             self.clearSelection()
         }
 
+        var followedLink = false
         self.visiblePages.forEach { visiblePage in
             guard let annotation = visiblePage.annotation(at: self.convert(tapLocation, to: visiblePage)),
                   let typeString = annotation.type,
@@ -129,10 +154,12 @@ class YabrPDFView: PDFView {
                     )
                 }
                 self.perform(annotationAction)
+                followedLink = true
             default:
                 break
             }
         }
+        return dismissedMenu || hadSelection || followedLink
     }
 
 }
