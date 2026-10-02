@@ -519,15 +519,20 @@ extension PDFReaderSurface {
     /// The highlight under `location` (in the surface) and the rect (in the
     /// surface) of the annotation hit, so a multi-line highlight's menu points at
     /// the line that was tapped.
+    /// The highlight whose text is at `location` (in the surface), and that
+    /// line's rect. Lines are hit, not the drawn marks: in dark an underline is a
+    /// bar along the bottom of its line.
     func highlight(at location: CGPoint) -> (UUID, CGRect)? {
         let pageView = activeView
         let locationInPageView = convert(location, to: pageView)
         for (highlightId, values) in highlights {
-            for annotation in values.flatMap(\.annotations) {
-                guard let page = annotation.page,
-                      annotation.bounds.contains(pageView.convert(locationInPageView, to: page))
-                else { continue }
-                return (highlightId, pageView.convert(pageView.convert(annotation.bounds, from: page), to: self))
+            for value in values {
+                for (annotation, lineBounds) in zip(value.annotations, value.lineBounds) {
+                    guard let page = annotation.page,
+                          lineBounds.contains(pageView.convert(locationInPageView, to: page))
+                    else { continue }
+                    return (highlightId, pageView.convert(pageView.convert(lineBounds, from: page), to: self))
+                }
             }
         }
         return nil
@@ -598,6 +603,7 @@ extension PDFReaderSurface {
                     let annotation = PDFHighlightAnnotations.line(bounds: lineBounds, style: style, highlightId: highlight.uuid, appearance: appearance)
                     page.addAnnotation(annotation)
                     value.annotations.append(annotation)
+                    value.lineBounds.append(lineBounds)
                     lastLineBounds = lineBounds
                 }
                 values.append(value)

@@ -1063,6 +1063,33 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// Tapping anywhere on an underlined line shows its menu, under dark too,
+    /// where the drawn bar is only the bottom of the line.
+    func testUnderlineIsTappableAcrossItsLine() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .underline)
+        let lightLines = lineAnnotations(harness, highlightId).map(\.bounds)
+        let page = try XCTUnwrap(lineAnnotations(harness, highlightId).first?.page)
+        let line = try XCTUnwrap(lightLines.first)
+
+        func tap(_ pagePoint: CGPoint) -> (UUID, CGRect)? {
+            let inView = harness.pdfView.convert(pagePoint, from: page)
+            return harness.surface.highlight(at: harness.surface.convert(inView, from: harness.pdfView))
+        }
+        let middle = CGPoint(x: line.midX, y: line.midY)
+        let nearTop = CGPoint(x: line.midX, y: line.maxY - 1)
+        let above = CGPoint(x: line.midX, y: line.maxY + 20)
+
+        for theme in [PDFThemeMode.none, .dark] {
+            setTheme(harness, theme)
+            XCTAssertEqual(tap(middle)?.0, highlightId, "\(theme): middle of the line")
+            XCTAssertEqual(tap(nearTop)?.0, highlightId, "\(theme): top of the line")
+            XCTAssertNil(tap(above), "\(theme): off the line")
+            let rect = try XCTUnwrap(tap(middle)?.1)
+            let lineInSurface = harness.surface.convert(harness.pdfView.convert(line, from: page), from: harness.pdfView)
+            XCTAssertEqual(rect.height, lineInSurface.height, accuracy: 1, "\(theme): the menu points at the line, not the bar")
+        }
+    }
+
     /// The marker is sized from the text line, not from the dark underline bar.
     func testDarkUnderlineNoteMarkerKeepsItsSize() throws {
         let (harness, highlightId) = try makeHighlightHarness(style: .underline)

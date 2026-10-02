@@ -518,6 +518,10 @@ extension PDFAnnotationKey {
 struct HighlightValue {
     let selection: PDFSelection
     var annotations: [PDFAnnotation] = []
+    /// The text line of each line annotation, in page space, in the same order.
+    /// Taps are tested against these: a dark underline bar is only the bottom
+    /// of its line.
+    var lineBounds: [CGRect] = []
 }
 
 /// How highlight annotations are drawn.
