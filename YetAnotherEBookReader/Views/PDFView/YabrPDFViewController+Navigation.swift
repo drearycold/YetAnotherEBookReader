@@ -250,12 +250,16 @@ extension YabrPDFViewController {
         )
         let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
         let boundsForCropBox = page.bounds(for: .cropBox)
-        let contentBounds = PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox)
+        // The fit works in display space, so a rotated page is fitted as shown;
+        // its anchor is mapped back to page space at the end.
+        let display = PDFPageDisplaySpace(box: boundsForCropBox, rotation: page.rotation)
+        let contentBounds = display.toDisplay(PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox))
+        let pageBounds = CGRect(origin: .zero, size: display.size)
         let readableRect = view.bounds.inset(by: pageLayoutInsets)
         var fit = PDFPageViewportFitter.fit(
             PDFPageViewportFitter.Input(
                 contentBounds: contentBounds,
-                pageBounds: boundsForCropBox,
+                pageBounds: pageBounds,
                 readableRect: readableRect,
                 autoScaler: pdfOptions.selectedAutoScaler,
                 hMarginPercent: pdfOptions.hMarginAutoScaler,
@@ -271,17 +275,20 @@ extension YabrPDFViewController {
         // needs scrolling along it. A saved top-left point is meaningless once the
         // content fits: after switching TtB_RtL from Width to Height it would put
         // the page at the left of the view.
-        let fitted = contentBounds.width > 0 && contentBounds.height > 0 ? contentBounds : boundsForCropBox
+        let fitted = contentBounds.width > 0 && contentBounds.height > 0 ? contentBounds : pageBounds
         if let pageHistory {
-            if !pageHistory.point.x.isNaN, fitted.width * fit.scale > readableRect.width + 0.5 {
-                fit.pageAnchor.x = pageHistory.point.x
+            // A NaN axis stays NaN through the turn, on whichever display axis it lands.
+            let saved = display.toDisplay(pageHistory.point)
+            if !saved.x.isNaN, fitted.width * fit.scale > readableRect.width + 0.5 {
+                fit.pageAnchor.x = saved.x
                 fit.viewAnchor.x = view.bounds.minX
             }
-            if !pageHistory.point.y.isNaN, fitted.height * fit.scale > readableRect.height + 0.5 {
-                fit.pageAnchor.y = pageHistory.point.y
+            if !saved.y.isNaN, fitted.height * fit.scale > readableRect.height + 0.5 {
+                fit.pageAnchor.y = saved.y
                 fit.viewAnchor.y = view.bounds.minY
             }
         }
+        fit.pageAnchor = display.toPage(fit.pageAnchor)
         return (fit, false)
     }
 
@@ -354,10 +361,10 @@ extension YabrPDFViewController {
               let curPageNum = curPage.pageRef?.pageNumber
         else { return nil }
 
-        // Measure the visible rect directly; same upper-left semantics as the
-        // persisted pageOffsetX/Y.
-        let visibleRect = pdfView.convert(pdfView.bounds, to: curPage)
-        let pointUpperLeft = CGPoint(x: visibleRect.minX, y: visibleRect.maxY)
+        // The page point at the view's top-left corner; same upper-left semantics
+        // as the persisted pageOffsetX/Y. Converted as a point: on a rotated page
+        // that corner is not the top-left of the visible rect in page space.
+        let pointUpperLeft = pdfView.convert(CGPoint(x: pdfView.bounds.minX, y: pdfView.bounds.minY), to: curPage)
 
         return (
             curPageNum,

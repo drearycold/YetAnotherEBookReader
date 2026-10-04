@@ -918,17 +918,67 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
-    /// Detection and the viewport fitter work in unrotated page space.
+    /// A rotated page is fitted as displayed. Detection and the fit used to work in
+    /// unrotated page space (and detection on a thumbnail PDFKit had shrunk to fit
+    /// the unturned size), so the text landed off screen.
     func testRotatedPageFitShowsContent() throws {
-        let harness = try makeHarness(
-            pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600), rotation: 90)],
-            viewSize: Self.portrait
-        )
-        let inView = contentInView(harness, pageIndex: 0)
-        record("PDFROTATE inView=\(inView) bounds=\(harness.pdfView.bounds)")
+        for rotation in [90, 180, 270] {
+            for viewSize in [Self.portrait, Self.landscape] {
+                let harness = try makeHarness(
+                    pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600), rotation: rotation)],
+                    viewSize: viewSize
+                )
+                let label = "rotation \(rotation) view \(viewSize)"
+                assertHorizontalWidthFit(harness, pageIndex: 0, label: label)
+                if viewSize == Self.portrait {
+                    // Width-fitted and shorter than the view: all of it on screen.
+                    let inView = contentInView(harness, pageIndex: 0)
+                    XCTAssertTrue(harness.pdfView.bounds.insetBy(dx: -2, dy: -2).contains(inView), "\(label) inView=\(inView)")
+                } else {
+                    // Taller than the view: it starts below the top margin and scrolls.
+                    assertTopMargin(harness, pageIndex: 0, label: label)
+                }
+                tearDownWindow()
+            }
+        }
+    }
 
-        XCTExpectFailure("Pre-existing: margin detection and PDFPageViewportFitter ignore page.rotation, so a rotated page is fitted as if unrotated and the text lands off screen.")
-        XCTAssertTrue(harness.pdfView.bounds.insetBy(dx: -2, dy: -2).contains(inView), "inView=\(inView)")
+    /// Detection works on the page as displayed and reports page space, as for an
+    /// unrotated page; the crop box's offset turns with the page.
+    func testDetectsContentOnRotatedPages() throws {
+        for rotation in [90, 180, 270] {
+            try assertDetection(content: CGRect(x: 60, y: 90, width: 300, height: 500), rotation: rotation)
+            tearDownWindow()
+            try assertDetection(
+                content: CGRect(x: 120, y: 140, width: 360, height: 520),
+                cropBox: CGRect(x: 40, y: 60, width: 500, height: 700),
+                rotation: rotation
+            )
+            tearDownWindow()
+        }
+    }
+
+    /// The saved top-left point is the page point at the view's corner; on a turned
+    /// page that is not the top-left of the visible rect in page space.
+    func testRevisitingRotatedPageRestoresSavedViewport() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: [PageSpec(content: content, rotation: 90), PageSpec(content: content, rotation: 90)],
+            viewSize: Self.landscape
+        )
+        let firstVisit = visibleRect(harness, pageIndex: 0)
+
+        harness.pdfView.go(to: harness.page(1))
+        settle()
+        harness.pdfView.go(to: harness.page(0))
+        settle()
+
+        let secondVisit = visibleRect(harness, pageIndex: 0)
+        let message = "first=\(firstVisit) second=\(secondVisit)"
+        XCTAssertEqual(secondVisit.minX, firstVisit.minX, accuracy: 1, message)
+        XCTAssertEqual(secondVisit.minY, firstVisit.minY, accuracy: 1, message)
+        XCTAssertEqual(secondVisit.width, firstVisit.width, accuracy: 1, message)
+        XCTAssertEqual(secondVisit.height, firstVisit.height, accuracy: 1, message)
     }
 
     func testOverlaysFollowViewResize() throws {
@@ -2404,13 +2454,14 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private func assertDetection(
         content: CGRect,
         cropBox: CGRect? = nil,
+        rotation: Int = 0,
         themeMode: PDFThemeMode = .none,
         readingDirection: PDFReadDirection = .LtR_TtB,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
         let harness = try makeHarness(
-            pages: [PageSpec(content: content, cropBox: cropBox)],
+            pages: [PageSpec(content: content, cropBox: cropBox, rotation: rotation)],
             viewSize: Self.portrait,
             themeMode: themeMode,
             readingDirection: readingDirection
@@ -2426,7 +2477,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             width: content.width,
             height: content.height
         )
-        let message = "theme=\(themeMode) detected=\(detected) expected=\(expected)"
+        let message = "theme=\(themeMode) rotation=\(rotation) detected=\(detected) expected=\(expected)"
         record("PDFDETECT \(message)")
         XCTAssertEqual(detected.minX, expected.minX, accuracy: detectTolerance, "minX \(message)", file: file, line: line)
         XCTAssertEqual(detected.minY, expected.minY, accuracy: detectTolerance, "minY \(message)", file: file, line: line)

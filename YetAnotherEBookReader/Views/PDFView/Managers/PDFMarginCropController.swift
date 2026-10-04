@@ -145,11 +145,16 @@ class PDFMarginCropController {
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
         let sizeForThumbnailImage = thumbnailImageSize(boundsForCropBox: boundsForCropBox)
         let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
+        // Thumbnails show the page turned by its rotation, fitted into the requested
+        // size, so ask for the turned size and detect in display space: the passes
+        // then find the top, line gaps and ragged edges the reader sees.
+        let mediaDisplay = PDFPageDisplaySpace(box: boundsForMediaBox, rotation: pdfPage.rotation)
+        let cropDisplaySize = PDFPageDisplaySpace(box: boundsForCropBox, rotation: pdfPage.rotation).size
 
         let imageMediaBox = pdfPage.thumbnail(
             of: CGSize(
-                width: boundsForMediaBox.width * thumbnailScale,
-                height: boundsForMediaBox.height * thumbnailScale
+                width: mediaDisplay.size.width * thumbnailScale,
+                height: mediaDisplay.size.height * thumbnailScale
             ),
             for: .mediaBox
         )
@@ -200,7 +205,7 @@ class PDFMarginCropController {
                     orientation: .up,
                     skip: artifactTop,
                     pixels: rowPixels,
-                    ratio: boundsForMediaBox.width / boundsForCropBox.width,
+                    ratio: mediaDisplay.size.width / cropDisplaySize.width,
                     hMarginDetectStrength: hMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
@@ -209,7 +214,7 @@ class PDFMarginCropController {
                     orientation: .down,
                     skip: artifactBottom,
                     pixels: rowPixels,
-                    ratio: boundsForMediaBox.width / boundsForCropBox.width,
+                    ratio: mediaDisplay.size.width / cropDisplaySize.width,
                     hMarginDetectStrength: hMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
@@ -240,7 +245,7 @@ class PDFMarginCropController {
                     orientation: .right,
                     skip: artifactLeft,
                     pixels: columnPixels,
-                    ratio: boundsForMediaBox.height / boundsForCropBox.height,
+                    ratio: mediaDisplay.size.height / cropDisplaySize.height,
                     hMarginDetectStrength: vMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
@@ -249,7 +254,7 @@ class PDFMarginCropController {
                     orientation: .left,
                     skip: artifactRight,
                     pixels: columnPixels,
-                    ratio: boundsForMediaBox.height / boundsForCropBox.height,
+                    ratio: mediaDisplay.size.height / cropDisplaySize.height,
                     hMarginDetectStrength: vMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
@@ -303,12 +308,19 @@ class PDFMarginCropController {
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
 
+        // The detected rect in display space (bottom-up), then back in page space.
+        let detected = mediaDisplay.toPage(CGRect(
+            x: CGFloat(leading) / thumbnailScale,
+            y: mediaDisplay.size.height - (CGFloat(top) + rectangle.height) / thumbnailScale,
+            width: rectangle.width / thumbnailScale,
+            height: rectangle.height / thumbnailScale
+        ))
         return PageVisibleContentValue(
             bounds: CGRect(
-                x: CGFloat(leading) / thumbnailScale - boundsForCropBox.minX,
-                y: CGFloat(top) / thumbnailScale - (boundsForMediaBox.maxY - boundsForCropBox.maxY),
-                width: rectangle.width / thumbnailScale,
-                height: rectangle.height / thumbnailScale
+                x: detected.minX - boundsForCropBox.minX,
+                y: boundsForCropBox.maxY - detected.maxY,
+                width: detected.width,
+                height: detected.height
             ),
             thumbImage: newImage
         )

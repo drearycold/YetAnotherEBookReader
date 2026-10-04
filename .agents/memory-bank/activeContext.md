@@ -54,6 +54,26 @@ placement (content right of center, top offset / drift after page turns).
       offsets that were passed to every scan as separate parameters.
   - Scanned-page noise (specks) is still only limited by the walks' gap limits
     and the hop's minimum line height.
+- Rotated pages (`page.rotation` ≠ 0) are detected and fitted as displayed:
+  - **`PDFPageDisplaySpace`** (in `PDFPageViewportFitter.swift`) maps a page box
+    to display space and back. PDFKit turns pages clockwise; display space has a
+    bottom-left origin with y up, like page space.
+  - **Detection.** `PDFPage.thumbnail` draws the page turned and aspect-fits it
+    into the requested size. Asking for the unturned media-box size gave a
+    shrunken raster (612×472 for a 90° Letter page) read at full scale.
+    Detection now asks for the turned size, runs the passes in display space
+    (so the top, line gaps and ragged edges are the ones the reader sees), and
+    maps the rect back. `visibleBounds` still returns crop-relative,
+    top-down page space.
+  - **Fit.** `singlePageViewport` runs the fitter in display space. That
+    includes the saved-axis keep: a NaN axis stays NaN through the turn. Only
+    `pageAnchor` is mapped back; `applyViewport` converts through PDFKit.
+  - **Saved position.** `getPagePoint` converts the view's top-left corner as a
+    point. Taking `(minX, maxY)` of the visible rect in page space is wrong on a
+    turned page.
+  - `testRotatedPageFitShowsContent` no longer expects a failure. The remaining
+    expected failures, `testProbeGoTo…`, record PDFKit's own `go(to:)`
+    behaviour.
 - Auto-hiding bars (FolioReader style):
   - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on

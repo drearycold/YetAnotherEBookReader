@@ -115,3 +115,60 @@ enum PDFPageViewportFitter {
         )
     }
 }
+
+/// A page box as displayed: PDFKit turns the page clockwise by its `rotation`.
+/// Display space has its origin at the bottom-left of the turned box and y up,
+/// like page space, so detection and the fit work on what the reader sees and
+/// only the result is mapped back to page space.
+struct PDFPageDisplaySpace: Equatable {
+    /// The box in page space (crop or media box).
+    let box: CGRect
+    /// 0, 90, 180 or 270.
+    let rotation: Int
+
+    init(box: CGRect, rotation: Int) {
+        self.box = box
+        let quarterTurns = ((rotation / 90) % 4 + 4) % 4
+        self.rotation = quarterTurns * 90
+    }
+
+    /// The box's size as displayed.
+    var size: CGSize {
+        rotation % 180 == 0 ? box.size : CGSize(width: box.height, height: box.width)
+    }
+
+    func toDisplay(_ point: CGPoint) -> CGPoint {
+        let u = point.x - box.minX
+        let v = point.y - box.minY
+        switch rotation {
+        case 90: return CGPoint(x: v, y: box.width - u)
+        case 180: return CGPoint(x: box.width - u, y: box.height - v)
+        case 270: return CGPoint(x: box.height - v, y: u)
+        default: return CGPoint(x: u, y: v)
+        }
+    }
+
+    func toPage(_ point: CGPoint) -> CGPoint {
+        let u: CGFloat
+        let v: CGFloat
+        switch rotation {
+        case 90: (u, v) = (box.width - point.y, point.x)
+        case 180: (u, v) = (box.width - point.x, box.height - point.y)
+        case 270: (u, v) = (point.y, box.height - point.x)
+        default: (u, v) = (point.x, point.y)
+        }
+        return CGPoint(x: box.minX + u, y: box.minY + v)
+    }
+
+    func toDisplay(_ rect: CGRect) -> CGRect {
+        Self.rect(toDisplay(CGPoint(x: rect.minX, y: rect.minY)), toDisplay(CGPoint(x: rect.maxX, y: rect.maxY)))
+    }
+
+    func toPage(_ rect: CGRect) -> CGRect {
+        Self.rect(toPage(CGPoint(x: rect.minX, y: rect.minY)), toPage(CGPoint(x: rect.maxX, y: rect.maxY)))
+    }
+
+    private static func rect(_ a: CGPoint, _ b: CGPoint) -> CGRect {
+        CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
+}
