@@ -97,7 +97,7 @@ struct PDFOptionView: View {
                         HStack {
                             Text("Columns")
                             Spacer()
-                            Text(model.preferences.readingDirection == .LtR_TtB ? "read one column at a time" : "left-to-right text only")
+                            Text(model.preferences.readingDirection == .LtR_TtB ? "read one column at a time" : "read one tier at a time")
                                 .font(.caption)
                         }
                         Picker(selection: $model.preferences.columnsMode, label: Text("Columns")) {
@@ -106,7 +106,6 @@ struct PDFOptionView: View {
                             }
                         }
                         .pickerStyle(SegmentedPickerStyle())
-                        .disabled(model.preferences.readingDirection != .LtR_TtB)
                     }
                 case .Scroll:
                     VStack(alignment: .leading, spacing: 4) {

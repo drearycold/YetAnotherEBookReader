@@ -4,7 +4,8 @@
 //
 //  Finds the text columns of a page (#19) and the order they are read in (#97):
 //  full-width blocks and bands of columns, top to bottom, the columns of a band
-//  left to right.
+//  left to right. Vertical text is read in tiers (段), found the same way on
+//  the page turned a quarter.
 //
 
 import CoreGraphics
@@ -43,6 +44,15 @@ struct PDFInkMap {
         Int(columnInk[rows.upperBound * width + x] - columnInk[rows.lowerBound * width + x])
     }
 
+    /// This map turned a quarter turn anticlockwise: vertical text, read in
+    /// lines top to bottom from right to left, becomes rows read left to right
+    /// from the top. (x, y) of the turned map is (width - 1 - y, x) of this one.
+    func turnedForVerticalText() -> PDFInkMap {
+        PDFInkMap(width: height, height: width) { x, y in
+            isInked(x: width - 1 - y, y: x)
+        }
+    }
+
     /// The bounding box of the ink in `columns` × `rows`, or nil when blank.
     func inkBounds(columns: Range<Int>, rows: Range<Int>) -> CGRect? {
         let inkedColumns = columns.filter { inkedRows(column: $0, rows: rows) > 0 }
@@ -63,6 +73,27 @@ enum PDFColumnDetector {
         /// Ink map pixels, top-down.
         var rect: CGRect
         var kind: PDFReadingRegion.Kind
+    }
+
+    /// The page's reading regions in `readingDirection`. Vertical text is read
+    /// in tiers (段): on the page turned a quarter (`turnedForVerticalText`)
+    /// its tiers are columns and a block across them (a title the height of the
+    /// page) is full-width. So it is read from the right, band by band, each
+    /// band's tiers from the top.
+    static func regions(in map: PDFInkMap, readingDirection: PDFReadDirection) -> [Region] {
+        switch readingDirection {
+        case .LtR_TtB:
+            return regions(in: map)
+        case .TtB_RtL:
+            let width = CGFloat(map.width)
+            return regions(in: map.turnedForVerticalText()).map { region in
+                let turned = region.rect
+                return Region(
+                    rect: CGRect(x: width - turned.maxY, y: turned.minX, width: turned.height, height: turned.width),
+                    kind: region.kind
+                )
+            }
+        }
     }
 
     /// The page's reading regions when it is set in columns, in reading order:

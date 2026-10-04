@@ -825,10 +825,83 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(single.regions.isEmpty)
     }
 
-    /// Vertical text is not read in columns: the key turns them off.
-    func testColumnsAreOffForVerticalText() throws {
-        let layout = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto, readingDirection: .TtB_RtL, draw: drawPaperPage)
-        XCTAssertTrue(layout.regions.isEmpty)
+    /// Vertical text: `count` lines from `right` leftward, 15 pt apart, each
+    /// a run of 9 pt characters down `y`.
+    private func drawVerticalLines(right: CGFloat, count: Int, y: ClosedRange<CGFloat>) {
+        UIColor.black.setFill()
+        for line in 0..<count {
+            let x = right - CGFloat(line + 1) * 15 + 3
+            var top = y.lowerBound
+            while top + 9 <= y.upperBound {
+                UIRectFill(CGRect(x: x, y: top, width: 9, height: 9))
+                top += 11
+            }
+        }
+    }
+
+    /// A vertical page in two tiers (段).
+    private func drawTieredPage(_ context: UIGraphicsPDFRendererContext) {
+        drawVerticalLines(right: 552, count: 33, y: 96...380)
+        drawVerticalLines(right: 552, count: 33, y: 420...700)
+    }
+
+    /// Vertical text is read in tiers: the top one, then the bottom one.
+    func testDetectsTiersOfVerticalText() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto, readingDirection: .TtB_RtL, draw: drawTieredPage)
+        XCTAssertEqual(layout.regions.map(\.kind), [.column, .column], "\(layout.regions)")
+        guard layout.regions.count == 2 else { return }
+        let (top, bottom) = (layout.regions[0].rect, layout.regions[1].rect)
+        XCTAssertEqual(top.minY, 96, accuracy: detectTolerance, "\(top)")
+        XCTAssertEqual(top.maxY, 380, accuracy: 12, "\(top)")
+        XCTAssertEqual(bottom.minY, 420, accuracy: 12, "\(bottom)")
+        XCTAssertEqual(bottom.maxY, 700, accuracy: 12, "\(bottom)")
+        for tier in [top, bottom] {
+            XCTAssertEqual(tier.maxX, 552, accuracy: detectTolerance, "\(tier)")
+            XCTAssertEqual(tier.minX, 552 - 33 * 15 + 3, accuracy: detectTolerance, "\(tier)")
+        }
+    }
+
+    /// A tiered page is read tier by tier, each a screen at a time from the
+    /// right when it is wider than the view, then the next page. Forward is
+    /// Prev's arrow in right-to-left reading.
+    func testNextReadsTiersOneAtATime() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("tiers.pdf")
+        try UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize)).writePDF(to: url) { context in
+            for _ in 0..<2 {
+                context.beginPage()
+                drawTieredPage(context)
+            }
+        }
+        tempURLs.append(url)
+        let harness = try makeHarness(
+            pages: [],
+            viewSize: Self.portrait,
+            readingDirection: .TtB_RtL,
+            pdfURL: url,
+            columnsMode: .Auto,
+            autoScaler: .Height
+        )
+        let page = harness.page(0)
+        let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        XCTAssertEqual(Set(plan.steps.map(\.region)), [0, 1])
+        XCTAssertGreaterThan(plan.steps.count, 2, "a tier is wider than the view at its height")
+
+        var visited: [(region: Int, rightEdge: CGFloat)] = []
+        for _ in plan.steps.indices {
+            XCTAssertTrue(harness.pdfView.currentPage === page)
+            let region = try XCTUnwrap(regionOnScreen(harness))
+            let tier = harness.pdfView.convert(plan.display.toPage(plan.regions[region]), from: page)
+            visited.append((region, tier.maxX))
+            pressPrev(harness)
+        }
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1), "the next page after the last step")
+        XCTAssertEqual(visited.map(\.region), visited.map(\.region).sorted(), "top tier, then bottom")
+        for region in [0, 1] {
+            let edges = visited.filter { $0.region == region }.map(\.rightEdge)
+            XCTAssertEqual(edges, edges.sorted(), "tier \(region) is read from its right end")
+        }
     }
 
     /// A spread of two-column pages: each half's columns, half by half.

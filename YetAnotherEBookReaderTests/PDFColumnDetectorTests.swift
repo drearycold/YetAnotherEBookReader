@@ -22,6 +22,30 @@ final class PDFColumnDetectorTests: XCTestCase {
         }
     }
 
+    /// Vertical text: 7 px lines on an 11 px pitch from the right edge leftward,
+    /// broken by 3 px gaps between characters.
+    private struct VerticalTextBlock {
+        var rect: CGRect
+
+        func isInked(_ x: Int, _ y: Int) -> Bool {
+            guard rect.contains(CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)) else { return false }
+            let fromRight = Int(rect.maxX) - 1 - x
+            let line = fromRight / 11
+            guard fromRight % 11 < 7 else { return false }
+            return (y - Int(rect.minY) + line * 13) % 23 >= 3
+        }
+    }
+
+    private func vertical(_ x: ClosedRange<CGFloat>, _ y: ClosedRange<CGFloat>) -> VerticalTextBlock {
+        VerticalTextBlock(rect: CGRect(x: x.lowerBound, y: y.lowerBound, width: x.upperBound - x.lowerBound, height: y.upperBound - y.lowerBound))
+    }
+
+    private func map(vertical blocks: [VerticalTextBlock]) -> PDFInkMap {
+        PDFInkMap(width: width, height: height) { x, y in
+            blocks.contains { $0.isInked(x, y) }
+        }
+    }
+
     private func map(text: [TextBlock], solid: [CGRect] = [], specks: [CGPoint] = []) -> PDFInkMap {
         PDFInkMap(width: width, height: height) { x, y in
             let point = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
@@ -128,6 +152,77 @@ final class PDFColumnDetectorTests: XCTestCase {
     func testUnequalColumnsAreNotSplit() {
         let regions = PDFColumnDetector.regions(in: map(text: [text(0...120, 0...800), text(160...600, 0...800)]))
         XCTAssertTrue(regions.isEmpty, "\(regions)")
+    }
+
+    // MARK: - Vertical text
+
+    /// The ink map turned a quarter: (x, y) of the turned map is
+    /// (width - 1 - y, x) of the page's.
+    func testTurnedMapReadsVerticalLinesAsRows() {
+        let page = map(vertical: [vertical(560...600, 100...300)])
+        let turned = page.turnedForVerticalText()
+        XCTAssertEqual(turned.width, height)
+        XCTAssertEqual(turned.height, width)
+        for (x, y) in [(150, 0), (150, 6), (150, 7), (10, 3), (299, 40)] {
+            XCTAssertEqual(turned.isInked(x: x, y: y), page.isInked(x: width - 1 - y, y: x), "(\(x), \(y))")
+        }
+    }
+
+    /// Two tiers (段) of vertical text: the top one, then the bottom one.
+    func testTwoTiersOfVerticalText() {
+        let regions = PDFColumnDetector.regions(
+            in: map(vertical: [vertical(0...600, 0...380), vertical(0...600, 420...800)]),
+            readingDirection: .TtB_RtL
+        )
+        XCTAssertEqual(regions.map(\.kind), [.column, .column], "\(regions)")
+        guard regions.count == 2 else { return }
+        assertTier(regions[0], .column, x: 0...600, y: 0...380, "top tier")
+        assertTier(regions[1], .column, x: 0...600, y: 420...800, "bottom tier")
+    }
+
+    /// A title the height of the page at the right is read first, then the
+    /// tiers beside it.
+    func testFullHeightTitleBesideTiers() {
+        let regions = PDFColumnDetector.regions(
+            in: map(vertical: [vertical(560...600, 0...800), vertical(0...520, 0...380), vertical(0...520, 420...800)]),
+            readingDirection: .TtB_RtL
+        )
+        XCTAssertEqual(regions.map(\.kind), [.spanning, .column, .column], "\(regions)")
+        guard regions.count == 3 else { return }
+        assertTier(regions[0], .spanning, x: 560...600, y: 0...800, "title")
+        assertTier(regions[1], .column, x: 0...520, y: 0...380, "top tier")
+        assertTier(regions[2], .column, x: 0...520, y: 420...800, "bottom tier")
+    }
+
+    func testThreeTiersTopToBottom() {
+        let regions = PDFColumnDetector.regions(
+            in: map(vertical: [vertical(0...600, 0...250), vertical(0...600, 275...525), vertical(0...600, 550...800)]),
+            readingDirection: .TtB_RtL
+        )
+        XCTAssertEqual(regions.count, 3, "\(regions)")
+        XCTAssertEqual(regions.map(\.rect.minY).sorted(), regions.map(\.rect.minY), "top to bottom")
+    }
+
+    func testSingleTierIsNotSplit() {
+        XCTAssertTrue(PDFColumnDetector.regions(in: map(vertical: [vertical(0...600, 0...800)]), readingDirection: .TtB_RtL).isEmpty)
+    }
+
+    /// Vertical lines end at a character pitch, not a pixel: the line ends of
+    /// a tier are found within one pitch, its sides within a few pixels.
+    private func assertTier(
+        _ region: PDFColumnDetector.Region,
+        _ kind: PDFReadingRegion.Kind,
+        x: ClosedRange<CGFloat>,
+        y: ClosedRange<CGFloat>,
+        _ label: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(region.kind, kind, label, file: file, line: line)
+        XCTAssertEqual(region.rect.minX, x.lowerBound, accuracy: 12, "\(label) \(region.rect)", file: file, line: line)
+        XCTAssertEqual(region.rect.maxX, x.upperBound, accuracy: 12, "\(label) \(region.rect)", file: file, line: line)
+        XCTAssertEqual(region.rect.minY, y.lowerBound, accuracy: 4, "\(label) \(region.rect)", file: file, line: line)
+        XCTAssertEqual(region.rect.maxY, y.upperBound, accuracy: 4, "\(label) \(region.rect)", file: file, line: line)
     }
 
     /// Word spaces lining up over a few lines (a river) are not a gutter.

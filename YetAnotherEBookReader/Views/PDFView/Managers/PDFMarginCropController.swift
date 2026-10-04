@@ -214,7 +214,7 @@ class PDFMarginCropController {
                     ? [(rect: CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1), kind: PDFReadingRegion.Kind.spreadHalf)]
                     : regionRects
                 let columned = parts.flatMap { part -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] in
-                    let columns = columnRegions(in: raster, rect: part.rect)
+                    let columns = columnRegions(in: raster, rect: part.rect, readingDirection: key.readingDirection)
                     return columns.isEmpty && !regionRects.isEmpty ? [part] : columns
                 }
                 if columned.count >= 2 {
@@ -301,9 +301,10 @@ class PDFMarginCropController {
         return key.readingDirection == .TtB_RtL ? halves.reversed() : halves
     }
 
-    /// The columns (#19) in `rect` (thumbnail pixels) as reading regions in
-    /// reading order, in thumbnail pixels; empty when it is not set in columns.
-    private func columnRegions(in raster: PageRaster, rect: CGRect) -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] {
+    /// The columns (#19), or tiers of vertical text, in `rect` (thumbnail
+    /// pixels) as reading regions in reading order, in thumbnail pixels; empty
+    /// when it is not set in columns.
+    private func columnRegions(in raster: PageRaster, rect: CGRect, readingDirection: PDFReadDirection) -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] {
         let part = raster.cropped(
             columns: Self.pixelRange(rect.minX, rect.maxX, limit: raster.width),
             lines: Self.pixelRange(rect.minY, rect.maxY, limit: raster.height)
@@ -311,7 +312,7 @@ class PDFMarginCropController {
         let map = PDFInkMap(width: part.width, height: part.height) { x, y in
             part.darkness(line: y, pixel: x, .up) > 0
         }
-        return PDFColumnDetector.regions(in: map).map { region in
+        return PDFColumnDetector.regions(in: map, readingDirection: readingDirection).map { region in
             (region.rect.offsetBy(dx: CGFloat(part.originX), dy: CGFloat(part.originY)), region.kind)
         }
     }

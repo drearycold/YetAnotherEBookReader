@@ -28,8 +28,7 @@ struct PageVisibleContentKey: Hashable {
 }
 
 extension PageVisibleContentKey {
-    /// The key for `pageNumber` under `options`. Columns are read left to right
-    /// only, so they are Off for vertical text.
+    /// The key for `pageNumber` under `options`.
     init(pageNumber: Int, options: PDFPreferenceValue) {
         self.init(
             pageNumber: pageNumber,
@@ -37,7 +36,7 @@ extension PageVisibleContentKey {
             hMarginDetectStrength: options.hMarginDetectStrength,
             vMarginDetectStrength: options.vMarginDetectStrength,
             spreadMode: options.spreadMode,
-            columnsMode: options.readingDirection == .LtR_TtB ? options.columnsMode : .Off
+            columnsMode: options.columnsMode
         )
     }
 }
