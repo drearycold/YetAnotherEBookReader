@@ -9,7 +9,7 @@ final class PDFThemePaletteTests: XCTestCase {
 
     /// The lists use FolioReader's menu colours (`FolioReaderConfig`), except the
     /// dark sheet, which is raised off the black page; text stays readable.
-    func testListStyleUsesFolioReaderColours() {
+    func testListStyleUsesFolioReaderColours() throws {
         let expectedText: [PDFThemeMode: UInt32] = [.none: 0x000000, .serpia: 0x5F4B32, .forest: 0x37453F, .dark: 0xB6B6B6]
         for theme in PDFThemeMode.allCases {
             let palette = PDFThemePalette(themeMode: theme)
@@ -22,6 +22,19 @@ final class PDFThemePaletteTests: XCTestCase {
             XCTAssertEqual(style.userInterfaceStyle, theme == .dark ? .dark : .light)
         }
         XCTAssertNotEqual(hex(PDFThemePalette(themeMode: .dark).listStyle.background), 0x000000, "not the black page")
+
+        // The selected tab's title on the accent fill.
+        for theme in PDFThemeMode.allCases {
+            let style = PDFThemePalette(themeMode: theme).listStyle
+            let control = UISegmentedControl(items: ["Chapter", "Thumbnail"])
+            style.apply(to: control)
+            XCTAssertEqual(control.selectedSegmentTintColor, style.accent)
+            let selected = control.titleTextAttributes(for: .selected)?[.foregroundColor] as? UIColor
+            XCTAssertEqual(selected, style.textOnAccent, "\(theme)")
+            XCTAssertGreaterThanOrEqual(contrast(style.textOnAccent, style.accent), 7, "\(theme)")
+            let normal = try XCTUnwrap(control.titleTextAttributes(for: .normal)?[.foregroundColor] as? UIColor)
+            XCTAssertGreaterThanOrEqual(contrast(normal, style.background), 3, "\(theme) unselected")
+        }
         XCTAssertEqual(PDFThemePalette(themeMode: .none).listStyle.titleFont(level: 2).pointSize, 14, "FolioReader: 1.5 pt smaller per level")
     }
 

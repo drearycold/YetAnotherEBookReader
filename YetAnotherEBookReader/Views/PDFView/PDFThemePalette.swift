@@ -179,11 +179,22 @@ extension PDFThemePalette {
             isDark ? PDFHighlightAnnotations.darkColor(for: style) : BookHighlightStyle.colorForStyle(style.rawValue)
         }
 
+        /// Text on an `accent` fill. The green is light, so dark text reads on
+        /// it in every theme; FolioReader's theme text (light grey under dark)
+        /// all but disappears on it.
+        var textOnAccent: UIColor { UIColor(white: 0.1, alpha: 1) }
+
         /// FolioReader's list tabs: the accent behind the selected segment.
         func apply(to segmentedControl: UISegmentedControl) {
             segmentedControl.selectedSegmentTintColor = accent
-            segmentedControl.setTitleTextAttributes([.foregroundColor: text], for: .selected)
-            segmentedControl.setTitleTextAttributes([.foregroundColor: text.withAlphaComponent(0.7)], for: .normal)
+            segmentedControl.setTitleTextAttributes([
+                .foregroundColor: textOnAccent,
+                .font: Self.avenir("Avenir-Medium", size: 14),
+            ], for: .selected)
+            segmentedControl.setTitleTextAttributes([
+                .foregroundColor: text.withAlphaComponent(0.7),
+                .font: Self.avenir("Avenir-Book", size: 14),
+            ], for: .normal)
         }
 
         private static func avenir(_ name: String, size: CGFloat) -> UIFont {
