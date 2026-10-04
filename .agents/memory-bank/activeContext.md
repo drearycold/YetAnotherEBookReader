@@ -40,7 +40,20 @@ placement (content right of center, top offset / drift after page turns).
       heading-to-body gap was ~32 pt.
     - The same hop keeps a one-line footnote below the body (#96's footnote case).
       It was cut off before.
-  - Still open: #95 (scan borders).
+  - **Scan artifacts (#95):** `PageRaster.edgeArtifactWidth` finds a scanner
+    border or binding shadow on each edge:
+    - a run of lines with at least half their pixels inked;
+    - starting at the edge, allowing a thin light strip first;
+    - ending within the outer tenth. A dark run that goes on is a full-bleed
+      picture or tinted page, so it gives 0.
+    - Each pass starts after the artifact on its own edge (`skip`). It also
+      leaves out those on the other edges from its lines (`pixels`).
+    - Before this, a gutter shadow inked every row. The top pass then saw no
+      line gaps and stopped extending, which dropped paragraph tails.
+    - `PageRaster` bundles the thumbnail bytes, size, row stride and channel
+      offsets that were passed to every scan as separate parameters.
+  - Scanned-page noise (specks) is still only limited by the walks' gap limits
+    and the hop's minimum line height.
 - Auto-hiding bars (FolioReader style):
   - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on

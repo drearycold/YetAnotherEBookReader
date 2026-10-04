@@ -244,6 +244,47 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(detected.minY, 198, accuracy: detectTolerance, "\(detected)")
     }
 
+    /// #95: a scanner's black border on the top and left edges counted as content
+    /// from the first line, so nothing was cropped there.
+    func testDetectsTextInsideScannerBorder() throws {
+        let detected = try detectDrawnPage { context in
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 792))
+            context.fill(CGRect(x: 0, y: 0, width: 612, height: 8))
+            drawBodyLines(y: 96, count: 40)
+        }
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.minY, 96, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxY, 96 + 40 * 15, accuracy: 4, "\(detected)")
+    }
+
+    /// #95: a binding shadow fading in from the gutter edge. Besides the left edge,
+    /// its ink in every row hid the gaps between lines from the top pass, which
+    /// then dropped the paragraph tail above the body.
+    func testDetectsTextBesideBindingShadow() throws {
+        let detected = try detectDrawnPage { context in
+            drawBindingShadow(context)
+            drawBodyLines(y: 96, count: 1) { _ in 81...201 }
+            drawBodyLines(y: 111, count: 39)
+        }
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.minY, 96, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// A full-bleed picture runs past the outer tenth, so it is content, not an
+    /// edge artifact.
+    func testFullBleedPictureIsNotAnEdgeArtifact() throws {
+        let detected = try detectDrawnPage { context in
+            UIColor.darkGray.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 612, height: 300))
+            UIColor.black.setFill()
+            drawBodyLines(y: 330, count: 20)
+        }
+        XCTAssertEqual(detected.minY, 1, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.minX, 1, accuracy: detectTolerance, "\(detected)")
+    }
+
     /// The outward walk only crosses word-sized gaps: a marginal note beside the
     /// text block stays out.
     func testMarginalNoteBesideTextIsNotPulledIn() throws {
@@ -2661,6 +2702,15 @@ final class YabrPDFMarginCropTests: XCTestCase {
             text.draw(at: line.origin, withAttributes: attributes)
             UIGraphicsGetCurrentContext()?.restoreGState()
         }
+    }
+
+    /// A scan's gutter shadow: dark at the left edge, fading out over 30 pt.
+    private func drawBindingShadow(_ context: UIGraphicsPDFRendererContext) {
+        for x in 0..<30 {
+            UIColor(white: 0.3 + CGFloat(x) * 0.02, alpha: 1).setFill()
+            context.fill(CGRect(x: CGFloat(x), y: 0, width: 1, height: 792))
+        }
+        UIColor.black.setFill()
     }
 
     /// A centred 9pt running head with its folio, as in `BookPageGenerator`.

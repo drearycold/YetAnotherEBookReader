@@ -160,7 +160,6 @@ class PDFMarginCropController {
             return PageVisibleContentValue(bounds: boundsForMediaBox, thumbImage: nil)
         }
 
-        let numberOfComponents = 4
         var top = 0
         var bottom = 0
         var leading = 0
@@ -178,26 +177,38 @@ class PDFMarginCropController {
         if let provider = cgimage.dataProvider,
            let providerData = provider.data,
            let data = CFDataGetBytePtr(providerData) {
+            let raster = PageRaster(
+                data: data,
+                width: Int(imageMediaBox.size.width),
+                height: Int(imageMediaBox.size.height),
+                pixelsPerRow: Int(imageMediaBox.size.width) + padding,
+                channels: channels
+            )
+            // Scanner borders and binding shadows (#95): each pass starts inside the
+            // one on its own edge, and leaves those either side out of its lines.
+            let artifactTop = raster.edgeArtifactWidth(from: .up)
+            let artifactBottom = raster.edgeArtifactWidth(from: .down)
+            let artifactLeft = raster.edgeArtifactWidth(from: .right)
+            let artifactRight = raster.edgeArtifactWidth(from: .left)
+            let rowPixels = max(1, artifactLeft)..<(raster.width - artifactRight)
+            let columnPixels = max(1, artifactTop)..<(raster.height - artifactBottom)
+
             switch readingDirection {
             case .LtR_TtB:
                 top = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .up,
-                    data: data,
-                    channels: channels,
+                    skip: artifactTop,
+                    pixels: rowPixels,
                     ratio: boundsForMediaBox.width / boundsForCropBox.width,
                     hMarginDetectStrength: hMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
                 bottom = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .down,
-                    data: data,
-                    channels: channels,
+                    skip: artifactBottom,
+                    pixels: rowPixels,
                     ratio: boundsForMediaBox.width / boundsForCropBox.width,
                     hMarginDetectStrength: hMarginDetectStrength,
                     extendsAcrossLineGaps: true
@@ -206,69 +217,57 @@ class PDFMarginCropController {
                 // pages (a chapter's last lines) are not diluted by the blank below.
                 let sideRatio = 3 * imageMediaBox.size.height / Double(max(bottom - top + 1, 1))
                 leading = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .right,
-                    data: data,
-                    channels: channels,
+                    skip: artifactLeft,
+                    pixels: columnPixels,
                     ratio: sideRatio,
                     hMarginDetectStrength: vMarginDetectStrength,
                     sparseInkSpan: min(top, bottom)...max(top, bottom)
                 )
                 trailing = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .left,
-                    data: data,
-                    channels: channels,
+                    skip: artifactRight,
+                    pixels: columnPixels,
                     ratio: sideRatio,
                     hMarginDetectStrength: vMarginDetectStrength,
                     sparseInkSpan: min(top, bottom)...max(top, bottom)
                 )
             case .TtB_RtL:
                 leading = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .right,
-                    data: data,
-                    channels: channels,
+                    skip: artifactLeft,
+                    pixels: columnPixels,
                     ratio: boundsForMediaBox.height / boundsForCropBox.height,
                     hMarginDetectStrength: vMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
                 trailing = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .left,
-                    data: data,
-                    channels: channels,
+                    skip: artifactRight,
+                    pixels: columnPixels,
                     ratio: boundsForMediaBox.height / boundsForCropBox.height,
                     hMarginDetectStrength: vMarginDetectStrength,
                     extendsAcrossLineGaps: true
                 )
                 let sideRatio = 3 * imageMediaBox.size.width / Double(max(trailing - leading + 1, 1))
                 top = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .up,
-                    data: data,
-                    channels: channels,
+                    skip: artifactTop,
+                    pixels: rowPixels,
                     ratio: sideRatio,
                     hMarginDetectStrength: hMarginDetectStrength,
                     sparseInkSpan: min(leading, trailing)...max(leading, trailing)
                 )
                 bottom = blankBorderWidth(
-                    size: imageMediaBox.size,
-                    padding: padding,
-                    numberOfComponents: numberOfComponents,
+                    raster: raster,
                     orientation: .down,
-                    data: data,
-                    channels: channels,
+                    skip: artifactBottom,
+                    pixels: rowPixels,
                     ratio: sideRatio,
                     hMarginDetectStrength: hMarginDetectStrength,
                     sparseInkSpan: min(leading, trailing)...max(leading, trailing)
@@ -341,55 +340,28 @@ class PDFMarginCropController {
     /// edge (`extendBorderAcrossLineGaps`). With `sparseInkSpan`, it walks outward over
     /// any ink within those perpendicular lines instead, so the few long lines of
     /// ragged text are kept (`extendBorderOverSparseInk`).
+    ///
+    /// `skip` is the scanner border or binding shadow on the scanned edge, and
+    /// `pixels` leaves out those on the edges either side of it (#95).
     private func blankBorderWidth(
-        size: CGSize,
-        padding: Int,
-        numberOfComponents: Int,
+        raster: PageRaster,
         orientation: CGImagePropertyOrientation,
-        data: UnsafePointer<UInt8>,
-        channels: PixelChannelOffsets,
+        skip: Int,
+        pixels: Range<Int>,
         ratio: Double = 1.0,
         hMarginDetectStrength: Double,
         extendsAcrossLineGaps: Bool = false,
         sparseInkSpan: ClosedRange<Int>? = nil
     ) -> Int {
-        let lineNumMax = { () -> Int in
-            switch orientation {
-            case .up, .down, .upMirrored, .downMirrored:
-                return Int(size.height)
-            case .left, .leftMirrored, .right, .rightMirrored:
-                return Int(size.width)
-            }
-        }()
-        let pixelNumMax = { () -> Int in
-            switch orientation {
-            case .up, .down, .upMirrored, .downMirrored:
-                return Int(size.width)
-            case .left, .leftMirrored, .right, .rightMirrored:
-                return Int(size.height)
-            }
-        }()
-        let pixelNumInRow = Int(size.width) + padding
+        let lineNumMax = raster.lineCount(orientation)
+        let pixelNumMax = raster.pixelCount(orientation)
         let scanLimit = lineNumMax - 1
+        let firstLine = max(1, skip)
 
-        func density(ofLine line: Int, pixels: Range<Int> = 1..<pixelNumMax) -> Double {
-            let lineIndex: Int
-            switch orientation {
-            case .up, .upMirrored, .right, .rightMirrored:
-                lineIndex = line
-            case .down, .downMirrored, .left, .leftMirrored:
-                lineIndex = lineNumMax - line - 1
-            }
+        func density(ofLine line: Int, pixels: Range<Int> = pixels) -> Double {
             var nonWhiteDensity = 0.0
             for pixelInLine in pixels {
-                let pixelIndex: Int
-                switch orientation {
-                case .up, .down, .upMirrored, .downMirrored:
-                    pixelIndex = (pixelInLine + pixelNumInRow * lineIndex) * numberOfComponents
-                case .left, .leftMirrored, .right, .rightMirrored:
-                    pixelIndex = (lineIndex + pixelNumInRow * pixelInLine) * numberOfComponents
-                }
-                nonWhiteDensity += pixelGreyLevel(pixelIndex: pixelIndex, data: data, channels: channels)
+                nonWhiteDensity += raster.darkness(line: line, pixel: pixelInLine, orientation)
             }
             return nonWhiteDensity
         }
@@ -397,7 +369,7 @@ class PDFMarginCropController {
         var border: Int?
         var nonWhiteLineFirst = 0
         var nonWhiteLines = 0
-        var line = 1
+        var line = firstLine
         while line < scanLimit && border == nil {
             let nonWhiteDensity = density(ofLine: line)
             if nonWhiteDensity > 0,
@@ -417,13 +389,13 @@ class PDFMarginCropController {
             line += 1
         }
 
-        var result = border ?? 1
+        var result = border ?? firstLine
         if let border, extendsAcrossLineGaps {
-            result = extendBorderAcrossLineGaps(from: border, scanLimit: scanLimit, lineNumMax: lineNumMax, density: { density(ofLine: $0) })
+            result = extendBorderAcrossLineGaps(from: border, floor: firstLine, scanLimit: scanLimit, lineNumMax: lineNumMax, density: { density(ofLine: $0) })
         } else if let border, let sparseInkSpan {
-            let pixels = max(sparseInkSpan.lowerBound, 1)..<min(sparseInkSpan.upperBound + 1, pixelNumMax)
-            if !pixels.isEmpty {
-                result = extendBorderOverSparseInk(from: border, lineNumMax: lineNumMax, density: { density(ofLine: $0, pixels: pixels) })
+            let span = max(sparseInkSpan.lowerBound, pixels.lowerBound)..<min(sparseInkSpan.upperBound + 1, pixels.upperBound)
+            if !span.isEmpty {
+                result = extendBorderOverSparseInk(from: border, floor: firstLine, lineNumMax: lineNumMax, density: { density(ofLine: $0, pixels: span) })
             }
         }
 
@@ -442,6 +414,7 @@ class PDFMarginCropController {
     /// a word space; a marginal note or folio further out is not reached.
     private func extendBorderOverSparseInk(
         from border: Int,
+        floor: Int,
         lineNumMax: Int,
         density: (Int) -> Double
     ) -> Int {
@@ -451,7 +424,7 @@ class PDFMarginCropController {
         var extended = border
         var whiteRun = 0
         var probe = border - 1
-        while probe >= 1 {
+        while probe >= floor {
             if density(probe) > 0 {
                 extended = probe
                 whiteRun = 0
@@ -466,6 +439,7 @@ class PDFMarginCropController {
 
     private func extendBorderAcrossLineGaps(
         from border: Int,
+        floor: Int,
         scanLimit: Int,
         lineNumMax: Int,
         density: (Int) -> Double
@@ -501,11 +475,11 @@ class PDFMarginCropController {
         var extended = border
         var whiteRun = 0
         var probe = border - 1
-        while probe >= 1 {
+        while probe >= floor {
             if density(probe) >= inkFloor {
                 if whiteRun > maxGap {
                     var runStart = probe
-                    while runStart > 1, density(runStart - 1) >= inkFloor {
+                    while runStart > floor, density(runStart - 1) >= inkFloor {
                         runStart -= 1
                     }
                     guard probe - runStart + 1 >= minBlockInk, runStart > edgeZone else { break }
@@ -524,17 +498,88 @@ class PDFMarginCropController {
         }
         return extended
     }
+}
 
-    /// Ink darkness of a pixel by perceived luminance (Rec. 601), so coloured text
-    /// counts: red, orange or light blue have a channel above 200 but are clearly ink.
+/// The page thumbnail's pixels, read along scan lines from any edge: a line runs
+/// across the page parallel to the edge, `line` counts in from that edge and
+/// `pixel` runs along it (left to right, or top to bottom).
+struct PageRaster {
+    let data: UnsafePointer<UInt8>
+    let width: Int
+    let height: Int
+    let pixelsPerRow: Int
+    let channels: PixelChannelOffsets
+
+    func lineCount(_ edge: CGImagePropertyOrientation) -> Int {
+        switch edge {
+        case .up, .down, .upMirrored, .downMirrored:
+            return height
+        case .left, .leftMirrored, .right, .rightMirrored:
+            return width
+        }
+    }
+
+    func pixelCount(_ edge: CGImagePropertyOrientation) -> Int {
+        switch edge {
+        case .up, .down, .upMirrored, .downMirrored:
+            return width
+        case .left, .leftMirrored, .right, .rightMirrored:
+            return height
+        }
+    }
+
+    /// Ink darkness by perceived luminance (Rec. 601), so coloured text counts:
+    /// red, orange or light blue have a channel above 200 but are clearly ink.
     /// Greys get the same value as the old per-channel average.
-    private func pixelGreyLevel(pixelIndex: Int, data: UnsafePointer<UInt8>, channels: PixelChannelOffsets) -> Double {
+    func darkness(line: Int, pixel: Int, _ edge: CGImagePropertyOrientation) -> Double {
+        let lineIndex: Int
+        switch edge {
+        case .up, .upMirrored, .right, .rightMirrored:
+            lineIndex = line
+        case .down, .downMirrored, .left, .leftMirrored:
+            lineIndex = lineCount(edge) - line - 1
+        }
+        let pixelIndex: Int
+        switch edge {
+        case .up, .down, .upMirrored, .downMirrored:
+            pixelIndex = (pixel + pixelsPerRow * lineIndex) * 4
+        case .left, .leftMirrored, .right, .rightMirrored:
+            pixelIndex = (lineIndex + pixelsPerRow * pixel) * 4
+        }
         let r = Double(data[pixelIndex + channels.red])
         let g = Double(data[pixelIndex + channels.green])
         let b = Double(data[pixelIndex + channels.blue])
 
         let luminance = 0.299 * r + 0.587 * g + 0.114 * b
         return luminance < 200 ? (255 - luminance) / 255 : 0
+    }
+
+    /// Lines at `edge` taken by a scanner border or a binding shadow: a run of
+    /// lines that are mostly ink along their length, from the edge (past a thin
+    /// light strip) to within the outer tenth. Text never inks most of a line. A
+    /// dark run that goes on is a full-bleed picture or a tinted page, not an
+    /// artifact, and gives 0.
+    func edgeArtifactWidth(from edge: CGImagePropertyOrientation) -> Int {
+        let lines = lineCount(edge)
+        let pixels = pixelCount(edge)
+        func isArtifactLine(_ line: Int) -> Bool {
+            var inked = 0
+            for pixel in 0..<pixels where darkness(line: line, pixel: pixel, edge) > 0 {
+                inked += 1
+            }
+            return inked * 2 >= pixels
+        }
+
+        var line = 0
+        let lightStrip = max(2, lines / 100)
+        while line < lightStrip, !isArtifactLine(line) {
+            line += 1
+        }
+        guard line < lightStrip else { return 0 }
+        while line < lines, isArtifactLine(line) {
+            line += 1
+        }
+        return line <= lines / 10 ? line : 0
     }
 }
 
