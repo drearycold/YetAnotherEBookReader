@@ -200,24 +200,55 @@ extension YabrPDFView {
     /// `page` as it appears in the view right now. Page drawing is untinted (the
     /// theme overlay sits above the mask) except for dark, which `draw` inverts.
     func viewportSnapshot(of page: PDFPage) -> UIImage {
-        let box = page.bounds(for: displayBox)
-        // Page space -> view space, exactly as PDFView lays the page out (scale,
-        // scroll, rotation), measured from three converted points.
+        Self.snapshot(
+            of: page,
+            displayBox: displayBox,
+            pageToView: pageToViewTransform(for: page),
+            bounds: bounds,
+            canvas: snapshotCanvas,
+            format: Self.snapshotFormat()
+        )
+    }
+
+    /// Page space -> view space, exactly as PDFView lays the page out (scale,
+    /// scroll, rotation), measured from three converted points.
+    func pageToViewTransform(for page: PDFPage) -> CGAffineTransform {
         let origin = convert(CGPoint.zero, from: page)
         let unitX = convert(CGPoint(x: 100, y: 0), from: page)
         let unitY = convert(CGPoint(x: 0, y: 100), from: page)
-        let pageToView = CGAffineTransform(
+        return CGAffineTransform(
             a: (unitX.x - origin.x) / 100, b: (unitX.y - origin.y) / 100,
             c: (unitY.x - origin.x) / 100, d: (unitY.y - origin.y) / 100,
             tx: origin.x, ty: origin.y
         )
+    }
+
+    /// The colour around the page in a snapshot.
+    var snapshotCanvas: UIColor {
+        backgroundColor.cgColor.alpha > 0 ? backgroundColor : .white
+    }
+
+    static func snapshotFormat() -> UIGraphicsImageRendererFormat {
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = true
+        return format
+    }
+
+    /// `page` drawn under `pageToView` into an image of `bounds`, as a page view
+    /// laid out that way shows it. Any thread: the masks of a page's next steps
+    /// are drawn ahead of time in the background (#97).
+    nonisolated static func snapshot(
+        of page: PDFPage,
+        displayBox: PDFDisplayBox,
+        pageToView: CGAffineTransform,
+        bounds: CGRect,
+        canvas: UIColor,
+        format: UIGraphicsImageRendererFormat
+    ) -> UIImage {
+        let box = page.bounds(for: displayBox)
         // PDFPage.draw(with:to:) draws in the box's display space (cropped and
         // rotated); undo that to draw in page space.
         let displayToPage = page.transform(for: displayBox).inverted()
-
-        let format = UIGraphicsImageRendererFormat.preferred()
-        format.opaque = true
-        let canvas = backgroundColor.cgColor.alpha > 0 ? backgroundColor : .white
 
         return UIGraphicsImageRenderer(bounds: bounds, format: format).image { rendererContext in
             canvas.setFill()

@@ -125,10 +125,28 @@ final class PDFReaderSurface: UIView {
     /// The page a takeover made current, until `handlePageChange` consumes it.
     private weak var takenOverPage: PDFPage?
 
+    /// Jump masks drawn ahead of time (`prepareJumpMasks`): the next and
+    /// previous step of the page on screen (#97).
+    private(set) var preparedJumpMasks: [PreparedJumpMask] = []
+    /// Bumped by each preparation and whenever prepared masks go stale (theme,
+    /// highlights, buffers released, memory); drawing begun before is dropped.
+    private var jumpMaskPreparation = 0
+    private let jumpMaskQueue = DispatchQueue(label: "YabrPDF.jumpMasks", qos: .userInitiated)
+    /// Jump masks drawn on the main thread, none prepared matching.
+    private(set) var drawnJumpMaskCount = 0
+    private var memoryWarningObserver: NSObjectProtocol?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         install(activeView)
         relayNotifications(of: activeView)
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.discardPreparedJumpMasks()
+        }
     }
 
     override func layoutSubviews() {
@@ -142,6 +160,7 @@ final class PDFReaderSurface: UIView {
 
     deinit {
         relayObservers.forEach(NotificationCenter.default.removeObserver)
+        memoryWarningObserver.map(NotificationCenter.default.removeObserver)
         coverTimer?.invalidate()
     }
 
@@ -178,6 +197,7 @@ final class PDFReaderSurface: UIView {
 @available(iOS 16.0, macCatalyst 16.0, *)
 extension PDFReaderSurface {
     func applyTheme(_ palette: PDFThemePalette) {
+        discardPreparedJumpMasks()
         activeView.applyTheme(palette)
         activeView.invertsPagePlaceholders = palette.drawsInverted
         for buffer in bufferViews {
@@ -200,9 +220,85 @@ extension PDFReaderSurface {
     }
 
     /// Covers the view with `page` rendered at the current viewport, then fades out.
-    /// Call after the viewport is applied so both land in the same frame.
-    func showJumpMask(for page: PDFPage) {
-        showJumpMask(image: activeView.viewportSnapshot(of: page))
+    /// Call after the viewport is applied so both land in the same frame. A
+    /// mask prepared for this layout is shown at once (`prepareJumpMasks`);
+    /// otherwise it is drawn now. With `newTiles` (a step within the page, the
+    /// tiles it newly shows) the mask stays past its usual hold while they are
+    /// still drawing, up to `longestJumpMaskHold`, so a heavy page never fades
+    /// into PDFKit's blurry placeholder.
+    func showJumpMask(for page: PDFPage, holdingFor newTiles: Set<PDFPageTile> = []) {
+        let hold = newTiles.isEmpty ? nil : JumpMaskHold(page: page, tiles: newTiles, since: CACurrentMediaTime())
+        let view = activeView
+        let layout = view.pageToViewTransform(for: page)
+        guard let prepared = preparedJumpMasks.last(where: {
+            $0.page === page && $0.size == view.bounds.size && Self.isSameLayout($0.pageToView, layout)
+        }) else {
+            drawnJumpMaskCount += 1
+            showJumpMask(image: view.viewportSnapshot(of: page), hold: hold)
+            return
+        }
+        // Drawn for the planned layout; PDFKit may land it a little apart.
+        let offset = CGPoint(x: layout.tx - prepared.pageToView.tx, y: layout.ty - prepared.pageToView.ty)
+        if abs(offset.x) < 0.5, abs(offset.y) < 0.5 {
+            showJumpMask(image: prepared.image, hold: hold)
+            return
+        }
+        showJumpMask(image: nil, hold: hold)
+        let imageView = UIImageView(image: prepared.image)
+        imageView.frame = jumpMaskView.bounds.offsetBy(dx: offset.x, dy: offset.y)
+        jumpMaskView.addSubview(imageView)
+    }
+
+    /// The longest a step's mask waits for the tiles it covers.
+    static let longestJumpMaskHold: CFTimeInterval = 1
+
+    /// Draws `page` in the background under each of `layouts` (page -> view
+    /// transforms, `PDFPageViewportFit.pageToView`), for `showJumpMask` to show
+    /// at once. Keeps the masks already drawn for them and drops the others.
+    func prepareJumpMasks(of page: PDFPage, layouts: [CGAffineTransform]) {
+        let view = activeView
+        let size = view.bounds.size
+        jumpMaskPreparation += 1
+        preparedJumpMasks.removeAll { mask in
+            !(mask.page === page && mask.size == size && layouts.contains(mask.pageToView))
+        }
+        let wanted = layouts.filter { layout in
+            !preparedJumpMasks.contains { $0.pageToView == layout }
+        }
+        guard !wanted.isEmpty, size.width > 0, size.height > 0 else { return }
+
+        let generation = jumpMaskPreparation
+        let bounds = view.bounds
+        let displayBox = view.displayBox
+        let canvas = view.snapshotCanvas
+        let format = YabrPDFView.snapshotFormat()
+        jumpMaskQueue.async { [weak self] in
+            let masks = wanted.map { layout in
+                PreparedJumpMask(
+                    page: page,
+                    pageToView: layout,
+                    size: size,
+                    image: YabrPDFView.snapshot(of: page, displayBox: displayBox, pageToView: layout, bounds: bounds, canvas: canvas, format: format)
+                )
+            }
+            DispatchQueue.main.async {
+                guard let self, self.jumpMaskPreparation == generation else { return }
+                self.preparedJumpMasks = Array((self.preparedJumpMasks + masks).suffix(2))
+            }
+        }
+    }
+
+    func discardPreparedJumpMasks() {
+        jumpMaskPreparation += 1
+        preparedJumpMasks = []
+    }
+
+    /// Same scale and turn, and within a few points.
+    private static func isSameLayout(_ a: CGAffineTransform, _ b: CGAffineTransform) -> Bool {
+        let scale = max(abs(b.a) + abs(b.b), 0.0001)
+        return [a.a - b.a, a.b - b.b, a.c - b.c, a.d - b.d].allSatisfy { abs($0) <= scale * 0.001 }
+            && abs(a.tx - b.tx) <= 8
+            && abs(a.ty - b.ty) <= 8
     }
 
     /// Covers the view with what it shows now, then fades out like a jump mask.
@@ -243,7 +339,7 @@ extension PDFReaderSurface {
         scheduleJumpMaskFade(generation: jumpMaskGeneration)
     }
 
-    private func showJumpMask(image: UIImage?) {
+    private func showJumpMask(image: UIImage?, hold: JumpMaskHold? = nil) {
         clearJumpMask()
         jumpMaskView.image = image
         jumpMaskView.layer.removeAllAnimations()
@@ -251,12 +347,23 @@ extension PDFReaderSurface {
         arrangeOverlayViews()
 
         jumpMaskGeneration += 1
-        scheduleJumpMaskFade(generation: jumpMaskGeneration)
+        scheduleJumpMaskFade(generation: jumpMaskGeneration, hold: hold)
     }
 
-    private func scheduleJumpMaskFade(generation: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(400)) { [weak self] in
+    /// Fades the mask out now: the user drags the page under it.
+    func fadeJumpMaskNow() {
+        guard isJumpMaskVisible else { return }
+        jumpMaskGeneration += 1
+        scheduleJumpMaskFade(generation: jumpMaskGeneration, after: 0)
+    }
+
+    private func scheduleJumpMaskFade(generation: Int, after milliseconds: Int = 400, hold: JumpMaskHold? = nil) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(milliseconds)) { [weak self] in
             guard let self, self.jumpMaskGeneration == generation else { return }
+            if let hold, CACurrentMediaTime() - hold.since < Self.longestJumpMaskHold, !self.hasDrawn(hold) {
+                self.scheduleJumpMaskFade(generation: generation, after: 50, hold: hold)
+                return
+            }
             UIView.animate(withDuration: 0.15) {
                 self.jumpMaskView.alpha = 0
             } completion: { _ in
@@ -442,6 +549,8 @@ extension PDFReaderSurface: UIGestureRecognizerDelegate {
     /// The user began dragging `pageView`'s document.
     func pageViewDidBeginDragging(_ pageView: YabrPDFView) {
         guard pageView === activeView else { return }
+        // The page moves; a mask over it would not.
+        fadeJumpMaskNow()
         onUserScroll?()
     }
 
@@ -503,6 +612,8 @@ extension PDFReaderSurface {
     /// Adds (or redraws) a highlight's annotations in the current appearance.
     func injectHighlight(highlight: PDFHighlight) {
         guard let document = activeView.document else { return }
+        // Prepared jump masks show the page's highlights.
+        discardPreparedJumpMasks()
         removeAnnotations(of: highlight.uuid)
         highlightSources[highlight.uuid] = highlight
         let values = Self.addAnnotations(for: highlight, to: document, appearance: highlightAppearance)
@@ -512,6 +623,7 @@ extension PDFReaderSurface {
     }
 
     func removeHighlight(highlight: PDFHighlight) {
+        discardPreparedJumpMasks()
         highlightSources.removeValue(forKey: highlight.uuid)
         removeAnnotations(of: highlight.uuid)
     }
@@ -667,6 +779,7 @@ extension PDFReaderSurface {
 
     /// Releases the buffers' pages (scroll mode, theme re-render).
     func discardBuffers() {
+        discardPreparedJumpMasks()
         endCover(notifies: false)
         for buffer in bufferViews {
             buffer.document = nil
@@ -776,6 +889,23 @@ extension PDFReaderSurface {
         let counts = tileDrawCounts(of: view, page: page, after: time)
         // Draws that are not PDFKit's usual tiles: settle for the quiet.
         return counts.isEmpty || tiles.allSatisfy { counts[$0, default: 0] >= (twice.contains($0) ? 2 : 1) }
+    }
+
+    /// Whether the tiles a step's mask holds for have drawn since the step, and
+    /// the page's draws have gone quiet (PDFKit hands a drawn tile to its layer
+    /// a moment later).
+    private func hasDrawn(_ hold: JumpMaskHold) -> Bool {
+        let view = activeView
+        guard view.currentPage === hold.page,
+              let drawLog,
+              let pageNumber = hold.page.pageRef?.pageNumber
+        else { return true }
+        if let lastDraw = drawLog.lastDrawEnd(ofPage: pageNumber, pixelsPerPoint: view.scaleFactor * displayScale),
+           CACurrentMediaTime() - lastDraw < 0.06 {
+            return false
+        }
+        let counts = tileDrawCounts(of: view, page: hold.page, after: hold.since)
+        return hold.tiles.allSatisfy { counts[$0, default: 0] > 0 }
     }
 
     /// The PDFKit tiles of `page` that `view` shows at its scale.
@@ -896,4 +1026,23 @@ extension PDFReaderSurface {
             onCoverEnded?()
         }
     }
+}
+
+/// A jump mask drawn ahead of time for one layout of a page.
+@available(iOS 16.0, macCatalyst 16.0, *)
+struct PreparedJumpMask {
+    let page: PDFPage
+    /// The layout it was drawn for: page space -> view space.
+    let pageToView: CGAffineTransform
+    let size: CGSize
+    let image: UIImage
+}
+
+/// What a step's jump mask waits for before fading: the tiles of `page` it
+/// newly shows, drawn since `since`.
+@available(iOS 16.0, macCatalyst 16.0, *)
+private struct JumpMaskHold {
+    let page: PDFPage
+    let tiles: Set<PDFPageTile>
+    let since: CFTimeInterval
 }

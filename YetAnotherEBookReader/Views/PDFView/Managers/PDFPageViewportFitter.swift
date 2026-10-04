@@ -12,6 +12,27 @@ struct PDFPageViewportFit: Equatable {
     var scale: CGFloat
     var pageAnchor: CGPoint
     var viewAnchor: CGPoint
+
+    /// Page space -> view space under this fit, its anchor in `display` space
+    /// (as the fitter and `PDFPageReadingPlan` keep it): how a page view lays
+    /// the page out once the fit is applied, known before it is.
+    func pageToView(display: PDFPageDisplaySpace) -> CGAffineTransform {
+        func view(_ point: CGPoint) -> CGPoint {
+            let shown = display.toDisplay(point)
+            return CGPoint(
+                x: viewAnchor.x + (shown.x - pageAnchor.x) * scale,
+                y: viewAnchor.y - (shown.y - pageAnchor.y) * scale
+            )
+        }
+        let origin = view(.zero)
+        let unitX = view(CGPoint(x: 1, y: 0))
+        let unitY = view(CGPoint(x: 0, y: 1))
+        return CGAffineTransform(
+            a: unitX.x - origin.x, b: unitX.y - origin.y,
+            c: unitY.x - origin.x, d: unitY.y - origin.y,
+            tx: origin.x, ty: origin.y
+        )
+    }
 }
 
 /// Pure viewport math for the YabrPDF single-page auto-crop mode.

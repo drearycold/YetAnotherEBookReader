@@ -220,6 +220,7 @@ extension YabrPDFViewController {
             updatePageViewPositionHistory()
         }
         updateReadingProgress()
+        prepareStepMasks()
     }
 
     /// The single-page viewport of `page` in `view`: its saved position, or a fit

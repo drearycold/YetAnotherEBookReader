@@ -673,6 +673,124 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertTrue(isReadable(harness, CGRect(origin: point, size: .zero), on: page))
     }
 
+    // MARK: - Prepared step masks (#97)
+
+    /// A step's fit gives the layout the page view has once it is applied, so
+    /// its mask can be drawn before; also on a turned page.
+    func testFitLayoutIsThePageViewsOnceApplied() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        for rotation in [0, 90] {
+            let harness = try makeHarness(pages: [PageSpec(content: content, rotation: rotation)], viewSize: Self.landscape)
+            let page = harness.page(0)
+            let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView), "rotation \(rotation)")
+            for index in plan.steps.indices {
+                harness.pdfView.applyViewport(plan.pageFit(at: index), on: page)
+                let actual = harness.pdfView.pageToViewTransform(for: page)
+                let planned = plan.steps[index].fit.pageToView(display: plan.display)
+                let label = "rotation \(rotation) step \(index) actual=\(actual) planned=\(planned)"
+                for (a, b) in [(actual.a, planned.a), (actual.b, planned.b), (actual.c, planned.c), (actual.d, planned.d)] {
+                    XCTAssertEqual(a, b, accuracy: 0.001, label)
+                }
+                XCTAssertEqual(actual.tx, planned.tx, accuracy: 1, label)
+                XCTAssertEqual(actual.ty, planned.ty, accuracy: 1, label)
+            }
+            tearDownWindow()
+        }
+    }
+
+    /// Waits for the masks of the steps beside the one on screen.
+    private func waitForPreparedMasks(_ harness: Harness, count: Int = 1, file: StaticString = #filePath, line: UInt = #line) {
+        let deadline = Date().addingTimeInterval(3)
+        while harness.surface.preparedJumpMasks.count < count, Date() < deadline {
+            settle(0.05)
+        }
+        XCTAssertGreaterThanOrEqual(harness.surface.preparedJumpMasks.count, count, "masks not prepared", file: file, line: line)
+    }
+
+    /// The mask on screen, in place or shifted into place.
+    private func jumpMaskImage(_ harness: Harness) -> UIImage? {
+        harness.surface.jumpMaskView.image
+            ?? harness.surface.jumpMaskView.subviews.compactMap { ($0 as? UIImageView)?.image }.first
+    }
+
+    /// A step shows the mask prepared for it at once, without drawing one, and
+    /// it is the page as the step shows it, light and dark.
+    func testStepShowsItsPreparedMask() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        for theme in [PDFThemeMode.none, .dark] {
+            let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.landscape, themeMode: theme)
+            waitForPreparedMasks(harness)
+            waitForJumpMaskToClear(harness)
+            let drawn = harness.surface.drawnJumpMaskCount
+            harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+
+            XCTAssertTrue(harness.surface.isJumpMaskVisible, "\(theme)")
+            XCTAssertEqual(harness.surface.drawnJumpMaskCount, drawn, "\(theme): prepared, not drawn")
+            let mask = try XCTUnwrap(jumpMaskImage(harness), "\(theme)")
+            let page = harness.page(0)
+            let snapshot = harness.pdfView.viewportSnapshot(of: page)
+            let bounds = harness.pdfView.bounds
+            for x in stride(from: bounds.minX + 10, to: bounds.maxX, by: bounds.width / 7) {
+                for y in stride(from: bounds.minY + 10, to: bounds.maxY, by: bounds.height / 5) {
+                    let point = CGPoint(x: x, y: y)
+                    XCTAssertEqual(try gray(of: mask, at: point), try gray(of: snapshot, at: point), accuracy: 12, "\(theme) at \(point)")
+                }
+            }
+            tearDownWindow()
+        }
+    }
+
+    /// Prepared masks go with a theme change (they show the old theme) and a
+    /// highlight change (they show the page's highlights); the step then draws
+    /// its mask.
+    func testStalePreparedMasksAreNotUsed() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.landscape)
+        waitForPreparedMasks(harness)
+        harness.surface.removeHighlight(highlight: PDFHighlight(uuid: UUID(), pos: [], type: 0, content: "", note: nil, date: Date()))
+        XCTAssertTrue(harness.surface.preparedJumpMasks.isEmpty, "highlights")
+
+        harness.controller.prepareStepMasks()
+        waitForPreparedMasks(harness)
+        harness.surface.applyTheme(PDFThemePalette(themeMode: .serpia))
+        XCTAssertTrue(harness.surface.preparedJumpMasks.isEmpty, "theme")
+
+        let drawn = harness.surface.drawnJumpMaskCount
+        pressNext(harness)
+        XCTAssertEqual(harness.surface.drawnJumpMaskCount, drawn + 1)
+    }
+
+    /// A step's mask stays while the tiles it newly shows are still drawing,
+    /// up to a second; without tiles to wait for it fades as before.
+    func testStepMaskHoldsForItsNewTiles() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: [PageSpec(content: content)], viewSize: Self.landscape)
+        let page = harness.page(0)
+        waitForJumpMaskToClear(harness)
+
+        // A tile PDFKit never draws.
+        harness.surface.showJumpMask(for: page, holdingFor: [PDFPageTile(column: 99, row: 99)])
+        settle(0.7)
+        XCTAssertTrue(harness.surface.isJumpMaskVisible, "held past 400 ms")
+        settle(0.6)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible, "not past a second")
+
+        harness.surface.showJumpMask(for: page)
+        settle(0.7)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible, "nothing to wait for")
+    }
+
+    /// Dragging the page under a mask fades it: the mask would not move.
+    func testDraggingFadesTheJumpMask() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: [PageSpec(content: content)], viewSize: Self.landscape)
+        waitForJumpMaskToClear(harness)
+        harness.surface.showJumpMask(for: harness.page(0))
+        harness.surface.pageViewDidBeginDragging(harness.pdfView)
+        settle(0.3)
+        XCTAssertFalse(harness.surface.isJumpMaskVisible)
+    }
+
     // MARK: - Columns (#19, #97)
 
     /// A paper's page: a title and abstract across the top, then two columns.

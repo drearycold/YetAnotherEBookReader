@@ -111,14 +111,40 @@ extension YabrPDFViewController {
 
         menuManager.dismissHighlightMenu()
         pdfView.clearSelection()
+        let scale = pdfView.scaleFactor
+        let tilesBefore = surface.shownTiles(of: pdfView, page: page)
         pdfView.applyViewport(plan.pageFit(at: step), on: page)
         // PDFKit shows the newly visible part at low resolution until its tiles
-        // render; the mask draws it at the new viewport meanwhile.
-        surface.showJumpMask(for: page)
+        // render; the mask, prepared ahead, shows it at the new viewport
+        // meanwhile. At another scale every tile is new.
+        var newTiles = surface.shownTiles(of: pdfView, page: page)
+        if abs(pdfView.scaleFactor - scale) < 0.0005 {
+            newTiles.subtract(tilesBefore)
+        }
+        surface.showJumpMask(for: page, holdingFor: newTiles)
         updatePageViewPositionHistory()
         updateReadingProgress()
         updatePageIndicator()
+        prepareStepMasks()
         return true
+    }
+
+    /// Draws the masks of the next and previous step of the page on screen in
+    /// the background, when they are on this page (page turns have the buffers),
+    /// so a step shows its mask at once.
+    func prepareStepMasks() {
+        guard pdfView.displayMode == .singlePage,
+              let page = pdfView.currentPage,
+              let plan = readingPlan(for: page, in: pdfView)
+        else {
+            surface.discardPreparedJumpMasks()
+            return
+        }
+        let step = currentStep(in: plan, of: page)
+        let layouts = [step + 1, step - 1]
+            .filter(plan.steps.indices.contains)
+            .map { plan.steps[$0].fit.pageToView(display: plan.display) }
+        surface.prepareJumpMasks(of: page, layouts: layouts)
     }
 
     // MARK: Jumps
@@ -179,6 +205,7 @@ extension YabrPDFViewController {
         updatePageViewPositionHistory()
         updateReadingProgress()
         updatePageIndicator()
+        prepareStepMasks()
     }
 
     /// "12 / 300", and on a page read in steps the step on screen of its turns:
