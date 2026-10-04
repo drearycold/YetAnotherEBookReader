@@ -30,7 +30,15 @@ enum PDFPageViewportFitter {
         var customScale: CGFloat
         var readingDirection: PDFReadDirection
         var marginOffsetPercent: Double
+        /// How far into the content, along the reading direction, the view starts:
+        /// down from the top for `LtR_TtB`, left from the right for `TtB_RtL`. Set
+        /// by `screens` for content longer than the view.
+        var flowOffset: CGFloat = 0
     }
+
+    /// The share of a screen kept on the next one when stepping through content
+    /// longer than the view: a couple of lines to keep one's place.
+    static let screenOverlap: CGFloat = 0.1
 
     static func fit(_ input: Input) -> PDFPageViewportFit {
         let content = input.contentBounds.width > 0 && input.contentBounds.height > 0
@@ -72,7 +80,7 @@ enum PDFPageViewportFitter {
                 viewAnchor.x = readable.minX + hMargin
             }
             // Text always starts at the same place below the top bar.
-            pageAnchor.y = content.maxY
+            pageAnchor.y = content.maxY - input.flowOffset
             viewAnchor.y = readable.minY + vMargin
             pageAnchor.x += input.pageBounds.width * CGFloat(input.marginOffsetPercent) / 100
         case .TtB_RtL:
@@ -82,7 +90,7 @@ enum PDFPageViewportFitter {
                 pageAnchor.x = content.midX
                 viewAnchor.x = readable.midX
             } else {
-                pageAnchor.x = content.maxX
+                pageAnchor.x = content.maxX - input.flowOffset
                 viewAnchor.x = readable.maxX - hMargin
             }
             if fitsHeight {
@@ -96,6 +104,49 @@ enum PDFPageViewportFitter {
         }
 
         return PDFPageViewportFit(scale: scale, pageAnchor: pageAnchor, viewAnchor: viewAnchor)
+    }
+
+    /// The fits that show content longer than the view one screen at a time, in
+    /// reading order: from its start to a last screen that ends at the far
+    /// margin, in equal steps that keep at least `screenOverlap` of a screen.
+    /// One fit when the content fits along the reading direction.
+    static func screens(_ input: Input) -> [PDFPageViewportFit] {
+        var input = input
+        input.flowOffset = 0
+        let first = fit(input)
+        let content = input.contentBounds.width > 0 && input.contentBounds.height > 0
+            ? input.contentBounds
+            : input.pageBounds
+        let readable = input.readableRect
+        let length: CGFloat
+        let available: CGFloat
+        switch input.readingDirection {
+        case .LtR_TtB:
+            length = content.height
+            available = readable.height * (1 - 2 * CGFloat(input.vMarginPercent) / 100)
+        case .TtB_RtL:
+            length = content.width
+            available = readable.width * (1 - 2 * CGFloat(input.hMarginPercent) / 100)
+        }
+        let visible = max(available, 1) / first.scale
+        guard length * first.scale > available + 0.5 else { return [first] }
+
+        let last = length - visible
+        let steps = Int((last / (visible * (1 - screenOverlap))).rounded(.up))
+        return (0...steps).map { step in
+            var screen = input
+            screen.flowOffset = last * CGFloat(step) / CGFloat(steps)
+            return fit(screen)
+        }
+    }
+
+    /// The point (in the fit's page or display space) that `fit` puts at the
+    /// top-left corner of `viewBounds`: the inverse of `restore`.
+    static func upperLeft(of fit: PDFPageViewportFit, viewBounds: CGRect) -> CGPoint {
+        CGPoint(
+            x: fit.pageAnchor.x + (viewBounds.minX - fit.viewAnchor.x) / fit.scale,
+            y: fit.pageAnchor.y - (viewBounds.minY - fit.viewAnchor.y) / fit.scale
+        )
     }
 
     /// Anchors the page point that was at the view's top-left corner, for restoring

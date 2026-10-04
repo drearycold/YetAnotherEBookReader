@@ -53,6 +53,7 @@
 		2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */; };
 		2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */; };
 		2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */; };
+		5EAD1F0430A0A10000BB0001 /* PDFReadingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */; };
 		2AC9D75430A0A10000AA0001 /* ReaderTypeAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D75330A0A10000AA0001 /* ReaderTypeAvailabilityTests.swift */; };
 		2AC9D74E30A0A10000AA0001 /* PDFThemePaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74D30A0A10000AA0001 /* PDFThemePaletteTests.swift */; };
 		2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265426A920E10037FCB4 /* YabrData.swift */; };
@@ -279,9 +280,11 @@
 		E71F35182FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */; };
 		E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */; };
 		2AC9D74430A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */; };
+		5EAD1F0130A0A10000BB0001 /* PDFReadingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD1F0030A0A10000BB0001 /* PDFReadingFlow.swift */; };
 		2AC9D75130A0A10000AA0001 /* PDFMenuManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D75030A0A10000AA0001 /* PDFMenuManager.swift */; };
 		2AC9D75230A0A10000AA0001 /* PDFMenuManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D75030A0A10000AA0001 /* PDFMenuManager.swift */; };
 		2AC9D74530A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */; };
+		5EAD1F0230A0A10000BB0001 /* PDFReadingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD1F0030A0A10000BB0001 /* PDFReadingFlow.swift */; };
 		E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */; };
 		E71F351B2FE3B351007AB0B1 /* ReadingPositionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */; };
 		E71F351C2FE3B351007AB0B1 /* ReadingPositionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */; };
@@ -621,6 +624,7 @@
 		2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewControllerTests.swift; sourceTree = "<group>"; };
 		2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFMarginCropTests.swift; sourceTree = "<group>"; };
 		2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageViewportFitterTests.swift; sourceTree = "<group>"; };
+		5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReadingFlowTests.swift; sourceTree = "<group>"; };
 		2AC9D75330A0A10000AA0001 /* ReaderTypeAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTypeAvailabilityTests.swift; sourceTree = "<group>"; };
 		2AC9D74D30A0A10000AA0001 /* PDFThemePaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFThemePaletteTests.swift; sourceTree = "<group>"; };
 		2ACE265426A920E10037FCB4 /* YabrData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrData.swift; sourceTree = "<group>"; };
@@ -709,6 +713,7 @@
 		E71F35142FDFAD15007AB0B1 /* YabrPDFSearchList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSearchList.swift; sourceTree = "<group>"; };
 		E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFMarginCropController.swift; sourceTree = "<group>"; };
 		2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageViewportFitter.swift; sourceTree = "<group>"; };
+		5EAD1F0030A0A10000BB0001 /* PDFReadingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReadingFlow.swift; sourceTree = "<group>"; };
 		2AC9D75030A0A10000AA0001 /* PDFMenuManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFMenuManager.swift; sourceTree = "<group>"; };
 		E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreCoreModels.swift; sourceTree = "<group>"; };
 		E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionModels.swift; sourceTree = "<group>"; };
@@ -1201,6 +1206,7 @@
 				2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */,
 				2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */,
 				2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */,
+				5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */,
 				2AC9D75330A0A10000AA0001 /* ReaderTypeAvailabilityTests.swift */,
 				2AC9D74D30A0A10000AA0001 /* PDFThemePaletteTests.swift */,
 				A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */,
@@ -1358,6 +1364,7 @@
 				E71F350E2FDFAD05007AB0B1 /* PDFSearchController.swift */,
 				E71F35172FDFAD18007AB0B1 /* PDFMarginCropController.swift */,
 				2AC9D74330A0A10000AA0001 /* PDFPageViewportFitter.swift */,
+				5EAD1F0030A0A10000BB0001 /* PDFReadingFlow.swift */,
 				2AC9D75030A0A10000AA0001 /* PDFMenuManager.swift */,
 			);
 			path = Managers;
@@ -1841,6 +1848,7 @@
 				E71F350F2FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35182FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
 				2AC9D74430A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */,
+				5EAD1F0130A0A10000BB0001 /* PDFReadingFlow.swift in Sources */,
 				2AC9D75130A0A10000AA0001 /* PDFMenuManager.swift in Sources */,
 				E71F35212FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
 				E71F35182FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
@@ -1967,6 +1975,7 @@
 				2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */,
 				2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */,
 				2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */,
+				5EAD1F0430A0A10000BB0001 /* PDFReadingFlowTests.swift in Sources */,
 				2AC9D75430A0A10000AA0001 /* ReaderTypeAvailabilityTests.swift in Sources */,
 				2AC9D74E30A0A10000AA0001 /* PDFThemePaletteTests.swift in Sources */,
 				E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */,
@@ -2143,6 +2152,7 @@
 				E71F35102FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
 				2AC9D74530A0A10000AA0001 /* PDFPageViewportFitter.swift in Sources */,
+				5EAD1F0230A0A10000BB0001 /* PDFReadingFlow.swift in Sources */,
 				2AC9D75230A0A10000AA0001 /* PDFMenuManager.swift in Sources */,
 				E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
 				E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
