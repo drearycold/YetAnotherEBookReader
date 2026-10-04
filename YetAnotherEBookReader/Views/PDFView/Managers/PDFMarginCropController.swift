@@ -9,13 +9,38 @@ import UIKit
 
 class PDFMarginCropController {
     private(set) var visibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
+    /// The pages last rendered for `readingLayout`, oldest first, with their
+    /// renders. An options change re-detects the page on screen from its render
+    /// instead of rendering the page again (a detect-strength slider re-detects
+    /// at each of its steps), even when a neighbour was rendered meanwhile.
+    /// Main thread only, as `readingLayout` is.
+    private(set) var recentRenders: [(page: PDFPage, thumbnail: Thumbnail)] = []
+    private static let keptRenders = 3
     /// Its own serial queue: a private queue still gets a thread when the global
     /// pool is saturated (PDFKit's per-document page analysis can fill it), and
     /// detections do not run concurrently.
     private let analysisQueue = DispatchQueue(label: "YabrPDF.marginDetection", qos: .utility)
+    private var memoryWarningObserver: NSObjectProtocol?
+
+    init() {
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.recentRenders.removeAll()
+        }
+    }
+
+    deinit {
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
+    }
 
     func clearCache() {
         visibleContentBounds.removeAll()
+        recentRenders.removeAll()
     }
 
     func cachedValue(for key: PageVisibleContentKey) -> PageVisibleContentValue? {
@@ -30,10 +55,11 @@ class PDFMarginCropController {
     }
 
     /// The page's content bounds and the regions it is read in (#97), detected
-    /// once per key.
+    /// once per key; under another key, from the page's last render
+    /// (`recentRenders`).
     func readingLayout(for page: PDFPage, key: PageVisibleContentKey) -> PDFPageReadingLayout {
         if visibleContentBounds[key] == nil {
-            visibleContentBounds[key] = analyzeVisibleContents(pdfPage: page, key: key)
+            visibleContentBounds[key] = analyzeVisibleContents(pdfPage: page, key: key, reusesLastRender: true)
         }
 
         visibleContentBounds[key]?.lastUsed = Date()
@@ -128,19 +154,39 @@ class PDFMarginCropController {
         let cropBox: CGRect
     }
 
-    private func analyzeVisibleContents(pdfPage: PDFPage, key: PageVisibleContentKey) -> PageVisibleContentValue {
+    /// With `reusesLastRender` (main thread only), the page's last render is
+    /// read again, or a new one kept in `recentRenders`.
+    private func analyzeVisibleContents(pdfPage: PDFPage, key: PageVisibleContentKey, reusesLastRender: Bool = false) -> PageVisibleContentValue {
         // Points of Interest in Instruments: the detection, and its render,
         // edge and region stages.
         let detection = AppPerformanceSignpost.begin("PDFMarginDetection", "page \(key.pageNumber)")
         defer { AppPerformanceSignpost.end("PDFMarginDetection", detection) }
 
-        let render = AppPerformanceSignpost.begin("PDFMarginRender")
-        let thumbnail = thumbnail(of: pdfPage)
-        AppPerformanceSignpost.end("PDFMarginRender", render)
+        var thumbnail = reusesLastRender ? reusableRender(of: pdfPage) : nil
+        if thumbnail == nil {
+            let render = AppPerformanceSignpost.begin("PDFMarginRender")
+            thumbnail = self.thumbnail(of: pdfPage)
+            AppPerformanceSignpost.end("PDFMarginRender", render)
+            if reusesLastRender, let thumbnail {
+                recentRenders.removeAll { $0.page === pdfPage }
+                recentRenders.append((pdfPage, thumbnail))
+                recentRenders.removeFirst(max(0, recentRenders.count - Self.keptRenders))
+            }
+        }
         guard let thumbnail, let value = analyze(thumbnail, key: key) else {
             return PageVisibleContentValue(bounds: pdfPage.bounds(for: .mediaBox))
         }
         return value
+    }
+
+    /// `page`'s render in `recentRenders` when it is of the page as it is now:
+    /// the same boxes and rotation.
+    func reusableRender(of page: PDFPage) -> Thumbnail? {
+        guard let render = recentRenders.last(where: { $0.page === page })?.thumbnail,
+              render.cropBox == page.bounds(for: .cropBox),
+              render.mediaDisplay == PDFPageDisplaySpace(box: page.bounds(for: .mediaBox), rotation: page.rotation)
+        else { return nil }
+        return render
     }
 
     /// Renders `page` for detection, without the reader's own highlights.

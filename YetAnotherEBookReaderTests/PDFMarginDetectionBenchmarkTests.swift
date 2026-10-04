@@ -39,9 +39,11 @@ final class PDFMarginDetectionBenchmarkTests: XCTestCase {
     /// Per page, the median of `runs`, in ms:
     /// - total: a detection (`readingLayout`) on a fresh controller;
     /// - render: the page rendered for detection (`thumbnail(of:)`);
-    /// - analyze: the edges and regions found on that render (`analyze`).
+    /// - analyze: the edges and regions found on that render (`analyze`);
+    /// - options: a detection under other options after the first, as a
+    ///   detect-strength slider's step re-detects the page on screen.
     func testDetectionTimings() throws {
-        var lines = ["PDFBENCH page      raster     total    render   analyze"]
+        var lines = ["PDFBENCH page      raster     total    render   analyze   options"]
         for sample in try corpus() {
             lines.append(try timings(of: sample))
         }
@@ -52,7 +54,11 @@ final class PDFMarginDetectionBenchmarkTests: XCTestCase {
 
     private func timings(of sample: Sample) throws -> String {
         let key = PageVisibleContentKey(pageNumber: 1, options: sample.options)
+        var stronger = sample.options
+        stronger.hMarginDetectStrength += 1
+        let strongerKey = PageVisibleContentKey(pageNumber: 1, options: stronger)
         var totals: [Double] = []
+        var optionChanges: [Double] = []
         var renders: [Double] = []
         var analyses: [Double] = []
         var rasterSize = CGSize.zero
@@ -60,9 +66,11 @@ final class PDFMarginDetectionBenchmarkTests: XCTestCase {
             // A fresh document each time: nothing PDFKit or CoreGraphics decoded
             // for an earlier run is reused.
             var (document, page) = try open(sample)
+            let controller = PDFMarginCropController()
             var layout: PDFPageReadingLayout?
-            totals.append(milliseconds { layout = PDFMarginCropController().readingLayout(for: page, key: key) })
+            totals.append(milliseconds { layout = controller.readingLayout(for: page, key: key) })
             XCTAssertEqual(layout?.regions.count, sample.regions, "\(sample.name) \(String(describing: layout))")
+            optionChanges.append(milliseconds { _ = controller.readingLayout(for: page, key: strongerKey) })
 
             (document, page) = try open(sample)
             let detector = PDFMarginCropController()
@@ -77,7 +85,7 @@ final class PDFMarginDetectionBenchmarkTests: XCTestCase {
         return "PDFBENCH "
             + sample.name.padding(toLength: 9, withPad: " ", startingAt: 0)
             + raster.padding(toLength: 9, withPad: " ", startingAt: 0)
-            + String(format: " %9.2f %9.2f %9.2f", median(totals), median(renders), median(analyses))
+            + String(format: " %9.2f %9.2f %9.2f %9.2f", median(totals), median(renders), median(analyses), median(optionChanges))
     }
 
     private func open(_ sample: Sample) throws -> (PDFDocument, PDFPage) {

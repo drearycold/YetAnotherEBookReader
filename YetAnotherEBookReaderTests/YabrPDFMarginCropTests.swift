@@ -159,6 +159,38 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(found.regions, expected.regions)
     }
 
+    /// Under other options the page is detected again from its last render,
+    /// not rendered again, and found as a fresh detection finds it, also after
+    /// another page was rendered. A memory warning drops the renders.
+    func testOptionChangesReuseThePagesRender() throws {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize)).pdfData { context in
+            context.beginPage()
+            drawPaperPage(context)
+            context.beginPage()
+            drawBodyLines(y: 96, count: 40)
+        }
+        let document = try XCTUnwrap(PDFDocument(data: data))
+        let page = try XCTUnwrap(document.page(at: 0))
+        let detector = PDFMarginCropController()
+        var options = PDFPreferenceValue()
+        _ = detector.readingLayout(for: page, key: PageVisibleContentKey(pageNumber: 1, options: options))
+        let render = try XCTUnwrap(detector.reusableRender(of: page)?.image)
+        // A neighbour rendered meanwhile, as a buffer refresh can.
+        _ = detector.readingLayout(for: try XCTUnwrap(document.page(at: 1)), key: PageVisibleContentKey(pageNumber: 2, options: options))
+
+        options.hMarginDetectStrength = 6
+        options.vMarginDetectStrength = 9
+        options.columnsMode = .Auto
+        let key = PageVisibleContentKey(pageNumber: 1, options: options)
+        let layout = detector.readingLayout(for: page, key: key)
+        XCTAssertTrue(detector.reusableRender(of: page)?.image === render, "read again, not rendered")
+        XCTAssertEqual(layout, PDFMarginCropController().readingLayout(for: page, key: key))
+        XCTAssertEqual(layout.regions.map(\.kind), [.spanning, .column, .column])
+
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertTrue(detector.recentRenders.isEmpty)
+    }
+
     // MARK: - Two-page spreads (#97)
 
     private static let spreadSize = CGSize(width: 1224, height: 792)
@@ -3297,6 +3329,24 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(darkRect.minX, lightRect.minX, accuracy: 1, message)
         XCTAssertEqual(darkRect.maxY, lightRect.maxY, accuracy: 1, message)
         XCTAssertEqual(darkRect.width, lightRect.width, accuracy: 1, message)
+    }
+
+    /// A detect-strength slider re-detects the page on screen at every step,
+    /// from the render it was detected on, not a new one.
+    func testDetectStrengthStepsDoNotRenderThePageAgain() throws {
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600)), count: 3),
+            viewSize: Self.portrait
+        )
+        let render = try XCTUnwrap(harness.controller.marginCropController.reusableRender(of: harness.page(0))?.image)
+        for strength in [3.0, 4, 5] {
+            var options = harness.controller.pdfOptions
+            options.hMarginDetectStrength = strength
+            harness.controller.handleOptionsChange(pdfOptions: options)
+            settle()
+            XCTAssertNotNil(harness.controller.marginCropController.cachedValue(for: PageVisibleContentKey(pageNumber: 1, options: options)), "re-detected at \(strength)")
+            XCTAssertTrue(harness.controller.marginCropController.reusableRender(of: harness.page(0))?.image === render, "rendered again at \(strength)")
+        }
     }
 
     func testMarginOffsetShiftsViewportHorizontally() throws {
