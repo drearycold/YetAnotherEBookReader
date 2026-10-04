@@ -28,8 +28,19 @@ placement (content right of center, top offset / drift after page turns).
     text works too.
     - #93's scale jumps (Width mode) and left-margin wiggle (Page/Height mode
       only) were left alone by choice. Width mode already pins the left margin.
-  - Still open: #92 (heading after a wide gap dropped: `maxGap` is ~7 pt for 11/15
-    text), #95 (scan borders).
+  - **Lines set off by extra space (#92):** `extendBorderAcrossLineGaps` still
+    walks across gaps up to ~1.5x the body's line gap (`maxGap`, ~7 px for 11/15
+    text). Across a wider gap, up to 4x the line pitch, it hops to the ink beyond
+    only when that ink is:
+    - line-like: at least half the body's first ink run, and 3 px;
+    - outside the outer tenth of the page, where running heads and folios sit.
+    - Hops repeat: paragraph tail → heading → body.
+    - The gap alone can't tell a heading from a running head. In
+      `BookPageGenerator` the head sits ~29 pt above the body; the probe's
+      heading-to-body gap was ~32 pt.
+    - The same hop keeps a one-line footnote below the body (#96's footnote case).
+      It was cut off before.
+  - Still open: #95 (scan borders).
 - Auto-hiding bars (FolioReader style):
   - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on

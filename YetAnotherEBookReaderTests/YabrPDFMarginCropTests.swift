@@ -189,6 +189,61 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(detected.maxX, 81 + width, accuracy: detectTolerance, "\(detected)")
     }
 
+    /// #92: a section heading set off from the body by extra space was dropped,
+    /// because the walk only crossed ~1.5x the gap between body lines.
+    func testDetectsSubtitleAfterWideGap() throws {
+        let font = UIFont.boldSystemFont(ofSize: 14)
+        let detected = try detectDrawnPage { _ in
+            drawRunningHead()
+            ("2.3 A Section Subtitle" as NSString).draw(at: CGPoint(x: 81, y: 150), withAttributes: [.font: font])
+            drawBodyLines(y: 196, count: 32)
+        }
+        XCTAssertEqual(detected.minY, 150 + font.ascender - font.capHeight, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// #92: a paragraph tail, then a heading after extra space, then the body. Both
+    /// hops are taken; the running head further out is not.
+    func testDetectsShortLineAndSubtitleAboveBody() throws {
+        let detected = try detectDrawnPage { _ in
+            drawRunningHead()
+            drawBodyLines(y: 110, count: 1) { _ in 81...201 }
+            ("2.3 A Section Subtitle" as NSString).draw(at: CGPoint(x: 81, y: 152), withAttributes: [.font: UIFont.boldSystemFont(ofSize: 14)])
+            drawBodyLines(y: 200, count: 32)
+        }
+        // Body lines drawn at y have their ink top about 2 pt lower.
+        XCTAssertEqual(detected.minY, 112, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// A running head in the top tenth stays out even when its gap to the body is
+    /// no wider than a heading's.
+    func testRunningHeadAfterHeadingSizedGapStaysOut() throws {
+        let detected = try detectDrawnPage { _ in
+            drawRunningHead(y: 60)
+            drawBodyLines(y: 100, count: 38)
+        }
+        XCTAssertEqual(detected.minY, 102, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// #96: a one-line footnote below the body is too sparse to anchor the bottom
+    /// pass, and its gap is wider than the body's line gap; it is kept by a hop.
+    func testDetectsShortFootnoteBelowBody() throws {
+        let font = UIFont(name: "TimesNewRomanPSMT", size: 8) ?? .systemFont(ofSize: 8)
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 30)
+            ("1. A short note." as NSString).draw(at: CGPoint(x: 81, y: 580), withAttributes: [.font: font])
+        }
+        XCTAssertEqual(detected.maxY, 580 + font.ascender - font.descender, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// A speck in the margin is not a line, so no hop is taken to it.
+    func testSpeckAboveBodyIsNotPulledIn() throws {
+        let detected = try detectDrawnPage { context in
+            context.fill(CGRect(x: 300, y: 160, width: 2, height: 2))
+            drawBodyLines(y: 196, count: 32)
+        }
+        XCTAssertEqual(detected.minY, 198, accuracy: detectTolerance, "\(detected)")
+    }
+
     /// The outward walk only crosses word-sized gaps: a marginal note beside the
     /// text block stays out.
     func testMarginalNoteBesideTextIsNotPulledIn() throws {
@@ -2606,6 +2661,13 @@ final class YabrPDFMarginCropTests: XCTestCase {
             text.draw(at: line.origin, withAttributes: attributes)
             UIGraphicsGetCurrentContext()?.restoreGState()
         }
+    }
+
+    /// A centred 9pt running head with its folio, as in `BookPageGenerator`.
+    private func drawRunningHead(y: CGFloat = 40) {
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont(name: "TimesNewRomanPSMT", size: 9) ?? .systemFont(ofSize: 9)]
+        ("CHAPTER THREE \u{00B7} THE RIVER AND THE ROAD" as NSString).draw(at: CGPoint(x: 200, y: y), withAttributes: attributes)
+        ("127" as NSString).draw(at: CGPoint(x: 516, y: y), withAttributes: attributes)
     }
 
     private func makePDF(pages: [PageSpec]) throws -> URL {

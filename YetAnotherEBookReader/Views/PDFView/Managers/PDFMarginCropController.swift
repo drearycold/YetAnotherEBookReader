@@ -336,9 +336,9 @@ class PDFMarginCropController {
     ///
     /// Content is the first run of 3+ lines whose ink density passes the detect
     /// strength. With `extendsAcrossLineGaps`, the border then walks outward over
-    /// any ink separated from the body by no more than ~1.5x its first inter-line
-    /// gap, so a short first line (paragraph tail) and ascenders are kept while a
-    /// running head further out is not. With `sparseInkSpan`, it walks outward over
+    /// lines set off from the body: a short first line (paragraph tail), ascenders,
+    /// or a heading after extra space, but not a running head or folio at the page
+    /// edge (`extendBorderAcrossLineGaps`). With `sparseInkSpan`, it walks outward over
     /// any ink within those perpendicular lines instead, so the few long lines of
     /// ragged text are kept (`extendBorderOverSparseInk`).
     private func blankBorderWidth(
@@ -473,9 +473,11 @@ class PDFMarginCropController {
         // A couple of dark pixels; ignores anti-aliasing dust.
         let inkFloor = 2.0
 
-        // Measure the first inter-line gap inside the body.
+        // Measure the body's first line and the inter-line gap after it.
         var cursor = border
+        var lineInk = 0
         while cursor < scanLimit, density(cursor) >= inkFloor {
+            lineInk += 1
             cursor += 1
         }
         var lineGap = 0
@@ -485,17 +487,38 @@ class PDFMarginCropController {
         }
         guard lineGap > 0, cursor < scanLimit, lineGap <= lineNumMax / 20 else { return border }
 
+        // Ink within ~1.5x the line gap continues the text: a paragraph tail, ascenders.
         let maxGap = lineGap + lineGap / 2 + 1
+        // Ink across a wider gap (extra space before a heading, or after a short
+        // line) is text when it is a line, not a speck, within a few lines' pitch,
+        // and clear of the band at the page edge that holds running heads and
+        // folios. The gap alone cannot tell them apart: a running head is often
+        // closer to the body than a section heading is.
+        let maxBlockGap = 4 * (lineInk + lineGap)
+        let minBlockInk = max(3, lineInk / 2)
+        let edgeZone = lineNumMax / 10
+
         var extended = border
         var whiteRun = 0
         var probe = border - 1
         while probe >= 1 {
             if density(probe) >= inkFloor {
+                if whiteRun > maxGap {
+                    var runStart = probe
+                    while runStart > 1, density(runStart - 1) >= inkFloor {
+                        runStart -= 1
+                    }
+                    guard probe - runStart + 1 >= minBlockInk, runStart > edgeZone else { break }
+                    extended = runStart
+                    whiteRun = 0
+                    probe = runStart - 1
+                    continue
+                }
                 extended = probe
                 whiteRun = 0
             } else {
                 whiteRun += 1
-                if whiteRun > maxGap { break }
+                if whiteRun > maxBlockGap { break }
             }
             probe -= 1
         }
