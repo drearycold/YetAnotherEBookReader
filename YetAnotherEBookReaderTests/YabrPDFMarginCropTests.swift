@@ -104,6 +104,33 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// A part of the raster reads in its own coordinates from every edge, so the
+    /// passes can run on one half of a spread or one column as on a whole page.
+    func testCroppedRasterReadsItsOwnCoordinates() throws {
+        let width = 40
+        let height = 30
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        // One black pixel at column 25, row 12.
+        let index = (12 * width + 25) * 4
+        bytes[index] = 0
+        bytes[index + 1] = 0
+        bytes[index + 2] = 0
+        try bytes.withUnsafeBufferPointer { buffer in
+            let base = try XCTUnwrap(buffer.baseAddress)
+            let raster = PageRaster(data: base, width: width, height: height, pixelsPerRow: width, channels: PixelChannelOffsets(red: 0, green: 1, blue: 2))
+            let part = raster.cropped(columns: 20..<40, lines: 10..<30)
+            XCTAssertEqual(part.lineCount(.up), 20)
+            XCTAssertEqual(part.pixelCount(.up), 20)
+            // In the part: column 5, row 2.
+            XCTAssertEqual(part.darkness(line: 2, pixel: 5, .up), 1)
+            XCTAssertEqual(part.darkness(line: 20 - 2 - 1, pixel: 5, .down), 1)
+            XCTAssertEqual(part.darkness(line: 5, pixel: 2, .right), 1)
+            XCTAssertEqual(part.darkness(line: 20 - 5 - 1, pixel: 2, .left), 1)
+            XCTAssertEqual(part.darkness(line: 0, pixel: 0, .up), 0)
+            XCTAssertEqual(raster.darkness(line: 12, pixel: 25, .up), 1)
+        }
+    }
+
     /// #94: a page of red text used to be blank to the detector, so nothing was cropped.
     func testDetectsColouredBodyText() throws {
         let detected = try detectDrawnPage { _ in

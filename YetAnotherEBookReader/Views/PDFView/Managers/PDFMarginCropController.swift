@@ -189,95 +189,20 @@ class PDFMarginCropController {
                 pixelsPerRow: Int(imageMediaBox.size.width) + padding,
                 channels: channels
             )
-            // Scanner borders and binding shadows (#95): each pass starts inside the
-            // one on its own edge, and leaves those either side out of its lines.
-            let artifactTop = raster.edgeArtifactWidth(from: .up)
-            let artifactBottom = raster.edgeArtifactWidth(from: .down)
-            let artifactLeft = raster.edgeArtifactWidth(from: .right)
-            let artifactRight = raster.edgeArtifactWidth(from: .left)
-            let rowPixels = max(1, artifactLeft)..<(raster.width - artifactRight)
-            let columnPixels = max(1, artifactTop)..<(raster.height - artifactBottom)
-
-            switch readingDirection {
-            case .LtR_TtB:
-                top = blankBorderWidth(
-                    raster: raster,
-                    orientation: .up,
-                    skip: artifactTop,
-                    pixels: rowPixels,
-                    ratio: mediaDisplay.size.width / cropDisplaySize.width,
-                    hMarginDetectStrength: hMarginDetectStrength,
-                    extendsAcrossLineGaps: true
+            let edges = detectContentEdges(
+                in: raster,
+                readingDirection: readingDirection,
+                hMarginDetectStrength: hMarginDetectStrength,
+                vMarginDetectStrength: vMarginDetectStrength,
+                mediaToCrop: CGSize(
+                    width: mediaDisplay.size.width / cropDisplaySize.width,
+                    height: mediaDisplay.size.height / cropDisplaySize.height
                 )
-                bottom = blankBorderWidth(
-                    raster: raster,
-                    orientation: .down,
-                    skip: artifactBottom,
-                    pixels: rowPixels,
-                    ratio: mediaDisplay.size.width / cropDisplaySize.width,
-                    hMarginDetectStrength: hMarginDetectStrength,
-                    extendsAcrossLineGaps: true
-                )
-                // The side passes add up a column over the text's height, so short
-                // pages (a chapter's last lines) are not diluted by the blank below.
-                let sideRatio = 3 * imageMediaBox.size.height / Double(max(bottom - top + 1, 1))
-                leading = blankBorderWidth(
-                    raster: raster,
-                    orientation: .right,
-                    skip: artifactLeft,
-                    pixels: columnPixels,
-                    ratio: sideRatio,
-                    hMarginDetectStrength: vMarginDetectStrength,
-                    sparseInkSpan: min(top, bottom)...max(top, bottom)
-                )
-                trailing = blankBorderWidth(
-                    raster: raster,
-                    orientation: .left,
-                    skip: artifactRight,
-                    pixels: columnPixels,
-                    ratio: sideRatio,
-                    hMarginDetectStrength: vMarginDetectStrength,
-                    sparseInkSpan: min(top, bottom)...max(top, bottom)
-                )
-            case .TtB_RtL:
-                leading = blankBorderWidth(
-                    raster: raster,
-                    orientation: .right,
-                    skip: artifactLeft,
-                    pixels: columnPixels,
-                    ratio: mediaDisplay.size.height / cropDisplaySize.height,
-                    hMarginDetectStrength: vMarginDetectStrength,
-                    extendsAcrossLineGaps: true
-                )
-                trailing = blankBorderWidth(
-                    raster: raster,
-                    orientation: .left,
-                    skip: artifactRight,
-                    pixels: columnPixels,
-                    ratio: mediaDisplay.size.height / cropDisplaySize.height,
-                    hMarginDetectStrength: vMarginDetectStrength,
-                    extendsAcrossLineGaps: true
-                )
-                let sideRatio = 3 * imageMediaBox.size.width / Double(max(trailing - leading + 1, 1))
-                top = blankBorderWidth(
-                    raster: raster,
-                    orientation: .up,
-                    skip: artifactTop,
-                    pixels: rowPixels,
-                    ratio: sideRatio,
-                    hMarginDetectStrength: hMarginDetectStrength,
-                    sparseInkSpan: min(leading, trailing)...max(leading, trailing)
-                )
-                bottom = blankBorderWidth(
-                    raster: raster,
-                    orientation: .down,
-                    skip: artifactBottom,
-                    pixels: rowPixels,
-                    ratio: sideRatio,
-                    hMarginDetectStrength: hMarginDetectStrength,
-                    sparseInkSpan: min(leading, trailing)...max(leading, trailing)
-                )
-            }
+            )
+            top = edges.top
+            bottom = edges.bottom
+            leading = edges.leading
+            trailing = edges.trailing
         }
 
         print("\(#function) white border page=\(pdfPage.pageRef!.pageNumber) \(top) \(bottom) \(leading) \(trailing)")
@@ -308,21 +233,141 @@ class PDFMarginCropController {
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
 
-        // The detected rect in display space (bottom-up), then back in page space.
-        let detected = mediaDisplay.toPage(CGRect(
-            x: CGFloat(leading) / thumbnailScale,
-            y: mediaDisplay.size.height - (CGFloat(top) + rectangle.height) / thumbnailScale,
-            width: rectangle.width / thumbnailScale,
-            height: rectangle.height / thumbnailScale
-        ))
         return PageVisibleContentValue(
-            bounds: CGRect(
-                x: detected.minX - boundsForCropBox.minX,
-                y: boundsForCropBox.maxY - detected.maxY,
-                width: detected.width,
-                height: detected.height
+            bounds: Self.pageRect(
+                fromRaster: rectangle,
+                thumbnailScale: thumbnailScale,
+                mediaDisplay: mediaDisplay,
+                cropBox: boundsForCropBox
             ),
             thumbImage: newImage
+        )
+    }
+
+    /// Finds the content edges in `raster`, in its own lines: `top`/`bottom` are
+    /// rows and `leading`/`trailing` columns, counted from its top-left.
+    /// `mediaToCrop` scales the first passes' density, which is measured across
+    /// the media box, to the crop box the reader sees.
+    private func detectContentEdges(
+        in raster: PageRaster,
+        readingDirection: PDFReadDirection,
+        hMarginDetectStrength: Double,
+        vMarginDetectStrength: Double,
+        mediaToCrop: CGSize
+    ) -> RasterEdges {
+        // Scanner borders and binding shadows (#95): each pass starts inside the
+        // one on its own edge, and leaves those either side out of its lines.
+        let artifactTop = raster.edgeArtifactWidth(from: .up)
+        let artifactBottom = raster.edgeArtifactWidth(from: .down)
+        let artifactLeft = raster.edgeArtifactWidth(from: .right)
+        let artifactRight = raster.edgeArtifactWidth(from: .left)
+        let rowPixels = max(1, artifactLeft)..<(raster.width - artifactRight)
+        let columnPixels = max(1, artifactTop)..<(raster.height - artifactBottom)
+
+        switch readingDirection {
+        case .LtR_TtB:
+            let top = blankBorderWidth(
+                raster: raster,
+                orientation: .up,
+                skip: artifactTop,
+                pixels: rowPixels,
+                ratio: mediaToCrop.width,
+                hMarginDetectStrength: hMarginDetectStrength,
+                extendsAcrossLineGaps: true
+            )
+            let bottom = blankBorderWidth(
+                raster: raster,
+                orientation: .down,
+                skip: artifactBottom,
+                pixels: rowPixels,
+                ratio: mediaToCrop.width,
+                hMarginDetectStrength: hMarginDetectStrength,
+                extendsAcrossLineGaps: true
+            )
+            // The side passes add up a column over the text's height, so short
+            // pages (a chapter's last lines) are not diluted by the blank below.
+            let sideRatio = 3 * Double(raster.height) / Double(max(bottom - top + 1, 1))
+            let leading = blankBorderWidth(
+                raster: raster,
+                orientation: .right,
+                skip: artifactLeft,
+                pixels: columnPixels,
+                ratio: sideRatio,
+                hMarginDetectStrength: vMarginDetectStrength,
+                sparseInkSpan: min(top, bottom)...max(top, bottom)
+            )
+            let trailing = blankBorderWidth(
+                raster: raster,
+                orientation: .left,
+                skip: artifactRight,
+                pixels: columnPixels,
+                ratio: sideRatio,
+                hMarginDetectStrength: vMarginDetectStrength,
+                sparseInkSpan: min(top, bottom)...max(top, bottom)
+            )
+            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing)
+        case .TtB_RtL:
+            let leading = blankBorderWidth(
+                raster: raster,
+                orientation: .right,
+                skip: artifactLeft,
+                pixels: columnPixels,
+                ratio: mediaToCrop.height,
+                hMarginDetectStrength: vMarginDetectStrength,
+                extendsAcrossLineGaps: true
+            )
+            let trailing = blankBorderWidth(
+                raster: raster,
+                orientation: .left,
+                skip: artifactRight,
+                pixels: columnPixels,
+                ratio: mediaToCrop.height,
+                hMarginDetectStrength: vMarginDetectStrength,
+                extendsAcrossLineGaps: true
+            )
+            let sideRatio = 3 * Double(raster.width) / Double(max(trailing - leading + 1, 1))
+            let top = blankBorderWidth(
+                raster: raster,
+                orientation: .up,
+                skip: artifactTop,
+                pixels: rowPixels,
+                ratio: sideRatio,
+                hMarginDetectStrength: hMarginDetectStrength,
+                sparseInkSpan: min(leading, trailing)...max(leading, trailing)
+            )
+            let bottom = blankBorderWidth(
+                raster: raster,
+                orientation: .down,
+                skip: artifactBottom,
+                pixels: rowPixels,
+                ratio: sideRatio,
+                hMarginDetectStrength: hMarginDetectStrength,
+                sparseInkSpan: min(leading, trailing)...max(leading, trailing)
+            )
+            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing)
+        }
+    }
+
+    /// A rect in the media-box thumbnail's pixels (top-down, display space) as a
+    /// crop-relative, top-down page-space rect, the form `visibleBounds` returns.
+    static func pageRect(
+        fromRaster rect: CGRect,
+        thumbnailScale: CGFloat,
+        mediaDisplay: PDFPageDisplaySpace,
+        cropBox: CGRect
+    ) -> CGRect {
+        // Display space is bottom-up; map back through the page's rotation.
+        let page = mediaDisplay.toPage(CGRect(
+            x: rect.minX / thumbnailScale,
+            y: mediaDisplay.size.height - rect.maxY / thumbnailScale,
+            width: rect.width / thumbnailScale,
+            height: rect.height / thumbnailScale
+        ))
+        return CGRect(
+            x: page.minX - cropBox.minX,
+            y: cropBox.maxY - page.maxY,
+            width: page.width,
+            height: page.height
         )
     }
 
@@ -512,6 +557,15 @@ class PDFMarginCropController {
     }
 }
 
+/// Content edges in a `PageRaster`'s own pixels, top-down: rows for `top` and
+/// `bottom`, columns for `leading` and `trailing`.
+struct RasterEdges: Equatable {
+    var top: Int
+    var bottom: Int
+    var leading: Int
+    var trailing: Int
+}
+
 /// The page thumbnail's pixels, read along scan lines from any edge: a line runs
 /// across the page parallel to the edge, `line` counts in from that edge and
 /// `pixel` runs along it (left to right, or top to bottom).
@@ -521,6 +575,24 @@ struct PageRaster {
     let height: Int
     let pixelsPerRow: Int
     let channels: PixelChannelOffsets
+    /// Where this raster's top-left pixel sits in the image, when it is a part of
+    /// it (`cropped`): one half of a spread, one column.
+    var originX = 0
+    var originY = 0
+
+    /// The part of this raster at `columns` × `lines` (top-down), read in its own
+    /// coordinates, so every pass works on it as on a whole page.
+    func cropped(columns: Range<Int>, lines: Range<Int>) -> PageRaster {
+        PageRaster(
+            data: data,
+            width: columns.count,
+            height: lines.count,
+            pixelsPerRow: pixelsPerRow,
+            channels: channels,
+            originX: originX + columns.lowerBound,
+            originY: originY + lines.lowerBound
+        )
+    }
 
     func lineCount(_ edge: CGImagePropertyOrientation) -> Int {
         switch edge {
@@ -551,13 +623,15 @@ struct PageRaster {
         case .down, .downMirrored, .left, .leftMirrored:
             lineIndex = lineCount(edge) - line - 1
         }
-        let pixelIndex: Int
+        let x: Int
+        let y: Int
         switch edge {
         case .up, .down, .upMirrored, .downMirrored:
-            pixelIndex = (pixel + pixelsPerRow * lineIndex) * 4
+            (x, y) = (pixel, lineIndex)
         case .left, .leftMirrored, .right, .rightMirrored:
-            pixelIndex = (lineIndex + pixelsPerRow * pixel) * 4
+            (x, y) = (lineIndex, pixel)
         }
+        let pixelIndex = ((originY + y) * pixelsPerRow + originX + x) * 4
         let r = Double(data[pixelIndex + channels.red])
         let g = Double(data[pixelIndex + channels.green])
         let b = Double(data[pixelIndex + channels.blue])
