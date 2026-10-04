@@ -385,6 +385,27 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(halfInView(harness).width, readableRect(harness).width * 0.84, accuracy: spreadFitTolerance)
     }
 
+    /// Turning Spreads on from the options refits the page on screen to its
+    /// first half; turning it off again shows the whole spread.
+    func testTurningSpreadsOnRefitsThePageToItsFirstHalf() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait, spreadMode: .Off)
+        let readable = readableRect(harness)
+
+        var options = harness.controller.pdfOptions
+        options.spreadMode = .On
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        XCTAssertEqual(spreadPosition(harness), "p1 left")
+        XCTAssertEqual(halfInView(harness).width, readable.width * 0.9, accuracy: spreadFitTolerance)
+
+        options.spreadMode = .Off
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        let page = harness.page(0)
+        let spread = harness.pdfView.convert(Self.leftBlock.union(Self.rightBlock), from: page)
+        XCTAssertEqual(spread.width, readable.width * 0.9, accuracy: spreadFitTolerance, "the whole spread")
+    }
+
     func testScrollModeReadsWholePages() throws {
         let harness = try makeSpreadHarness(viewSize: Self.portrait)
         let page = harness.page(0)

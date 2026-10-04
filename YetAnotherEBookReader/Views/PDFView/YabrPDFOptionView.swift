@@ -80,6 +80,19 @@ struct PDFOptionView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                     }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Two-Page Spreads")
+                            Spacer()
+                            Text("read one half at a time").font(.caption)
+                        }
+                        Picker(selection: $model.preferences.spreadMode, label: Text("Two-Page Spreads")) {
+                            ForEach(PDFSpreadMode.allCases, id: \.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
                 case .Scroll:
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Scroll Direction")
@@ -156,6 +169,7 @@ struct PDFOptionView: View {
             .onChange(of: model.preferences.vMarginDetectStrength) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.marginOffset) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.rememberInPagePosition) { _ in handleOptionsChange() }
+            .onChange(of: model.preferences.spreadMode) { _ in handleOptionsChange() }
         }
     }
     
