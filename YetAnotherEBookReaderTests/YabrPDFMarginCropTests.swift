@@ -554,7 +554,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     /// Paper pages (`drawPaperPage`) whose right column has "Zanzibar" on one
     /// line, read with Columns Auto.
-    private func makePaperHarness(pageCount: Int = 2, viewSize: CGSize = YabrPDFMarginCropTests.portrait) throws -> Harness {
+    private func makePaperHarness(pageCount: Int = 2, viewSize: CGSize? = nil) throws -> Harness {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("paper.pdf")
@@ -573,7 +573,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             }
         }
         tempURLs.append(url)
-        return try makeHarness(pages: [], viewSize: viewSize, pdfURL: url, columnsMode: .Auto)
+        return try makeHarness(pages: [], viewSize: viewSize ?? Self.portrait, pdfURL: url, columnsMode: .Auto)
     }
 
     /// The region of the step on screen.
