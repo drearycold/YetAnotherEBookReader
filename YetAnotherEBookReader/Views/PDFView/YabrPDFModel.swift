@@ -46,7 +46,6 @@ struct PageVisibleContentValue {
     /// The parts of the page read one after another (#97), in reading order.
     /// Empty when the page reads whole.
     var regions: [PDFReadingRegion] = []
-    let thumbImage: UIImage?
     var lastUsed = Date()
 }
 

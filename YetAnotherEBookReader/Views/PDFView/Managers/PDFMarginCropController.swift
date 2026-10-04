@@ -96,7 +96,6 @@ class PDFMarginCropController {
         while visibleContentBounds.count > 9 {
             if let minPageEntry = visibleContentBounds.min(by: { $0.value.lastUsed < $1.value.lastUsed }) {
                 visibleContentBounds.removeValue(forKey: minPageEntry.key)
-                print("\(#function) visibleContentBounds.removeValue=\(minPageEntry.key.pageNumber)")
             } else {
                 break
             }
@@ -117,160 +116,142 @@ class PDFMarginCropController {
         }
     }
 
+    /// A page as detection reads it: its media box as displayed (turned by the
+    /// page's rotation), rendered at `pixelsPerPoint`.
+    struct Thumbnail {
+        let image: CGImage
+        /// Raster pixels per page point.
+        let pixelsPerPoint: CGFloat
+        /// The media box, as displayed.
+        let mediaDisplay: PDFPageDisplaySpace
+        /// The crop box, page space.
+        let cropBox: CGRect
+    }
+
     private func analyzeVisibleContents(pdfPage: PDFPage, key: PageVisibleContentKey) -> PageVisibleContentValue {
         // Points of Interest in Instruments: the detection, and its render,
         // edge and region stages.
         let detection = AppPerformanceSignpost.begin("PDFMarginDetection", "page \(key.pageNumber)")
         defer { AppPerformanceSignpost.end("PDFMarginDetection", detection) }
 
-        let pdfPage = Self.pageWithoutReaderAnnotations(pdfPage)
-        let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
-        let boundsForCropBox = pdfPage.bounds(for: .cropBox)
-        let sizeForThumbnailImage = thumbnailImageSize(boundsForCropBox: boundsForCropBox)
-        let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
+        let render = AppPerformanceSignpost.begin("PDFMarginRender")
+        let thumbnail = thumbnail(of: pdfPage)
+        AppPerformanceSignpost.end("PDFMarginRender", render)
+        guard let thumbnail, let value = analyze(thumbnail, key: key) else {
+            return PageVisibleContentValue(bounds: pdfPage.bounds(for: .mediaBox))
+        }
+        return value
+    }
+
+    /// Renders `page` for detection, without the reader's own highlights.
+    func thumbnail(of page: PDFPage) -> Thumbnail? {
+        let page = Self.pageWithoutReaderAnnotations(page)
+        let cropBox = page.bounds(for: .cropBox)
+        let scale = thumbnailImageSize(boundsForCropBox: cropBox).width / cropBox.width
         // Thumbnails show the page turned by its rotation, fitted into the requested
         // size, so ask for the turned size and detect in display space: the passes
         // then find the top, line gaps and ragged edges the reader sees.
-        let mediaDisplay = PDFPageDisplaySpace(box: boundsForMediaBox, rotation: pdfPage.rotation)
-        let cropDisplaySize = PDFPageDisplaySpace(box: boundsForCropBox, rotation: pdfPage.rotation).size
-
-        let render = AppPerformanceSignpost.begin("PDFMarginRender")
-        let imageMediaBox = pdfPage.thumbnail(
-            of: CGSize(
-                width: mediaDisplay.size.width * thumbnailScale,
-                height: mediaDisplay.size.height * thumbnailScale
-            ),
+        let mediaDisplay = PDFPageDisplaySpace(box: page.bounds(for: .mediaBox), rotation: page.rotation)
+        let image = page.thumbnail(
+            of: CGSize(width: mediaDisplay.size.width * scale, height: mediaDisplay.size.height * scale),
             for: .mediaBox
         )
-        let imageCropBox = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
-        AppPerformanceSignpost.end("PDFMarginRender", render)
+        guard let cgImage = image.cgImage else { return nil }
+        return Thumbnail(image: cgImage, pixelsPerPoint: scale * image.scale, mediaDisplay: mediaDisplay, cropBox: cropBox)
+    }
 
-        guard let cgimage = imageMediaBox.cgImage,
-              let channels = PixelChannelOffsets(cgImage: cgimage) else {
-            return PageVisibleContentValue(bounds: boundsForMediaBox, thumbImage: nil)
+    /// The content bounds and reading regions detected on `thumbnail` under
+    /// `key`; nil when its pixels cannot be read.
+    func analyze(_ thumbnail: Thumbnail, key: PageVisibleContentKey) -> PageVisibleContentValue? {
+        let image = thumbnail.image
+        guard let channels = PixelChannelOffsets(cgImage: image),
+              let pixels = image.dataProvider?.data,
+              let data = CFDataGetBytePtr(pixels)
+        else { return nil }
+        // The image's own size and row stride: rows can be padded past the width.
+        let raster = PageRaster(
+            data: data,
+            width: image.width,
+            height: image.height,
+            pixelsPerRow: image.bytesPerRow / 4,
+            channels: channels
+        )
+        return withExtendedLifetime(pixels) {
+            analyze(raster, of: thumbnail, key: key)
         }
+    }
 
-        var top = 0
-        var bottom = 0
-        var leading = 0
-        var trailing = 0
+    private func analyze(_ raster: PageRaster, of thumbnail: Thumbnail, key: PageVisibleContentKey) -> PageVisibleContentValue {
+        let scale = thumbnail.pixelsPerPoint
+        let mediaDisplay = thumbnail.mediaDisplay
+        let cropDisplaySize = PDFPageDisplaySpace(box: thumbnail.cropBox, rotation: mediaDisplay.rotation).size
+
+        let edgesInterval = AppPerformanceSignpost.begin("PDFMarginEdges")
+        let edges = detectContentEdges(
+            in: raster,
+            readingDirection: key.readingDirection,
+            hMarginDetectStrength: key.hMarginDetectStrength,
+            vMarginDetectStrength: key.vMarginDetectStrength,
+            mediaToCrop: CGSize(
+                width: mediaDisplay.size.width / cropDisplaySize.width,
+                height: mediaDisplay.size.height / cropDisplaySize.height
+            )
+        )
+        AppPerformanceSignpost.end("PDFMarginEdges", edgesInterval)
+        var top = edges.top
+        var bottom = edges.bottom
+        var leading = edges.leading
+        var trailing = edges.trailing
         /// Reading regions, in thumbnail pixels.
         var regionRects: [(rect: CGRect, kind: PDFReadingRegion.Kind)] = []
 
-        print("\(#function) bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
-        print("\(#function) sizeForThumbnailImage \(sizeForThumbnailImage)")
-        print("\(#function) imageCropBox width=\(imageCropBox.size.width) height=\(imageCropBox.size.height)")
-        print("\(#function) imageMediaBox width=\(imageMediaBox.size.width) height=\(imageMediaBox.size.height)")
-
-        let align = 8
-        let padding = (align - Int(imageMediaBox.size.width) % align) % align
-        print("\(#function) CGIMAGE PADDING \(padding)")
-
-        if let provider = cgimage.dataProvider,
-           let providerData = provider.data,
-           let data = CFDataGetBytePtr(providerData) {
-            let raster = PageRaster(
-                data: data,
-                width: Int(imageMediaBox.size.width),
-                height: Int(imageMediaBox.size.height),
-                pixelsPerRow: Int(imageMediaBox.size.width) + padding,
-                channels: channels
-            )
-            let edgesInterval = AppPerformanceSignpost.begin("PDFMarginEdges")
-            let edges = detectContentEdges(
-                in: raster,
-                readingDirection: key.readingDirection,
-                hMarginDetectStrength: key.hMarginDetectStrength,
-                vMarginDetectStrength: key.vMarginDetectStrength,
-                mediaToCrop: CGSize(
-                    width: mediaDisplay.size.width / cropDisplaySize.width,
-                    height: mediaDisplay.size.height / cropDisplaySize.height
+        let regionsInterval = AppPerformanceSignpost.begin("PDFMarginRegions")
+        if key.spreadMode != .Off {
+            // The crop box's part of the media-box thumbnail, top-down.
+            let crop = mediaDisplay.toDisplay(thumbnail.cropBox)
+            let page = raster.cropped(
+                columns: Self.pixelRange(crop.minX * scale, crop.maxX * scale, limit: raster.width),
+                lines: Self.pixelRange(
+                    (mediaDisplay.size.height - crop.maxY) * scale,
+                    (mediaDisplay.size.height - crop.minY) * scale,
+                    limit: raster.height
                 )
             )
-            AppPerformanceSignpost.end("PDFMarginEdges", edgesInterval)
-            top = edges.top
-            bottom = edges.bottom
-            leading = edges.leading
-            trailing = edges.trailing
-
-            let regionsInterval = AppPerformanceSignpost.begin("PDFMarginRegions")
-            defer { AppPerformanceSignpost.end("PDFMarginRegions", regionsInterval) }
-            if key.spreadMode != .Off {
-                // The crop box's part of the media-box thumbnail, top-down.
-                let crop = mediaDisplay.toDisplay(boundsForCropBox)
-                let page = raster.cropped(
-                    columns: Self.pixelRange(crop.minX * thumbnailScale, crop.maxX * thumbnailScale, limit: raster.width),
-                    lines: Self.pixelRange(
-                        (mediaDisplay.size.height - crop.maxY) * thumbnailScale,
-                        (mediaDisplay.size.height - crop.minY) * thumbnailScale,
-                        limit: raster.height
-                    )
-                )
-                regionRects = spreadHalves(of: page, key: key).map { ($0, .spreadHalf) }
-                // One half holds everything (a blank verso): the page reads whole,
-                // fitted to that half. Text across half the width is too thin for
-                // the whole-page passes to find its top and bottom.
-                if regionRects.count == 1, let half = regionRects.first?.rect {
-                    top = Int(half.minY)
-                    bottom = Int(half.maxY) - 1
-                    leading = Int(half.minX)
-                    trailing = Int(half.maxX) - 2
-                    regionRects = []
-                }
-            }
-
-            if key.columnsMode == .Auto {
-                // Columns (#19) of each half of a spread, or of the page's content.
-                let parts = regionRects.isEmpty
-                    ? [(rect: CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1), kind: PDFReadingRegion.Kind.spreadHalf)]
-                    : regionRects
-                let columned = parts.flatMap { part -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] in
-                    let columns = columnRegions(in: raster, rect: part.rect, readingDirection: key.readingDirection)
-                    return columns.isEmpty && !regionRects.isEmpty ? [part] : columns
-                }
-                if columned.count >= 2 {
-                    regionRects = columned
-                }
+            regionRects = spreadHalves(of: page, key: key).map { ($0, .spreadHalf) }
+            // One half holds everything (a blank verso): the page reads whole,
+            // fitted to that half. Text across half the width is too thin for
+            // the whole-page passes to find its top and bottom.
+            if regionRects.count == 1, let half = regionRects.first?.rect {
+                top = Int(half.minY)
+                bottom = Int(half.maxY) - 1
+                leading = Int(half.minX)
+                trailing = Int(half.maxX) - 2
+                regionRects = []
             }
         }
 
-        print("\(#function) white border page=\(pdfPage.pageRef!.pageNumber) \(top) \(bottom) \(leading) \(trailing)")
+        if key.columnsMode == .Auto {
+            // Columns (#19) of each half of a spread, or of the page's content.
+            let parts = regionRects.isEmpty
+                ? [(rect: CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1), kind: PDFReadingRegion.Kind.spreadHalf)]
+                : regionRects
+            let columned = parts.flatMap { part -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] in
+                let columns = columnRegions(in: raster, rect: part.rect, readingDirection: key.readingDirection)
+                return columns.isEmpty && !regionRects.isEmpty ? [part] : columns
+            }
+            if columned.count >= 2 {
+                regionRects = columned
+            }
+        }
+        AppPerformanceSignpost.end("PDFMarginRegions", regionsInterval)
 
-        UIGraphicsBeginImageContextWithOptions(imageMediaBox.size, false, CGFloat.zero)
-        imageMediaBox.draw(at: CGPoint.zero)
-
-        let rectangle = CGRect(
-            x: leading,
-            y: top,
-            width: trailing - leading + 2,
-            height: bottom - top + 1
-        )
-        UIColor.black.setFill()
-        UIRectFrame(rectangle)
-        UIColor.systemBlue.setFill()
-        regionRects.map(\.rect).forEach(UIRectFrame)
-
-        #if DEBUG
-        UIColor.red.setStroke()
-        let drawBounds = CGRect(
-            x: boundsForCropBox.minX * thumbnailScale,
-            y: boundsForCropBox.minY * thumbnailScale,
-            width: sizeForThumbnailImage.width,
-            height: sizeForThumbnailImage.height
-        )
-        UIRectFrame(drawBounds)
-        #endif
-
-        let newImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
+        let bounds = CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1)
         func pageRect(_ rasterRect: CGRect) -> CGRect {
-            Self.pageRect(fromRaster: rasterRect, thumbnailScale: thumbnailScale, mediaDisplay: mediaDisplay, cropBox: boundsForCropBox)
+            Self.pageRect(fromRaster: rasterRect, thumbnailScale: scale, mediaDisplay: mediaDisplay, cropBox: thumbnail.cropBox)
         }
         return PageVisibleContentValue(
-            bounds: pageRect(rectangle),
-            regions: regionRects.map { PDFReadingRegion(rect: pageRect($0.rect), kind: $0.kind) },
-            thumbImage: newImage
+            bounds: pageRect(bounds),
+            regions: regionRects.map { PDFReadingRegion(rect: pageRect($0.rect), kind: $0.kind) }
         )
     }
 

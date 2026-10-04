@@ -104,6 +104,61 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// Detection reads the thumbnail's own row stride: with its rows padded
+    /// past the width, a paper's page reads as with packed rows, columns and all.
+    func testDetectionReadsPaddedRows() throws {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize)).pdfData { context in
+            context.beginPage()
+            drawPaperPage(context)
+        }
+        let page = try XCTUnwrap(PDFDocument(data: data)?.page(at: 0))
+        var options = PDFPreferenceValue()
+        options.columnsMode = .Auto
+        let key = PageVisibleContentKey(pageNumber: 1, options: options)
+        let detector = PDFMarginCropController()
+        let packed = try XCTUnwrap(detector.thumbnail(of: page))
+
+        // The same pixels, each row 64 bytes further on than the image's own
+        // stride.
+        let image = packed.image
+        let source = try XCTUnwrap(image.dataProvider?.data as Data?)
+        let stride = image.bytesPerRow + 64
+        var bytes = Data(count: stride * image.height)
+        bytes.withUnsafeMutableBytes { target in
+            source.withUnsafeBytes { rows in
+                guard let to = target.baseAddress, let from = rows.baseAddress else { return }
+                for row in 0..<image.height {
+                    (to + row * stride).copyMemory(from: from + row * image.bytesPerRow, byteCount: image.bytesPerRow)
+                }
+            }
+        }
+        let paddedImage = try XCTUnwrap(CGImage(
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: image.bitsPerComponent,
+            bitsPerPixel: image.bitsPerPixel,
+            bytesPerRow: stride,
+            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: image.bitmapInfo,
+            provider: try XCTUnwrap(CGDataProvider(data: bytes as CFData)),
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        ))
+        let padded = PDFMarginCropController.Thumbnail(
+            image: paddedImage,
+            pixelsPerPoint: packed.pixelsPerPoint,
+            mediaDisplay: packed.mediaDisplay,
+            cropBox: packed.cropBox
+        )
+
+        let expected = try XCTUnwrap(detector.analyze(packed, key: key))
+        XCTAssertEqual(expected.regions.map(\.kind), [.spanning, .column, .column])
+        let found = try XCTUnwrap(detector.analyze(padded, key: key))
+        XCTAssertEqual(found.bounds, expected.bounds)
+        XCTAssertEqual(found.regions, expected.regions)
+    }
+
     // MARK: - Two-page spreads (#97)
 
     private static let spreadSize = CGSize(width: 1224, height: 792)
@@ -2550,6 +2605,25 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     // MARK: - Reader bars
 
+    /// The page number opens the contents and page thumbnails in both modes,
+    /// also in Scroll mode, where no page is ever detected.
+    func testPageIndicatorOpensNavigationInBothModes() throws {
+        for mode in [PDFLayoutMode.Page, .Scroll] {
+            let harness = try makeHarness(
+                pages: [PageSpec(content: CGRect(x: 81, y: 96, width: 450, height: 600))],
+                viewSize: Self.portrait,
+                pageMode: mode
+            )
+            harness.controller.pageIndicator.sendActions(for: .primaryActionTriggered)
+            settle(0.5)
+            let nav = try XCTUnwrap(harness.controller.presentedViewController as? UINavigationController, "\(mode)")
+            XCTAssertTrue(nav.viewControllers.first is YabrPDFNavigationPageVC, "\(mode)")
+            harness.controller.dismiss(animated: false)
+            waitForDismissal(harness)
+            tearDownWindow()
+        }
+    }
+
     /// The page is fitted to the area without the nav bar and toolbar, which
     /// float over it.
     func testPageFitsAreaWithoutBars() throws {
@@ -3524,7 +3598,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         initialPoint: CGPoint? = nil,
         spreadMode: PDFSpreadMode = .Off,
         columnsMode: PDFColumnsMode = .Off,
-        autoScaler: PDFAutoScaler = .Width
+        autoScaler: PDFAutoScaler = .Width,
+        pageMode: PDFLayoutMode = .Page
     ) throws -> Harness {
         let url = try pdfURL ?? makePDF(pages: pages)
         let controller = AppearanceTrackingPDFViewController()
@@ -3547,7 +3622,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         controller.pdfOptions = PDFPreferenceValue(
             themeMode: themeMode,
             selectedAutoScaler: autoScaler,
-            pageMode: .Page,
+            pageMode: pageMode,
             readingDirection: readingDirection,
             spreadMode: spreadMode,
             columnsMode: columnsMode

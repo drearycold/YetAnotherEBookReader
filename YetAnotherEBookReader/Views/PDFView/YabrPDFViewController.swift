@@ -21,8 +21,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let auxSurface = PDFReaderSurface()
     var pdfViewAux: YabrPDFView { auxSurface.activeView }
     
-    let thumbController = UIViewController()
-
     let logger = Logger()
     
     var historyMenu = UIMenu(title: "History", children: [])
@@ -44,8 +42,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
-    
-    let thumbImageView = UIImageView()
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
     weak var readerEngineDelegate: ReaderEngineDelegate?
@@ -239,8 +235,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         
         
         surface.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
-        
-        configureThumbnailPreview()
     }
     
     override func viewWillAppear(_ animated: Bool) {

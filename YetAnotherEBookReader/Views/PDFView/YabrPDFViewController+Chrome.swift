@@ -53,17 +53,6 @@ extension YabrPDFViewController {
         ])
     }
 
-    func configureThumbnailPreview() {
-        self.thumbImageView.translatesAutoresizingMaskIntoConstraints = false
-        self.thumbController.view.addSubview(self.thumbImageView)
-        NSLayoutConstraint.activate([
-            self.thumbImageView.topAnchor.constraint(equalTo: self.thumbController.view.topAnchor),
-            self.thumbImageView.bottomAnchor.constraint(equalTo: self.thumbController.view.bottomAnchor),
-            self.thumbImageView.leadingAnchor.constraint(equalTo: self.thumbController.view.leadingAnchor),
-            self.thumbImageView.trailingAnchor.constraint(equalTo: self.thumbController.view.trailingAnchor)
-        ])
-    }
-
     private func configurePagingControls() {
         chromeContainerView.translatesAutoresizingMaskIntoConstraints = false
         chromeContainerView.frame = CGRect(
@@ -76,23 +65,9 @@ extension YabrPDFViewController {
         chromeContainerView.layer.masksToBounds = false
 
         pageIndicator.setTitle("0 / 0", for: .normal)
-        pageIndicator.addAction(UIAction(handler: { [self] _ in
-            guard let curPageNum = pdfView.currentPage?.pageRef?.pageNumber,
-                  let bounds = marginCropController.cachedValue(for:
-                    PageVisibleContentKey(pageNumber: curPageNum, options: pdfOptions)
-                  ),
-                  let image = bounds.thumbImage else { return }
-            self.thumbImageView.image = image
-
-            let pageController = YabrPDFNavigationPageVC()
-            pageController.pdfViewController = self
-            pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
-
-            let nav = self.themedNavigationController(rootViewController: pageController)
-
-            self.present(nav, animated: true)
-
-        }), for: .primaryActionTriggered)
+        pageIndicator.addAction(UIAction { [weak self] _ in
+            self?.presentNavigation()
+        }, for: .primaryActionTriggered)
 
         pageSlider.minimumValue = 1
         pageSlider.maximumValue = Float(pdfView.document?.pageCount ?? 1)
@@ -327,6 +302,15 @@ extension YabrPDFViewController {
     }
 
     /// Sheets look like FolioReader's: the sheet surface, accent bar buttons.
+    /// The contents and page thumbnails (`YabrPDFNavigationPageVC`), from the
+    /// toolbar's list button and the page number.
+    func presentNavigation() {
+        let navigation = YabrPDFNavigationPageVC()
+        navigation.pdfViewController = self
+        navigation.yabrPDFMetaSource = yabrPDFMetaSource
+        present(themedNavigationController(rootViewController: navigation), animated: true)
+    }
+
     func themedNavigationController(rootViewController: UIViewController) -> UINavigationController {
         let palette = pdfOptions.themePalette
         palette.applySheet(to: rootViewController.navigationItem)
@@ -365,15 +349,9 @@ extension YabrPDFViewController {
 
     private func configureNavigationItems() {
         navigationItem.setLeftBarButtonItems([
-            UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { _ in
-                let navigationController = YabrPDFNavigationPageVC()
-                navigationController.pdfViewController = self
-                navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
-
-                let nav = self.themedNavigationController(rootViewController: navigationController)
-
-                self.present(nav, animated: true)
-            })),
+            UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction { [weak self] _ in
+                self?.presentNavigation()
+            }),
             UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { _ in
                 let annotationController = YabrPDFAnnotationPageVC()
                 annotationController.pdfViewController = self
