@@ -904,6 +904,23 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// A table in two equal columns over most of the page, a label and a
+    /// number per cell, is not read in columns: its lines are not text.
+    func testTableIsNotReadInColumns() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto) { _ in
+            let attributes: [NSAttributedString.Key: Any] = [.font: UIFont(name: "TimesNewRomanPSMT", size: 11) ?? .systemFont(ofSize: 11)]
+            for row in 0..<25 {
+                let y = 96 + CGFloat(row) * 15
+                ("Method" as NSString).draw(at: CGPoint(x: 60, y: y), withAttributes: attributes)
+                ("0.93" as NSString).draw(at: CGPoint(x: 230, y: y), withAttributes: attributes)
+                ("Baseline" as NSString).draw(at: CGPoint(x: 322, y: y), withAttributes: attributes)
+                ("0.87" as NSString).draw(at: CGPoint(x: 500, y: y), withAttributes: attributes)
+            }
+            drawBodyLines(y: 490, count: 14) { _ in 60...552 }
+        }
+        XCTAssertTrue(layout.regions.isEmpty, "\(layout.regions)")
+    }
+
     /// A spread of two-column pages: each half's columns, half by half.
     func testColumnsWithinSpreadHalves() throws {
         let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .Auto, columnsMode: .Auto) { _ in

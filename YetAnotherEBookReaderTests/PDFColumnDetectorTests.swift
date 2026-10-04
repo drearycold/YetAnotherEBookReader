@@ -154,6 +154,64 @@ final class PDFColumnDetectorTests: XCTestCase {
         XCTAssertTrue(regions.isEmpty, "\(regions)")
     }
 
+    // MARK: - Tables and figures
+
+    /// A two-column numeric table over 60% of the page, text below it: in each
+    /// column, rows of a label and a number far apart, which no line of text is.
+    /// Cells are 7 px tall on an 11 px pitch.
+    private func tableMap() -> PDFInkMap {
+        let body = text(0...600, 530...800)
+        let cells = [10..<60, 200..<250, 320..<370, 520..<570]
+        return PDFInkMap(width: width, height: height) { x, y in
+            if body.isInked(x, y) { return true }
+            guard y < 500, y % 11 < 7 else { return false }
+            return cells.contains { $0.contains(x) }
+        }
+    }
+
+    func testNumericTableIsNotSplit() {
+        let page = tableMap()
+        XCTAssertTrue(PDFColumnDetector.regions(in: page).isEmpty, "\(PDFColumnDetector.regions(in: page))")
+    }
+
+    /// A 2 x 2 grid of figures, each with a short caption.
+    func testFigureGridIsNotSplit() {
+        let figures = [CGRect(x: 0, y: 0, width: 285, height: 330), CGRect(x: 315, y: 0, width: 285, height: 330),
+                       CGRect(x: 0, y: 400, width: 285, height: 330), CGRect(x: 315, y: 400, width: 285, height: 330)]
+        let captions = [text(0...285, 340...362), text(315...600, 340...362), text(0...285, 740...762), text(315...600, 740...762)]
+        let page = map(text: captions, solid: figures)
+        XCTAssertTrue(PDFColumnDetector.regions(in: page).isEmpty, "\(PDFColumnDetector.regions(in: page))")
+    }
+
+    /// A column that also holds a figure (40% of its height) is still text.
+    func testColumnHoldingAFigureIsSplit() {
+        let page = map(
+            text: [text(0...285, 0...300), text(0...285, 620...800), text(315...600, 0...800)],
+            solid: [CGRect(x: 0, y: 310, width: 285, height: 300)]
+        )
+        XCTAssertEqual(PDFColumnDetector.regions(in: page).count, 2)
+    }
+
+    /// The same on a vertical page: `map` turned back the other way, so the
+    /// detector's quarter turn gives `map` again.
+    private func vertical(_ map: PDFInkMap) -> PDFInkMap {
+        PDFInkMap(width: map.height, height: map.width) { x, y in
+            map.isInked(x: y, y: map.height - 1 - x)
+        }
+    }
+
+    func testVerticalTableAndFigureGridAreNotSplit() {
+        let table = tableMap()
+        XCTAssertEqual(vertical(table).turnedForVerticalText().isInked(x: 15, y: 3), table.isInked(x: 15, y: 3))
+        XCTAssertTrue(PDFColumnDetector.regions(in: vertical(table), readingDirection: .TtB_RtL).isEmpty)
+        let figures = map(
+            text: [text(0...285, 340...362), text(315...600, 340...362)],
+            solid: [CGRect(x: 0, y: 0, width: 285, height: 330), CGRect(x: 315, y: 0, width: 285, height: 330),
+                    CGRect(x: 0, y: 400, width: 285, height: 330), CGRect(x: 315, y: 400, width: 285, height: 330)]
+        )
+        XCTAssertTrue(PDFColumnDetector.regions(in: vertical(figures), readingDirection: .TtB_RtL).isEmpty)
+    }
+
     // MARK: - Vertical text
 
     /// The ink map turned a quarter: (x, y) of the turned map is

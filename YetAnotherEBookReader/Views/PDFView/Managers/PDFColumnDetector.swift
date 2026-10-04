@@ -11,28 +11,34 @@
 import CoreGraphics
 
 /// Which pixels of a part of the page thumbnail hold ink, with each column's
-/// inked rows counted cumulatively, so a column's ink over any rows is O(1).
+/// inked rows and each row's inked columns counted cumulatively, so the ink of
+/// a column over any rows, or of a row over any columns, is O(1).
 struct PDFInkMap {
     let width: Int
     let height: Int
     private let ink: [Bool]
     /// `columnInk[row * width + x]`: inked pixels of column `x` above `row`.
     private let columnInk: [Int32]
+    /// `rowInk[y * (width + 1) + column]`: inked pixels of row `y` left of `column`.
+    private let rowInk: [Int32]
 
     init(width: Int, height: Int, isInked: (_ x: Int, _ y: Int) -> Bool) {
         self.width = width
         self.height = height
         var ink = [Bool](repeating: false, count: width * height)
         var columnInk = [Int32](repeating: 0, count: width * (height + 1))
+        var rowInk = [Int32](repeating: 0, count: (width + 1) * height)
         for y in 0..<height {
             for x in 0..<width {
                 let inked = isInked(x, y)
                 ink[y * width + x] = inked
                 columnInk[(y + 1) * width + x] = columnInk[y * width + x] + (inked ? 1 : 0)
+                rowInk[y * (width + 1) + x + 1] = rowInk[y * (width + 1) + x] + (inked ? 1 : 0)
             }
         }
         self.ink = ink
         self.columnInk = columnInk
+        self.rowInk = rowInk
     }
 
     func isInked(x: Int, y: Int) -> Bool {
@@ -42,6 +48,11 @@ struct PDFInkMap {
     /// Inked pixels of column `x` in `rows`.
     func inkedRows(column x: Int, rows: Range<Int>) -> Int {
         Int(columnInk[rows.upperBound * width + x] - columnInk[rows.lowerBound * width + x])
+    }
+
+    /// Inked pixels of row `y` in `columns`.
+    func inkedColumns(row y: Int, columns: Range<Int>) -> Int {
+        Int(rowInk[y * (width + 1) + columns.upperBound] - rowInk[y * (width + 1) + columns.lowerBound])
     }
 
     /// This map turned a quarter turn anticlockwise: vertical text, read in
@@ -98,8 +109,8 @@ enum PDFColumnDetector {
 
     /// The page's reading regions when it is set in columns, in reading order:
     /// each full-width block, and each band of columns column by column. Empty
-    /// when it is not: a single column, or columns over less than 40% of the
-    /// content (a table, a figure grid).
+    /// when it is not: a single column, columns that do not read like text (a
+    /// table, a figure grid), or columns over less than 40% of the content.
     static func regions(in map: PDFInkMap) -> [Region] {
         let width = map.width
         let height = map.height
@@ -129,6 +140,16 @@ enum PDFColumnDetector {
         bands = mergedSlivers(bands, maximumSliver: max(windowHeight, height * 3 / 100))
         bands = merged(bands)
 
+        // A table's or a figure grid's columns are not text: their band is read
+        // whole, like a full-width block.
+        bands = bands.map { band in
+            guard case .split(let gutters) = band.kind,
+                  !cells(between: gutters, width: width).allSatisfy({ readsLikeText(map, columns: $0, rows: band.rows) })
+            else { return band }
+            return Band(rows: band.rows, kind: .spanning)
+        }
+        bands = merged(bands)
+
         let splitHeight = bands.reduce(0) { total, band in
             if case .split = band.kind { return total + band.rows.count }
             return total
@@ -148,6 +169,62 @@ enum PDFColumnDetector {
                 }
             }
         }
+    }
+
+    // MARK: - Text
+
+    /// Whether `columns` × `rows` hold running text: at least four lines of
+    /// text height that fill the column, covering 30% or more of its inked
+    /// height, so a column that also holds a figure still counts.
+    /// - A line fills the column when it is inked across half its width or
+    ///   more without a gap wider than an eighth of it: words are a few pixels
+    ///   apart, a table's cells (a label and a number) far apart.
+    /// - Text height is at most 4% of the content's: a picture is one tall blob.
+    private static func readsLikeText(_ map: PDFInkMap, columns: Range<Int>, rows: Range<Int>) -> Bool {
+        let width = columns.count
+        guard width > 0, !rows.isEmpty else { return false }
+        // Touching descenders and ascenders do not join two lines.
+        let lineInk = max(1, width / 20)
+        let tallestLine = max(6, map.height * 4 / 100)
+        let widestGap = max(4, width / 8)
+
+        var lines: [Range<Int>] = []
+        var start: Int?
+        for y in rows.lowerBound...rows.upperBound {
+            let inked = y < rows.upperBound && map.inkedColumns(row: y, columns: columns) >= lineInk
+            if inked, start == nil {
+                start = y
+            } else if !inked, let lineStart = start {
+                lines.append(lineStart..<y)
+                start = nil
+            }
+        }
+        guard let first = lines.first, let last = lines.last else { return false }
+
+        var textLines = 0
+        var textRows = 0
+        for line in lines where line.count <= tallestLine {
+            var inked = 0
+            var gap = 0
+            var widest = 0
+            var seenInk = false
+            for x in columns {
+                if map.inkedRows(column: x, rows: line) > 0 {
+                    inked += 1
+                    if seenInk { widest = max(widest, gap) }
+                    seenInk = true
+                    gap = 0
+                } else {
+                    gap += 1
+                }
+            }
+            if inked * 2 >= width, widest <= widestGap {
+                textLines += 1
+                textRows += line.count
+            }
+        }
+        let inkedHeight = last.upperBound - first.lowerBound
+        return textLines >= 4 && textRows * 10 >= inkedHeight * 3
     }
 
     // MARK: - Bands
