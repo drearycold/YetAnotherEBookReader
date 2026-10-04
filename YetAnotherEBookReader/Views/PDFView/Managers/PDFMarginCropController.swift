@@ -26,42 +26,35 @@ class PDFMarginCropController {
     /// `marginOffset` is applied by `PDFPageViewportFitter`, not here, so the cache
     /// stays valid when it changes.
     func visibleBounds(for page: PDFPage, key: PageVisibleContentKey) -> CGRect {
+        readingLayout(for: page, key: key).bounds
+    }
+
+    /// The page's content bounds and the regions it is read in (#97), detected
+    /// once per key.
+    func readingLayout(for page: PDFPage, key: PageVisibleContentKey) -> PDFPageReadingLayout {
         if visibleContentBounds[key] == nil {
-            visibleContentBounds[key] = analyzeVisibleContents(
-                pdfPage: page,
-                readingDirection: key.readingDirection,
-                hMarginDetectStrength: key.hMarginDetectStrength,
-                vMarginDetectStrength: key.vMarginDetectStrength
-            )
+            visibleContentBounds[key] = analyzeVisibleContents(pdfPage: page, key: key)
         }
 
         visibleContentBounds[key]?.lastUsed = Date()
         pruneCache()
-        return visibleContentBounds[key]?.bounds ?? page.bounds(for: .cropBox)
+        guard let value = visibleContentBounds[key] else {
+            return PDFPageReadingLayout(bounds: page.bounds(for: .cropBox), regions: [])
+        }
+        return PDFPageReadingLayout(bounds: value.bounds, regions: value.regions)
     }
 
-    /// Detects the neighbours of `currentPageNumber` in the background.
-    /// `completion` runs on the main queue once both are cached.
+    /// Detects the neighbours of `currentPageNumber` in the background, under the
+    /// keys `key` gives for their page numbers. `completion` runs on the main
+    /// queue once both are cached.
     func preAnalyzeAdjacentPages(
         currentPageNumber: Int,
         document: PDFDocument?,
-        readingDirection: PDFReadDirection,
-        hMarginDetectStrength: Double,
-        vMarginDetectStrength: Double,
+        key: (Int) -> PageVisibleContentKey,
         completion: (() -> Void)? = nil
     ) {
-        let nextKey = PageVisibleContentKey(
-            pageNumber: currentPageNumber + 1,
-            readingDirection: readingDirection,
-            hMarginDetectStrength: hMarginDetectStrength,
-            vMarginDetectStrength: vMarginDetectStrength
-        )
-        let previousKey = PageVisibleContentKey(
-            pageNumber: currentPageNumber - 1,
-            readingDirection: readingDirection,
-            hMarginDetectStrength: hMarginDetectStrength,
-            vMarginDetectStrength: vMarginDetectStrength
-        )
+        let nextKey = key(currentPageNumber + 1)
+        let previousKey = key(currentPageNumber - 1)
 
         let needsNext = visibleContentBounds[nextKey] == nil
         let needsPrevious = visibleContentBounds[previousKey] == nil
@@ -77,23 +70,13 @@ class PDFMarginCropController {
 
             let boundsNext = needsNext
                 ? document?.page(at: nextKey.pageNumber - 1).map {
-                    self.analyzeVisibleContents(
-                        pdfPage: $0,
-                        readingDirection: readingDirection,
-                        hMarginDetectStrength: hMarginDetectStrength,
-                        vMarginDetectStrength: vMarginDetectStrength
-                    )
+                    self.analyzeVisibleContents(pdfPage: $0, key: nextKey)
                 }
                 : nil
 
             let boundsPrevious = needsPrevious
                 ? document?.page(at: previousKey.pageNumber - 1).map {
-                    self.analyzeVisibleContents(
-                        pdfPage: $0,
-                        readingDirection: readingDirection,
-                        hMarginDetectStrength: hMarginDetectStrength,
-                        vMarginDetectStrength: vMarginDetectStrength
-                    )
+                    self.analyzeVisibleContents(pdfPage: $0, key: previousKey)
                 }
                 : nil
 
@@ -134,12 +117,7 @@ class PDFMarginCropController {
         }
     }
 
-    private func analyzeVisibleContents(
-        pdfPage: PDFPage,
-        readingDirection: PDFReadDirection,
-        hMarginDetectStrength: Double,
-        vMarginDetectStrength: Double
-    ) -> PageVisibleContentValue {
+    private func analyzeVisibleContents(pdfPage: PDFPage, key: PageVisibleContentKey) -> PageVisibleContentValue {
         let pdfPage = Self.pageWithoutReaderAnnotations(pdfPage)
         let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
@@ -169,6 +147,8 @@ class PDFMarginCropController {
         var bottom = 0
         var leading = 0
         var trailing = 0
+        /// Reading regions, in thumbnail pixels.
+        var regionRects: [CGRect] = []
 
         print("\(#function) bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
         print("\(#function) sizeForThumbnailImage \(sizeForThumbnailImage)")
@@ -191,9 +171,9 @@ class PDFMarginCropController {
             )
             let edges = detectContentEdges(
                 in: raster,
-                readingDirection: readingDirection,
-                hMarginDetectStrength: hMarginDetectStrength,
-                vMarginDetectStrength: vMarginDetectStrength,
+                readingDirection: key.readingDirection,
+                hMarginDetectStrength: key.hMarginDetectStrength,
+                vMarginDetectStrength: key.vMarginDetectStrength,
                 mediaToCrop: CGSize(
                     width: mediaDisplay.size.width / cropDisplaySize.width,
                     height: mediaDisplay.size.height / cropDisplaySize.height
@@ -203,6 +183,30 @@ class PDFMarginCropController {
             bottom = edges.bottom
             leading = edges.leading
             trailing = edges.trailing
+
+            if key.spreadMode != .Off {
+                // The crop box's part of the media-box thumbnail, top-down.
+                let crop = mediaDisplay.toDisplay(boundsForCropBox)
+                let page = raster.cropped(
+                    columns: Self.pixelRange(crop.minX * thumbnailScale, crop.maxX * thumbnailScale, limit: raster.width),
+                    lines: Self.pixelRange(
+                        (mediaDisplay.size.height - crop.maxY) * thumbnailScale,
+                        (mediaDisplay.size.height - crop.minY) * thumbnailScale,
+                        limit: raster.height
+                    )
+                )
+                regionRects = spreadHalves(of: page, key: key)
+                // One half holds everything (a blank verso): the page reads whole,
+                // fitted to that half. Text across half the width is too thin for
+                // the whole-page passes to find its top and bottom.
+                if regionRects.count == 1, let half = regionRects.first {
+                    top = Int(half.minY)
+                    bottom = Int(half.maxY) - 1
+                    leading = Int(half.minX)
+                    trailing = Int(half.maxX) - 2
+                    regionRects = []
+                }
+            }
         }
 
         print("\(#function) white border page=\(pdfPage.pageRef!.pageNumber) \(top) \(bottom) \(leading) \(trailing)")
@@ -218,6 +222,8 @@ class PDFMarginCropController {
         )
         UIColor.black.setFill()
         UIRectFrame(rectangle)
+        UIColor.systemBlue.setFill()
+        regionRects.forEach(UIRectFrame)
 
         #if DEBUG
         UIColor.red.setStroke()
@@ -233,15 +239,59 @@ class PDFMarginCropController {
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
 
+        func pageRect(_ rasterRect: CGRect) -> CGRect {
+            Self.pageRect(fromRaster: rasterRect, thumbnailScale: thumbnailScale, mediaDisplay: mediaDisplay, cropBox: boundsForCropBox)
+        }
         return PageVisibleContentValue(
-            bounds: Self.pageRect(
-                fromRaster: rectangle,
-                thumbnailScale: thumbnailScale,
-                mediaDisplay: mediaDisplay,
-                cropBox: boundsForCropBox
-            ),
+            bounds: pageRect(rectangle),
+            regions: regionRects.map { PDFReadingRegion(rect: pageRect($0), kind: .spreadHalf) },
             thumbImage: newImage
         )
+    }
+
+    /// The halves of a two-page spread (#97) that hold content, in reading order,
+    /// each cropped to its own content, in thumbnail pixels. `page` is the crop
+    /// box's part of the thumbnail. Empty when the page is not split: Auto splits
+    /// only a landscape page that looks like two book pages.
+    private func spreadHalves(of page: PageRaster, key: PageVisibleContentKey) -> [CGRect] {
+        switch key.spreadMode {
+        case .Off:
+            return []
+        case .Auto:
+            guard page.width * 5 >= page.height * 6, page.hasSpreadSpine() else { return [] }
+        case .On:
+            break
+        }
+
+        let middle = page.width / 2
+        let halves = [0..<middle, middle..<page.width].compactMap { columns -> CGRect? in
+            let half = page.cropped(columns: columns, lines: 0..<page.height)
+            // Each half is a page of its own; its inner edge's binding shadow is an
+            // edge artifact (#95) and stays out.
+            let edges = detectContentEdges(
+                in: half,
+                readingDirection: key.readingDirection,
+                hMarginDetectStrength: key.hMarginDetectStrength,
+                vMarginDetectStrength: key.vMarginDetectStrength,
+                mediaToCrop: CGSize(width: 1, height: 1)
+            )
+            guard edges.hasContent else { return nil }
+            return CGRect(
+                x: half.originX + edges.leading,
+                y: half.originY + edges.top,
+                width: edges.trailing - edges.leading + 2,
+                height: edges.bottom - edges.top + 1
+            )
+        }
+        // Vertical text runs right to left, and so do its spreads.
+        return key.readingDirection == .TtB_RtL ? halves.reversed() : halves
+    }
+
+    /// Whole pixels from `lower` to `upper`, within `0..<limit`.
+    private static func pixelRange(_ lower: CGFloat, _ upper: CGFloat, limit: Int) -> Range<Int> {
+        let start = min(max(0, Int(lower.rounded())), limit)
+        let end = min(max(start, Int(upper.rounded())), limit)
+        return start..<end
     }
 
     /// Finds the content edges in `raster`, in its own lines: `top`/`bottom` are
@@ -264,9 +314,21 @@ class PDFMarginCropController {
         let rowPixels = max(1, artifactLeft)..<(raster.width - artifactRight)
         let columnPixels = max(1, artifactTop)..<(raster.height - artifactBottom)
 
+        /// A pass's edge, or the line it starts on when it found nothing.
+        func edge(_ found: Int?, from orientation: CGImagePropertyOrientation, skip: Int) -> Int {
+            if let found { return found }
+            let firstLine = max(1, skip)
+            switch orientation {
+            case .up, .upMirrored, .right, .rightMirrored:
+                return firstLine
+            case .down, .downMirrored, .left, .leftMirrored:
+                return raster.lineCount(orientation) - firstLine - 1
+            }
+        }
+
         switch readingDirection {
         case .LtR_TtB:
-            let top = blankBorderWidth(
+            let topFound = blankBorderWidth(
                 raster: raster,
                 orientation: .up,
                 skip: artifactTop,
@@ -275,7 +337,8 @@ class PDFMarginCropController {
                 hMarginDetectStrength: hMarginDetectStrength,
                 extendsAcrossLineGaps: true
             )
-            let bottom = blankBorderWidth(
+            let top = edge(topFound, from: .up, skip: artifactTop)
+            let bottom = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .down,
                 skip: artifactBottom,
@@ -283,11 +346,11 @@ class PDFMarginCropController {
                 ratio: mediaToCrop.width,
                 hMarginDetectStrength: hMarginDetectStrength,
                 extendsAcrossLineGaps: true
-            )
+            ), from: .down, skip: artifactBottom)
             // The side passes add up a column over the text's height, so short
             // pages (a chapter's last lines) are not diluted by the blank below.
             let sideRatio = 3 * Double(raster.height) / Double(max(bottom - top + 1, 1))
-            let leading = blankBorderWidth(
+            let leading = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .right,
                 skip: artifactLeft,
@@ -295,8 +358,8 @@ class PDFMarginCropController {
                 ratio: sideRatio,
                 hMarginDetectStrength: vMarginDetectStrength,
                 sparseInkSpan: min(top, bottom)...max(top, bottom)
-            )
-            let trailing = blankBorderWidth(
+            ), from: .right, skip: artifactLeft)
+            let trailing = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .left,
                 skip: artifactRight,
@@ -304,10 +367,10 @@ class PDFMarginCropController {
                 ratio: sideRatio,
                 hMarginDetectStrength: vMarginDetectStrength,
                 sparseInkSpan: min(top, bottom)...max(top, bottom)
-            )
-            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing)
+            ), from: .left, skip: artifactRight)
+            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing, hasContent: topFound != nil)
         case .TtB_RtL:
-            let leading = blankBorderWidth(
+            let leadingFound = blankBorderWidth(
                 raster: raster,
                 orientation: .right,
                 skip: artifactLeft,
@@ -316,7 +379,8 @@ class PDFMarginCropController {
                 hMarginDetectStrength: vMarginDetectStrength,
                 extendsAcrossLineGaps: true
             )
-            let trailing = blankBorderWidth(
+            let leading = edge(leadingFound, from: .right, skip: artifactLeft)
+            let trailing = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .left,
                 skip: artifactRight,
@@ -324,9 +388,9 @@ class PDFMarginCropController {
                 ratio: mediaToCrop.height,
                 hMarginDetectStrength: vMarginDetectStrength,
                 extendsAcrossLineGaps: true
-            )
+            ), from: .left, skip: artifactRight)
             let sideRatio = 3 * Double(raster.width) / Double(max(trailing - leading + 1, 1))
-            let top = blankBorderWidth(
+            let top = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .up,
                 skip: artifactTop,
@@ -334,8 +398,8 @@ class PDFMarginCropController {
                 ratio: sideRatio,
                 hMarginDetectStrength: hMarginDetectStrength,
                 sparseInkSpan: min(leading, trailing)...max(leading, trailing)
-            )
-            let bottom = blankBorderWidth(
+            ), from: .up, skip: artifactTop)
+            let bottom = edge(blankBorderWidth(
                 raster: raster,
                 orientation: .down,
                 skip: artifactBottom,
@@ -343,8 +407,8 @@ class PDFMarginCropController {
                 ratio: sideRatio,
                 hMarginDetectStrength: hMarginDetectStrength,
                 sparseInkSpan: min(leading, trailing)...max(leading, trailing)
-            )
-            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing)
+            ), from: .down, skip: artifactBottom)
+            return RasterEdges(top: top, bottom: bottom, leading: leading, trailing: trailing, hasContent: leadingFound != nil)
         }
     }
 
@@ -409,7 +473,7 @@ class PDFMarginCropController {
         hMarginDetectStrength: Double,
         extendsAcrossLineGaps: Bool = false,
         sparseInkSpan: ClosedRange<Int>? = nil
-    ) -> Int {
+    ) -> Int? {
         let lineNumMax = raster.lineCount(orientation)
         let pixelNumMax = raster.pixelCount(orientation)
         let scanLimit = lineNumMax - 1
@@ -446,10 +510,11 @@ class PDFMarginCropController {
             line += 1
         }
 
-        var result = border ?? firstLine
-        if let border, extendsAcrossLineGaps {
+        guard let border else { return nil }
+        var result = border
+        if extendsAcrossLineGaps {
             result = extendBorderAcrossLineGaps(from: border, floor: firstLine, scanLimit: scanLimit, lineNumMax: lineNumMax, density: { density(ofLine: $0) })
-        } else if let border, let sparseInkSpan {
+        } else if let sparseInkSpan {
             let span = max(sparseInkSpan.lowerBound, pixels.lowerBound)..<min(sparseInkSpan.upperBound + 1, pixels.upperBound)
             if !span.isEmpty {
                 result = extendBorderOverSparseInk(from: border, floor: firstLine, lineNumMax: lineNumMax, density: { density(ofLine: $0, pixels: span) })
@@ -564,6 +629,9 @@ struct RasterEdges: Equatable {
     var bottom: Int
     var leading: Int
     var trailing: Int
+    /// False when the first pass found no content: the edges are then the
+    /// raster's own, as the passes leave them.
+    var hasContent = true
 }
 
 /// The page thumbnail's pixels, read along scan lines from any edge: a line runs
@@ -638,6 +706,49 @@ struct PageRaster {
 
         let luminance = 0.299 * r + 0.587 * g + 0.114 * b
         return luminance < 200 ? (255 - luminance) / 255 : 0
+    }
+
+    /// Whether this looks like two book pages side by side (#97): within the
+    /// central sixth, a strip at least 2% of the width wide running the full
+    /// height that is blank (the gutter between two text blocks, two inner
+    /// margins) or dark (a binding shadow), with ink on both sides. A slide or a
+    /// chart has text or art across its centre; the spaces between a title's
+    /// words are narrower than the strip.
+    func hasSpreadSpine() -> Bool {
+        guard width >= 20, height >= 20 else { return false }
+        func inkedRows(inColumn column: Int) -> Int {
+            var inked = 0
+            for row in 0..<height where darkness(line: column, pixel: row, .right) > 0 {
+                inked += 1
+            }
+            return inked
+        }
+
+        let band = (width / 2 - width * 8 / 100)..<(width / 2 + width * 8 / 100)
+        let minimumStrip = max(2, width / 50)
+        var strip = 0
+        var foundSpine = false
+        for column in band {
+            let inked = inkedRows(inColumn: column)
+            // Blank: at most 2% of rows (specks). Shadow: at least 90%.
+            if inked * 50 <= height || inked * 10 >= height * 9 {
+                strip += 1
+                if strip >= minimumStrip {
+                    foundSpine = true
+                    break
+                }
+            } else {
+                strip = 0
+            }
+        }
+        guard foundSpine else { return false }
+
+        // Content on both sides: at least 2% of each side's columns inked.
+        func hasContent(_ columns: Range<Int>) -> Bool {
+            let inked = columns.filter { inkedRows(inColumn: $0) > 2 }.count
+            return inked * 50 >= columns.count
+        }
+        return hasContent(0..<band.lowerBound) && hasContent(band.upperBound..<width)
     }
 
     /// Lines at `edge` taken by a scanner border or a binding shadow: a run of

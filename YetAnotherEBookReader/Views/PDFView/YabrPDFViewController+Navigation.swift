@@ -196,9 +196,7 @@ extension YabrPDFViewController {
         marginCropController.preAnalyzeAdjacentPages(
             currentPageNumber: curPageNum,
             document: pdfView.document,
-            readingDirection: pdfOptions.readingDirection,
-            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength,
+            key: { [pdfOptions] in PageVisibleContentKey(pageNumber: $0, options: pdfOptions) },
             completion: { [weak self] in self?.refreshPageBuffers() }
         )
 
@@ -242,12 +240,7 @@ extension YabrPDFViewController {
             return (fit, true)
         }
 
-        let key = PageVisibleContentKey(
-            pageNumber: pageNumber,
-            readingDirection: pdfOptions.readingDirection,
-            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
-        )
+        let key = PageVisibleContentKey(pageNumber: pageNumber, options: pdfOptions)
         let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
         let boundsForCropBox = page.bounds(for: .cropBox)
         // The fit works in display space, so a rotated page is fitted as shown;

@@ -104,6 +104,123 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    // MARK: - Two-page spreads (#97)
+
+    private static let spreadSize = CGSize(width: 1224, height: 792)
+
+    /// Two book pages side by side: text blocks at x 81...531 and 693...1143.
+    private func drawSpread(_ context: UIGraphicsPDFRendererContext) {
+        drawBodyLines(y: 96, count: 40) { _ in 81...531 }
+        drawBodyLines(y: 96, count: 40) { _ in 693...1143 }
+    }
+
+    func testSpreadOnSplitsIntoHalvesInReadingOrder() throws {
+        for mode in [PDFSpreadMode.On, .Auto] {
+            let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: mode, draw: drawSpread)
+            XCTAssertEqual(layout.regions.count, 2, "\(mode)")
+            guard layout.regions.count == 2 else { continue }
+            XCTAssertEqual(layout.regions.map(\.kind), [.spreadHalf, .spreadHalf])
+            assertTextBlock(layout.regions[0].rect, x: 81...531, label: "\(mode) left")
+            assertTextBlock(layout.regions[1].rect, x: 693...1143, label: "\(mode) right")
+        }
+    }
+
+    func testSpreadOffReadsWhole() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .Off, draw: drawSpread)
+        XCTAssertTrue(layout.regions.isEmpty)
+        XCTAssertEqual(layout.bounds.minX, 81, accuracy: detectTolerance)
+        XCTAssertEqual(layout.bounds.maxX, 1143, accuracy: detectTolerance)
+    }
+
+    /// Vertical text runs right to left, and so do its spreads.
+    func testSpreadHalvesRunRightToLeftForVerticalText() throws {
+        // Solid blocks: the vertical-text passes look for columns of ink.
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .On, readingDirection: .TtB_RtL) { context in
+            context.fill(CGRect(x: 81, y: 96, width: 450, height: 600))
+            context.fill(CGRect(x: 693, y: 96, width: 450, height: 600))
+        }
+        XCTAssertEqual(layout.regions.count, 2)
+        guard layout.regions.count == 2 else { return }
+        XCTAssertGreaterThan(layout.regions[0].rect.minX, layout.regions[1].rect.minX, "right half first")
+    }
+
+    /// Auto splits only a landscape page that looks like two book pages: a slide
+    /// has its title across the centre.
+    func testSpreadAutoLeavesSlidesWhole() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .Auto) { _ in
+            ("A SLIDE TITLE THAT RUNS ACROSS THE CENTRE" as NSString).draw(
+                at: CGPoint(x: 160, y: 80),
+                withAttributes: [.font: UIFont.boldSystemFont(ofSize: 40)]
+            )
+            drawBodyLines(y: 200, count: 6) { _ in 81...531 }
+            drawBodyLines(y: 200, count: 6) { _ in 693...1143 }
+        }
+        XCTAssertTrue(layout.regions.isEmpty, "\(layout.regions)")
+    }
+
+    /// Auto leaves portrait pages whole, even with a gutter down the middle (a
+    /// two-column page); On splits them.
+    func testSpreadAutoLeavesPortraitPagesWhole() throws {
+        let twoColumns: (UIGraphicsPDFRendererContext) -> Void = { _ in
+            self.drawBodyLines(y: 96, count: 40) { _ in 60...290 }
+            self.drawBodyLines(y: 96, count: 40) { _ in 322...552 }
+        }
+        XCTAssertTrue(try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Auto, draw: twoColumns).regions.isEmpty)
+        XCTAssertEqual(try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .On, draw: twoColumns).regions.count, 2)
+    }
+
+    /// A scan's binding shadow down the spine: Auto takes it for the spine, and
+    /// each half leaves it out as its inner edge artifact (#95).
+    func testSpreadHalvesLeaveBindingShadowOut() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .Auto) { context in
+            for offset in 0..<30 {
+                UIColor(white: 0.3 + CGFloat(offset) * 0.02, alpha: 1).setFill()
+                context.fill(CGRect(x: 612 - CGFloat(offset) - 1, y: 0, width: 1, height: 792))
+                context.fill(CGRect(x: 612 + CGFloat(offset), y: 0, width: 1, height: 792))
+            }
+            UIColor.black.setFill()
+            drawSpread(context)
+        }
+        XCTAssertEqual(layout.regions.count, 2)
+        guard layout.regions.count == 2 else { return }
+        assertTextBlock(layout.regions[0].rect, x: 81...531, label: "left")
+        assertTextBlock(layout.regions[1].rect, x: 693...1143, label: "right")
+    }
+
+    /// A blank verso leaves one half: the page reads whole, fitted to that half.
+    /// The whole-page passes miss its top and bottom (text across half the width
+    /// is too thin), so the half's own edges are used.
+    func testSpreadWithBlankHalfReadsWholeFittedToTheOtherHalf() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .On) { _ in
+            drawBodyLines(y: 96, count: 40) { _ in 81...531 }
+        }
+        XCTAssertTrue(layout.regions.isEmpty)
+        assertTextBlock(layout.bounds, x: 81...531, label: "bounds")
+    }
+
+    /// A portrait sheet turned 90° shows as a landscape spread; it is split as
+    /// displayed and the halves come back in page space.
+    func testRotatedSheetSplitsAsDisplayed() throws {
+        // Page space 792 × 1224, top-down blocks A (upper) and B (lower). Turned
+        // clockwise, the page's top goes to the right: B shows left, A right.
+        let blockA = CGRect(x: 96, y: 81, width: 600, height: 450)
+        let blockB = CGRect(x: 96, y: 693, width: 600, height: 450)
+        let layout = try detectDrawnLayout(pageSize: CGSize(width: 792, height: 1224), spreadMode: .Auto, rotation: 90) { context in
+            context.fill(blockA)
+            context.fill(blockB)
+        }
+        XCTAssertEqual(layout.regions.count, 2)
+        guard layout.regions.count == 2 else { return }
+        // A 1224 pt page is thumbnailed at half scale: a pixel is 2 pt.
+        let tolerance: CGFloat = 5
+        for (region, block, label) in [(layout.regions[0].rect, blockB, "first (B)"), (layout.regions[1].rect, blockA, "second (A)")] {
+            XCTAssertEqual(region.minX, block.minX, accuracy: tolerance, label)
+            XCTAssertEqual(region.minY, block.minY, accuracy: tolerance, label)
+            XCTAssertEqual(region.width, block.width, accuracy: tolerance, label)
+            XCTAssertEqual(region.height, block.height, accuracy: tolerance, label)
+        }
+    }
+
     /// A part of the raster reads in its own coordinates from every edge, so the
     /// passes can run on one half of a spread or one column as on a whole page.
     func testCroppedRasterReadsItsOwnCoordinates() throws {
@@ -2755,6 +2872,37 @@ final class YabrPDFMarginCropTests: XCTestCase {
         let detected = PDFMarginCropController().visibleBounds(for: page, key: key)
         record("PDFDETECT drawn page detected=\(detected)")
         return detected
+    }
+
+    /// The layout detected on a page of `pageSize` drawn by `draw` (top-left
+    /// coordinates), turned by `rotation`, under the given modes.
+    private func detectDrawnLayout(
+        pageSize: CGSize,
+        spreadMode: PDFSpreadMode,
+        readingDirection: PDFReadDirection = .LtR_TtB,
+        rotation: Int = 0,
+        draw: (UIGraphicsPDFRendererContext) -> Void
+    ) throws -> PDFPageReadingLayout {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize)).pdfData { context in
+            context.beginPage()
+            draw(context)
+        }
+        let page = try XCTUnwrap(PDFDocument(data: data)?.page(at: 0))
+        page.rotation = rotation
+        var options = PDFPreferenceValue()
+        options.readingDirection = readingDirection
+        options.spreadMode = spreadMode
+        let layout = PDFMarginCropController().readingLayout(for: page, key: PageVisibleContentKey(pageNumber: 1, options: options))
+        record("PDFREGIONS size=\(pageSize) spread=\(spreadMode) rotation=\(rotation) bounds=\(layout.bounds) regions=\(layout.regions.map(\.rect))")
+        return layout
+    }
+
+    /// A detected block of `drawBodyLines(y: 96, count: 40)` spanning `x`.
+    private func assertTextBlock(_ rect: CGRect, x: ClosedRange<CGFloat>, label: String, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(rect.minX, x.lowerBound, accuracy: detectTolerance, "\(label) \(rect)", file: file, line: line)
+        XCTAssertEqual(rect.maxX, x.upperBound, accuracy: detectTolerance, "\(label) \(rect)", file: file, line: line)
+        XCTAssertEqual(rect.minY, 96, accuracy: detectTolerance, "\(label) \(rect)", file: file, line: line)
+        XCTAssertEqual(rect.maxY, 96 + 40 * 15, accuracy: 4, "\(label) \(rect)", file: file, line: line)
     }
 
     /// 11pt justified-looking body lines on a 15pt pitch, x 81...531, each

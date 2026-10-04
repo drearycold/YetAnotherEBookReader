@@ -79,12 +79,7 @@ extension YabrPDFViewController {
         pageIndicator.addAction(UIAction(handler: { [self] _ in
             guard let curPageNum = pdfView.currentPage?.pageRef?.pageNumber,
                   let bounds = marginCropController.cachedValue(for:
-                    PageVisibleContentKey(
-                        pageNumber: curPageNum,
-                        readingDirection: pdfOptions.readingDirection,
-                        hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-                        vMarginDetectStrength: pdfOptions.vMarginDetectStrength
-                    )
+                    PageVisibleContentKey(pageNumber: curPageNum, options: pdfOptions)
                   ),
                   let image = bounds.thumbImage else { return }
             self.thumbImageView.image = image
