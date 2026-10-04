@@ -10,58 +10,99 @@
 
 import CoreGraphics
 
-/// Which pixels of a part of the page thumbnail hold ink, with each column's
-/// inked rows and each row's inked columns counted cumulatively, so the ink of
-/// a column over any rows, or of a row over any columns, is O(1).
+/// The ink pixels of a part of the page thumbnail, counted over every
+/// rectangle from its top-left corner: the ink of any rectangle is four
+/// lookups.
+final class PDFInkTable {
+    let width: Int
+    let height: Int
+    /// `counts[y * (width + 1) + x]`: the ink pixels above `y` and left of `x`.
+    private let counts: [Int32]
+
+    /// `counts` as above, (width + 1) × (height + 1) of them.
+    init(width: Int, height: Int, counts: [Int32]) {
+        self.width = width
+        self.height = height
+        self.counts = counts
+    }
+
+    convenience init(width: Int, height: Int, isInked: (_ x: Int, _ y: Int) -> Bool) {
+        let stride = width + 1
+        var counts = [Int32](repeating: 0, count: stride * (height + 1))
+        for y in 0..<height {
+            var rowInk: Int32 = 0
+            for x in 0..<width {
+                rowInk += isInked(x, y) ? 1 : 0
+                counts[(y + 1) * stride + x + 1] = counts[y * stride + x + 1] + rowInk
+            }
+        }
+        self.init(width: width, height: height, counts: counts)
+    }
+
+    /// The ink pixels in `columns` × `rows`.
+    func ink(columns: Range<Int>, rows: Range<Int>) -> Int {
+        let stride = width + 1
+        return Int(
+            counts[rows.upperBound * stride + columns.upperBound] - counts[rows.lowerBound * stride + columns.upperBound]
+                - counts[rows.upperBound * stride + columns.lowerBound] + counts[rows.lowerBound * stride + columns.lowerBound]
+        )
+    }
+}
+
+/// Which pixels of a part of the page thumbnail hold ink: the ink of a column
+/// over any rows, or of a row over any columns, is O(1), and turning the map
+/// copies nothing.
 struct PDFInkMap {
     let width: Int
     let height: Int
-    private let ink: [Bool]
-    /// `columnInk[row * width + x]`: inked pixels of column `x` above `row`.
-    private let columnInk: [Int32]
-    /// `rowInk[y * (width + 1) + column]`: inked pixels of row `y` left of `column`.
-    private let rowInk: [Int32]
+    private let table: PDFInkTable
+    /// Turned a quarter anticlockwise (`turnedForVerticalText`).
+    private let turned: Bool
+
+    private init(table: PDFInkTable, turned: Bool) {
+        self.table = table
+        self.turned = turned
+        width = turned ? table.height : table.width
+        height = turned ? table.width : table.height
+    }
 
     init(width: Int, height: Int, isInked: (_ x: Int, _ y: Int) -> Bool) {
-        self.width = width
-        self.height = height
-        var ink = [Bool](repeating: false, count: width * height)
-        var columnInk = [Int32](repeating: 0, count: width * (height + 1))
-        var rowInk = [Int32](repeating: 0, count: (width + 1) * height)
-        for y in 0..<height {
-            for x in 0..<width {
-                let inked = isInked(x, y)
-                ink[y * width + x] = inked
-                columnInk[(y + 1) * width + x] = columnInk[y * width + x] + (inked ? 1 : 0)
-                rowInk[y * (width + 1) + x + 1] = rowInk[y * (width + 1) + x] + (inked ? 1 : 0)
-            }
-        }
-        self.ink = ink
-        self.columnInk = columnInk
-        self.rowInk = rowInk
+        self.init(table: PDFInkTable(width: width, height: height, isInked: isInked), turned: false)
+    }
+
+    /// The ink of `raster`.
+    init(_ raster: PageRaster) {
+        self.init(table: raster.inkTable(), turned: false)
+    }
+
+    /// The ink pixels in this map's `columns` × `rows`.
+    private func ink(columns: Range<Int>, rows: Range<Int>) -> Int {
+        guard turned else { return table.ink(columns: columns, rows: rows) }
+        // (x, y) here is (W - 1 - y, x) before the turn, W being this map's height.
+        return table.ink(columns: (height - rows.upperBound)..<(height - rows.lowerBound), rows: columns)
     }
 
     func isInked(x: Int, y: Int) -> Bool {
-        ink[y * width + x]
+        ink(columns: x..<(x + 1), rows: y..<(y + 1)) > 0
     }
 
     /// Inked pixels of column `x` in `rows`.
     func inkedRows(column x: Int, rows: Range<Int>) -> Int {
-        Int(columnInk[rows.upperBound * width + x] - columnInk[rows.lowerBound * width + x])
+        ink(columns: x..<(x + 1), rows: rows)
     }
 
     /// Inked pixels of row `y` in `columns`.
     func inkedColumns(row y: Int, columns: Range<Int>) -> Int {
-        Int(rowInk[y * (width + 1) + columns.upperBound] - rowInk[y * (width + 1) + columns.lowerBound])
+        ink(columns: columns, rows: y..<(y + 1))
     }
 
     /// This map turned a quarter turn anticlockwise: vertical text, read in
     /// lines top to bottom from right to left, becomes rows read left to right
-    /// from the top. (x, y) of the turned map is (width - 1 - y, x) of this one.
+    /// from the top. (x, y) of the turned map is (width - 1 - y, x) of this one,
+    /// which must not be turned already.
     func turnedForVerticalText() -> PDFInkMap {
-        PDFInkMap(width: height, height: width) { x, y in
-            isInked(x: width - 1 - y, y: x)
-        }
+        assert(!turned, "a turned map is not turned again")
+        return PDFInkMap(table: table, turned: true)
     }
 
     /// The bounding box of the ink in `columns` × `rows`, or nil when blank.
@@ -69,7 +110,7 @@ struct PDFInkMap {
         let inkedColumns = columns.filter { inkedRows(column: $0, rows: rows) > 0 }
         guard let minX = inkedColumns.first, let maxX = inkedColumns.last else { return nil }
         func rowHasInk(_ y: Int) -> Bool {
-            columns.contains { isInked(x: $0, y: y) }
+            self.inkedColumns(row: y, columns: columns) > 0
         }
         guard let minY = rows.first(where: rowHasInk),
               let maxY = rows.reversed().first(where: rowHasInk)
@@ -353,14 +394,12 @@ enum PDFColumnDetector {
     private static func refined(_ bands: [Band], in map: PDFInkMap) -> [Band] {
         var bands = bands
         func rowBlank(_ row: Int) -> Bool {
-            (0..<map.width).allSatisfy { !map.isInked(x: $0, y: row) }
+            map.inkedColumns(row: row, columns: 0..<map.width) == 0
         }
         // The whole gutter: a full-width line may have a gap between two
         // letters at any one column of it.
         func gutterBlank(_ row: Int, _ gutters: [Range<Int>]) -> Bool {
-            gutters.allSatisfy { gutter in
-                gutter.allSatisfy { !map.isInked(x: $0, y: row) }
-            }
+            gutters.allSatisfy { map.inkedColumns(row: row, columns: $0) == 0 }
         }
         for index in bands.indices {
             guard case .split(let gutters) = bands[index].kind else { continue }

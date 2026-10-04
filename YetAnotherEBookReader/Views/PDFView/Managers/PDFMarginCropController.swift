@@ -163,20 +163,7 @@ class PDFMarginCropController {
     /// The content bounds and reading regions detected on `thumbnail` under
     /// `key`; nil when its pixels cannot be read.
     func analyze(_ thumbnail: Thumbnail, key: PageVisibleContentKey) -> PageVisibleContentValue? {
-        let image = thumbnail.image
-        guard let channels = PixelChannelOffsets(cgImage: image),
-              let pixels = image.dataProvider?.data,
-              let data = CFDataGetBytePtr(pixels)
-        else { return nil }
-        // The image's own size and row stride: rows can be padded past the width.
-        let raster = PageRaster(
-            data: data,
-            width: image.width,
-            height: image.height,
-            pixelsPerRow: image.bytesPerRow / 4,
-            channels: channels
-        )
-        return withExtendedLifetime(pixels) {
+        PageRaster.reading(thumbnail.image) { raster in
             analyze(raster, of: thumbnail, key: key)
         }
     }
@@ -301,9 +288,7 @@ class PDFMarginCropController {
             columns: Self.pixelRange(rect.minX, rect.maxX, limit: raster.width),
             lines: Self.pixelRange(rect.minY, rect.maxY, limit: raster.height)
         )
-        let map = PDFInkMap(width: part.width, height: part.height) { x, y in
-            part.darkness(line: y, pixel: x, .up) > 0
-        }
+        let map = PDFInkMap(part)
         return PDFColumnDetector.regions(in: map, readingDirection: readingDirection).map { region in
             (region.rect.offsetBy(dx: CGFloat(part.originX), dy: CGFloat(part.originY)), region.kind)
         }
@@ -502,11 +487,7 @@ class PDFMarginCropController {
         let firstLine = max(1, skip)
 
         func density(ofLine line: Int, pixels: Range<Int> = pixels) -> Double {
-            var nonWhiteDensity = 0.0
-            for pixelInLine in pixels {
-                nonWhiteDensity += raster.darkness(line: line, pixel: pixelInLine, orientation)
-            }
-            return nonWhiteDensity
+            raster.density(line: line, pixels: pixels, orientation)
         }
 
         var border: Int?
@@ -659,16 +640,36 @@ struct RasterEdges: Equatable {
 /// The page thumbnail's pixels, read along scan lines from any edge: a line runs
 /// across the page parallel to the edge, `line` counts in from that edge and
 /// `pixel` runs along it (left to right, or top to bottom).
+///
+/// A pixel is ink when its perceived luminance (Rec. 601) is below 200, so
+/// coloured text counts: red, orange or light blue have a channel above 200
+/// but are clearly ink. Its darkness is 255 − luminance, counted in
+/// thousandths so a line's darkness is an exact integer sum.
 struct PageRaster {
+    /// A whole darkness, the darkness of black.
+    static let darknessScale = 255_000.0
+
     let data: UnsafePointer<UInt8>
     let width: Int
     let height: Int
-    let pixelsPerRow: Int
+    let bytesPerRow: Int
     let channels: PixelChannelOffsets
     /// Where this raster's top-left pixel sits in the image, when it is a part of
     /// it (`cropped`): one half of a spread, one column.
     var originX = 0
     var originY = 0
+
+    /// Reads `image`, 32 bits a pixel, with its own size and row stride, for
+    /// as long as `body` runs; nil when its pixels cannot be read.
+    static func reading<Value>(_ image: CGImage, _ body: (PageRaster) throws -> Value) rethrows -> Value? {
+        guard let channels = PixelChannelOffsets(cgImage: image),
+              let pixels = image.dataProvider?.data,
+              let data = CFDataGetBytePtr(pixels)
+        else { return nil }
+        return try withExtendedLifetime(pixels) {
+            try body(PageRaster(data: data, width: image.width, height: image.height, bytesPerRow: image.bytesPerRow, channels: channels))
+        }
+    }
 
     /// The part of this raster at `columns` × `lines` (top-down), read in its own
     /// coordinates, so every pass works on it as on a whole page.
@@ -677,7 +678,7 @@ struct PageRaster {
             data: data,
             width: columns.count,
             height: lines.count,
-            pixelsPerRow: pixelsPerRow,
+            bytesPerRow: bytesPerRow,
             channels: channels,
             originX: originX + columns.lowerBound,
             originY: originY + lines.lowerBound
@@ -702,32 +703,89 @@ struct PageRaster {
         }
     }
 
-    /// Ink darkness by perceived luminance (Rec. 601), so coloured text counts:
-    /// red, orange or light blue have a channel above 200 but are clearly ink.
-    /// Greys get the same value as the old per-channel average.
-    func darkness(line: Int, pixel: Int, _ edge: CGImagePropertyOrientation) -> Double {
-        let lineIndex: Int
+    /// A pixel's darkness in thousandths, 0 when it is not ink.
+    static func darkness(red: UInt8, green: UInt8, blue: UInt8) -> Int32 {
+        let luminance = 299 * Int32(red) + 587 * Int32(green) + 114 * Int32(blue)
+        // On the threshold itself, detection has always compared the floating
+        // point sum, which rounds 14 colours to just under 200: they are ink.
+        guard luminance < 200_000
+                || luminance == 200_000 && 0.299 * Double(red) + 0.587 * Double(green) + 0.114 * Double(blue) < 200
+        else { return 0 }
+        return 255_000 - luminance
+    }
+
+    private func darkness(at pixel: UnsafePointer<UInt8>) -> Int32 {
+        Self.darkness(red: pixel[channels.red], green: pixel[channels.green], blue: pixel[channels.blue])
+    }
+
+    /// Where `pixels` of `line`, counted in from `edge`, start in memory, and
+    /// the bytes from one to the next.
+    private func walk(line: Int, pixels: Range<Int>, _ edge: CGImagePropertyOrientation) -> (start: UnsafePointer<UInt8>, step: Int) {
+        let index: Int
         switch edge {
         case .up, .upMirrored, .right, .rightMirrored:
-            lineIndex = line
+            index = line
         case .down, .downMirrored, .left, .leftMirrored:
-            lineIndex = lineCount(edge) - line - 1
+            index = lineCount(edge) - line - 1
         }
-        let x: Int
-        let y: Int
         switch edge {
         case .up, .down, .upMirrored, .downMirrored:
-            (x, y) = (pixel, lineIndex)
+            return (data + (originY + index) * bytesPerRow + (originX + pixels.lowerBound) * 4, 4)
         case .left, .leftMirrored, .right, .rightMirrored:
-            (x, y) = (lineIndex, pixel)
+            return (data + (originY + pixels.lowerBound) * bytesPerRow + (originX + index) * 4, bytesPerRow)
         }
-        let pixelIndex = ((originY + y) * pixelsPerRow + originX + x) * 4
-        let r = Double(data[pixelIndex + channels.red])
-        let g = Double(data[pixelIndex + channels.green])
-        let b = Double(data[pixelIndex + channels.blue])
+    }
 
-        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        return luminance < 200 ? (255 - luminance) / 255 : 0
+    /// The ink of `pixels` along `line`, counted in from `edge`: each ink
+    /// pixel adds its darkness, (255 − luminance) / 255.
+    func density(line: Int, pixels: Range<Int>, _ edge: CGImagePropertyOrientation) -> Double {
+        var (pixel, step) = walk(line: line, pixels: pixels, edge)
+        var darkness: Int64 = 0
+        for _ in pixels {
+            darkness += Int64(self.darkness(at: pixel))
+            pixel += step
+        }
+        return Double(darkness) / Self.darknessScale
+    }
+
+    /// The ink pixels among `pixels` along `line`, counted in from `edge`.
+    func inkedPixels(line: Int, pixels: Range<Int>, _ edge: CGImagePropertyOrientation) -> Int {
+        var (pixel, step) = walk(line: line, pixels: pixels, edge)
+        var inked = 0
+        for _ in pixels {
+            if darkness(at: pixel) > 0 {
+                inked += 1
+            }
+            pixel += step
+        }
+        return inked
+    }
+
+    /// This raster's ink, counted over every rectangle from its top-left
+    /// corner, for the column detector (`PDFInkMap`).
+    func inkTable() -> PDFInkTable {
+        let stride = width + 1
+        let counts = [Int32](unsafeUninitializedCapacity: stride * (height + 1)) { counts, count in
+            for x in 0..<stride {
+                counts[x] = 0
+            }
+            for y in 0..<height {
+                let above = y * stride
+                let here = above + stride
+                counts[here] = 0
+                var rowInk: Int32 = 0
+                var pixel = data + (originY + y) * bytesPerRow + originX * 4
+                for x in 0..<width {
+                    if darkness(at: pixel) > 0 {
+                        rowInk += 1
+                    }
+                    counts[here + x + 1] = counts[above + x + 1] + rowInk
+                    pixel += 4
+                }
+            }
+            count = stride * (height + 1)
+        }
+        return PDFInkTable(width: width, height: height, counts: counts)
     }
 
     /// Whether this looks like two book pages side by side (#97): within the
@@ -739,11 +797,7 @@ struct PageRaster {
     func hasSpreadSpine() -> Bool {
         guard width >= 20, height >= 20 else { return false }
         func inkedRows(inColumn column: Int) -> Int {
-            var inked = 0
-            for row in 0..<height where darkness(line: column, pixel: row, .right) > 0 {
-                inked += 1
-            }
-            return inked
+            inkedPixels(line: column, pixels: 0..<height, .right)
         }
 
         let band = (width / 2 - width * 8 / 100)..<(width / 2 + width * 8 / 100)
@@ -782,11 +836,7 @@ struct PageRaster {
         let lines = lineCount(edge)
         let pixels = pixelCount(edge)
         func isArtifactLine(_ line: Int) -> Bool {
-            var inked = 0
-            for pixel in 0..<pixels where darkness(line: line, pixel: pixel, edge) > 0 {
-                inked += 1
-            }
-            return inked * 2 >= pixels
+            inkedPixels(line: line, pixels: 0..<pixels, edge) * 2 >= pixels
         }
 
         var line = 0

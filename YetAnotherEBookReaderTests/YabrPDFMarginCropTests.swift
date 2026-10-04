@@ -1033,17 +1033,18 @@ final class YabrPDFMarginCropTests: XCTestCase {
         bytes[index + 2] = 0
         try bytes.withUnsafeBufferPointer { buffer in
             let base = try XCTUnwrap(buffer.baseAddress)
-            let raster = PageRaster(data: base, width: width, height: height, pixelsPerRow: width, channels: PixelChannelOffsets(red: 0, green: 1, blue: 2))
+            let raster = PageRaster(data: base, width: width, height: height, bytesPerRow: width * 4, channels: PixelChannelOffsets(red: 0, green: 1, blue: 2))
             let part = raster.cropped(columns: 20..<40, lines: 10..<30)
             XCTAssertEqual(part.lineCount(.up), 20)
             XCTAssertEqual(part.pixelCount(.up), 20)
             // In the part: column 5, row 2.
-            XCTAssertEqual(part.darkness(line: 2, pixel: 5, .up), 1)
-            XCTAssertEqual(part.darkness(line: 20 - 2 - 1, pixel: 5, .down), 1)
-            XCTAssertEqual(part.darkness(line: 5, pixel: 2, .right), 1)
-            XCTAssertEqual(part.darkness(line: 20 - 5 - 1, pixel: 2, .left), 1)
-            XCTAssertEqual(part.darkness(line: 0, pixel: 0, .up), 0)
-            XCTAssertEqual(raster.darkness(line: 12, pixel: 25, .up), 1)
+            XCTAssertEqual(part.density(line: 2, pixels: 5..<6, .up), 1)
+            XCTAssertEqual(part.density(line: 20 - 2 - 1, pixels: 5..<6, .down), 1)
+            XCTAssertEqual(part.density(line: 5, pixels: 2..<3, .right), 1)
+            XCTAssertEqual(part.density(line: 20 - 5 - 1, pixels: 2..<3, .left), 1)
+            XCTAssertEqual(part.density(line: 0, pixels: 0..<20, .up), 0)
+            XCTAssertEqual(part.inkedPixels(line: 2, pixels: 0..<20, .up), 1)
+            XCTAssertEqual(raster.density(line: 12, pixels: 25..<26, .up), 1)
         }
     }
 
