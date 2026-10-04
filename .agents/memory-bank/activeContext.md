@@ -126,6 +126,66 @@ placement (content right of center, top offset / drift after page turns).
       offsets that were passed to every scan as separate parameters.
   - Scanned-page noise (specks) is still only limited by the walks' gap limits
     and the hop's minimum line height.
+- Margin detection performance (2026-10-04), `PDFMarginCropController`:
+  - **Pipeline.** `thumbnail(of:)` renders the media box once, without the
+    reader's highlights. `analyze(_:key:)` reads it through
+    `PageRaster.reading`, which uses the CGImage's own size and row stride
+    and keeps its pixel data alive while read. Then come the edge passes,
+    spread halves and columns.
+  - **Removed:**
+    - the crop-box render, which only fed a print;
+    - the debug overlay (`thumbImage`), drawn at screen scale: 17 MB per
+      Letter page at 3x, kept for up to 9 pages. Its viewer,
+      `thumbController`, was never shown.
+  - **Page number.** It now always opens `YabrPDFNavigationPageVC`
+    (`presentNavigation`, shared with the toolbar's list button). It used to
+    need a cached detection, so it did nothing on a book opened in Scroll mode.
+  - **Reading lines.** `PageRaster.density` and `inkedPixels` walk a line
+    through the bitmap in exact integers: darkness 255000 − (299r + 587g +
+    114b) per ink pixel. The 14 colours exactly on the threshold, which the
+    old floating-point sum rounded to ink, stay ink.
+    - `PDFInkMap` keeps a `PDFInkTable` of ink counts for its own area. The
+      map turned for vertical text is a view of it.
+    - Whole-page summed-area tables were tried and dropped: building them
+      (1–2.6 ms at -O) cost more than a text page's passes.
+  - **Options changes.** The page on screen is re-detected from its render:
+    `recentRenders` keeps three (the page and its neighbours, since a buffer
+    refresh can detect a neighbour on the main thread between slider steps).
+    It is main-thread only, and is dropped on `clearCache` and on memory
+    warnings.
+  - **Same results.** An A/B run against the old detector over every page the
+    suite and the benchmark detect (575) found no difference.
+    `PDFPageRasterTests` pins lines and ink maps to per-pixel reading.
+  - **Benchmark.** `PDFMarginDetectionBenchmarkTests` is opt-in. Run it with
+    `TEST_RUNNER_YABR_BENCHMARK=1 xcodebuild test …
+    -only-testing:YetAnotherEBookReaderTests/PDFMarginDetectionBenchmarkTests`.
+    - For optimized numbers, add `SWIFT_OPTIMIZATION_LEVEL=-O` and use its own
+      derived data (`/tmp/YabrDerivedDataO`).
+    - Points of Interest intervals (`PDFMarginDetection`, `PDFMarginRender`,
+      `PDFMarginEdges`, `PDFMarginRegions`) profile it on a device.
+  - **Numbers.** Median ms per page, iOS 26.5 simulator on the Mac, -O,
+    before → after. The re-detection under other options is one slider step.
+
+    | Page | Detection | Under other options |
+    |---|---|---|
+    | text | 23.2 → 3.0 | 23.2 → 0.39 |
+    | blank | 23.4 → 2.4 | 23.4 → 2.0 |
+    | paper, columns | 30.0 → 4.5 | 30.0 → 1.2 |
+    | vertical tiers | 27.6 → 2.8 | 27.6 → 1.0 |
+    | spread | 19.6 → 4.6 | 19.6 → 1.7 |
+    | 300 dpi scan | 53.6 → 19.3 (18.7 render) | 53.6 → 0.45 |
+
+    - Debug analysis is 1.2–2× faster.
+    - `YabrPDFMarginCropTests` went from 175.6 s to 162.6 s; the unit suite
+      from 214 s to 198 s.
+  - **Not done:**
+    - Our own rendering: drawing into our own context was within 10% of
+      `PDFPage.thumbnail`.
+    - 8-bit gray: CoreGraphics' gray isn't Rec. 601 on encoded values.
+    - A smaller raster.
+  - **Follow-up.** `refreshPageBuffers` (after a cover ends) can detect a
+    neighbour on the main thread while the analysis queue is still detecting
+    it.
 - Rotated pages (`page.rotation` ≠ 0) are detected and fitted as displayed:
   - **`PDFPageDisplaySpace`** (in `PDFPageViewportFitter.swift`) maps a page box
     to display space and back. PDFKit turns pages clockwise; display space has a
