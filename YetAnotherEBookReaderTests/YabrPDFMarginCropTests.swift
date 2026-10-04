@@ -221,6 +221,178 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    // MARK: - Reading a spread region by region (#97)
+
+    /// The spread pages' text blocks, page space (symmetric top to bottom).
+    private static let leftBlock = CGRect(x: 81, y: 96, width: 450, height: 600)
+    private static let rightBlock = CGRect(x: 693, y: 96, width: 450, height: 600)
+
+    private func makeSpreadHarness(
+        pageCount: Int = 3,
+        viewSize: CGSize,
+        spreadMode: PDFSpreadMode = .On,
+        initialPage: Int? = nil,
+        initialPoint: CGPoint? = nil
+    ) throws -> Harness {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("spread.pdf")
+        let pageRect = CGRect(origin: .zero, size: Self.spreadSize)
+        try UIGraphicsPDFRenderer(bounds: pageRect).writePDF(to: url) { context in
+            for _ in 0..<pageCount {
+                context.beginPage()
+                UIColor.white.setFill()
+                context.fill(pageRect)
+                UIColor.black.setFill()
+                context.fill(Self.leftBlock)
+                context.fill(Self.rightBlock)
+            }
+        }
+        tempURLs.append(url)
+        return try makeHarness(
+            pages: [],
+            viewSize: viewSize,
+            pdfURL: url,
+            initialPage: initialPage,
+            initialPoint: initialPoint,
+            spreadMode: spreadMode
+        )
+    }
+
+    /// "p<page> left|right": the page and the half the view's centre shows.
+    private func spreadPosition(_ harness: Harness) -> String {
+        let pdfView = harness.pdfView
+        guard let page = pdfView.currentPage, let document = pdfView.document else { return "none" }
+        let centre = pdfView.convert(CGPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY), to: page)
+        return "p\(document.index(for: page) + 1) \(centre.x < 612 ? "left" : "right")"
+    }
+
+    /// A spread page is thumbnailed at half scale for detection, so a half is
+    /// found within a couple of pixels, 4 pt: up to ~3 pt of fitted width.
+    private let spreadFitTolerance: CGFloat = 4
+
+    /// The text block of the half on screen, in view space.
+    private func halfInView(_ harness: Harness) -> CGRect {
+        let pdfView = harness.pdfView
+        guard let page = pdfView.currentPage else { return .null }
+        let block = spreadPosition(harness).hasSuffix("left") ? Self.leftBlock : Self.rightBlock
+        return pdfView.convert(block, from: page)
+    }
+
+    func testNextReadsSpreadHalvesBeforeTurningThePage() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait)
+        let readable = readableRect(harness)
+        func assertFitsHalf(_ label: String) {
+            let inView = halfInView(harness)
+            XCTAssertEqual(inView.width, readable.width * 0.9, accuracy: spreadFitTolerance, "\(label) \(inView)")
+            XCTAssertEqual(inView.midX, readable.midX, accuracy: viewTolerance, "\(label) \(inView)")
+        }
+
+        XCTAssertEqual(spreadPosition(harness), "p1 left")
+        assertFitsHalf("p1 left")
+        pressNext(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+        assertFitsHalf("p1 right")
+        pressNext(harness)
+        XCTAssertEqual(spreadPosition(harness), "p2 left")
+        pressPrev(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 right", "back onto a page: its last region")
+        pressPrev(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 left")
+        pressPrev(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 left", "nothing before the first region")
+    }
+
+    func testSpreadsOffTurnsWholePages() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait, spreadMode: .Off)
+        pressNext(harness)
+        XCTAssertEqual(harness.pdfView.currentPage.map { harness.pdfView.document?.index(for: $0) }, 1)
+    }
+
+    /// In landscape a half is taller than the view: Next steps down it a screen
+    /// at a time (overlapping), then to the other half's top, then the next page;
+    /// Prev onto a page lands on its last screen.
+    func testLandscapeHalvesAreReadAScreenAtATime() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.landscape)
+        let readable = readableRect(harness)
+        let top = readable.minY + readable.height * 0.05
+        let bottom = readable.maxY - readable.height * 0.05
+
+        var steps: [(position: String, block: CGRect)] = []
+        while spreadPosition(harness).hasPrefix("p1"), steps.count < 30 {
+            steps.append((spreadPosition(harness), halfInView(harness)))
+            pressNext(harness)
+        }
+        XCTAssertEqual(spreadPosition(harness), "p2 left")
+
+        for half in ["p1 left", "p1 right"] {
+            let screens = steps.filter { $0.position == half }.map(\.block)
+            XCTAssertGreaterThan(screens.count, 2, half)
+            XCTAssertEqual(screens.first?.minY ?? 0, top, accuracy: viewTolerance, "\(half) starts at the top margin")
+            XCTAssertEqual(screens.last?.maxY ?? 0, bottom, accuracy: viewTolerance, "\(half) ends at the bottom margin")
+            for (earlier, later) in zip(screens, screens.dropFirst()) {
+                let step = earlier.minY - later.minY
+                XCTAssertGreaterThan(step, 0, half)
+                XCTAssertLessThanOrEqual(step, (bottom - top) * 0.9 + viewTolerance, "\(half) keeps an overlap")
+            }
+        }
+        XCTAssertEqual(steps.map(\.position), steps.map(\.position).sorted(), "left half, then right")
+
+        pressPrev(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+        XCTAssertEqual(halfInView(harness).maxY, bottom, accuracy: viewTolerance, "back onto a page: its last screen")
+    }
+
+    func testStepWithinPageShowsTheMask() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait)
+        waitForJumpMaskToClear(harness)
+        harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+        XCTAssertTrue(harness.surface.isJumpMaskVisible)
+    }
+
+    /// Leaving a spread for the next page takes over its rendered buffer, which
+    /// was prepared at the next page's first region.
+    func testTurningOffASpreadTakesOverTheBufferAtTheFirstRegion() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait)
+        pressNext(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+        try waitForRenderedBuffers(harness, pages: [2])
+
+        let old = harness.pdfView
+        pressNext(harness)
+        XCTAssertFalse(harness.pdfView === old, "took over the buffer")
+        XCTAssertEqual(spreadPosition(harness), "p2 left")
+    }
+
+    /// A saved position inside the right half reopens on it.
+    func testRestoreInsideTheRightHalfReopensThere() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait, initialPage: 1, initialPoint: CGPoint(x: 700, y: 696))
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+    }
+
+    /// An options change that keeps the regions refits the region on screen.
+    func testOptionsChangeKeepsTheRegion() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait)
+        pressNext(harness)
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+
+        var options = harness.controller.pdfOptions
+        options.hMarginAutoScaler = 8
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        XCTAssertEqual(spreadPosition(harness), "p1 right")
+        XCTAssertEqual(halfInView(harness).width, readableRect(harness).width * 0.84, accuracy: spreadFitTolerance)
+    }
+
+    func testScrollModeReadsWholePages() throws {
+        let harness = try makeSpreadHarness(viewSize: Self.portrait)
+        let page = harness.page(0)
+        XCTAssertNotNil(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        harness.controller.pdfOptions.pageMode = .Scroll
+        XCTAssertNil(harness.controller.readingPlan(for: page, in: harness.pdfView))
+    }
+
     /// A part of the raster reads in its own coordinates from every edge, so the
     /// passes can run on one half of a spread or one column as on a whole page.
     func testCroppedRasterReadsItsOwnCoordinates() throws {
@@ -2749,7 +2921,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         readingDirection: PDFReadDirection = .LtR_TtB,
         pdfURL: URL? = nil,
         inNavigationController: Bool = false,
-        initialPage: Int? = nil
+        initialPage: Int? = nil,
+        initialPoint: CGPoint? = nil,
+        spreadMode: PDFSpreadMode = .Off
     ) throws -> Harness {
         let url = try pdfURL ?? makePDF(pages: pages)
         let controller = AppearanceTrackingPDFViewController()
@@ -2773,11 +2947,12 @@ final class YabrPDFMarginCropTests: XCTestCase {
             themeMode: themeMode,
             selectedAutoScaler: .Width,
             pageMode: .Page,
-            readingDirection: readingDirection
+            readingDirection: readingDirection,
+            spreadMode: spreadMode
         )
         if let initialPage {
-            // Same shape as a restored reading position with no in-page offset.
-            controller.pageViewPositionHistory[initialPage] = PageViewPosition(scaler: 0, point: CGPoint(x: CGFloat.nan, y: CGFloat.nan))
+            // Same shape as a restored reading position (no in-page offset by default).
+            controller.pageViewPositionHistory[initialPage] = PageViewPosition(scaler: 0, point: initialPoint ?? CGPoint(x: CGFloat.nan, y: CGFloat.nan))
         }
 
         if inNavigationController {

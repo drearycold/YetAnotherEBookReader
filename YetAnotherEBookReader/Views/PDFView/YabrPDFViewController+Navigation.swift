@@ -162,6 +162,7 @@ extension YabrPDFViewController {
         let isJumpTarget = pendingJumpMaskPage == curPageNum
         let showsJumpMask = isJumpTarget || pdfOptions.themePalette.drawsInverted
         pendingJumpMaskPage = nil
+        let readingTarget = readingFlow.consumeTarget(for: curPageNum)
         pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
 
@@ -200,7 +201,7 @@ extension YabrPDFViewController {
             completion: { [weak self] in self?.refreshPageBuffers() }
         )
 
-        let viewport = singlePageViewport(for: curPage, in: pdfView)
+        let viewport = singlePageViewport(for: curPage, in: pdfView, target: readingTarget)
         pdfView.applyViewport(viewport.fit, on: curPage)
         // A buffered neighbour already rendered at this viewport hides PDFKit's
         // low-resolution placeholder while the page's tiles render; under dark it
@@ -223,10 +224,18 @@ extension YabrPDFViewController {
 
     /// The single-page viewport of `page` in `view`: its saved position, or a fit
     /// of its detected content that keeps any saved axis. Used for the page on
-    /// screen and for the buffered neighbours, so both land identically.
-    func singlePageViewport(for page: PDFPage, in view: YabrPDFView) -> (fit: PDFPageViewportFit, restoresSavedPosition: Bool) {
+    /// screen and for the buffered neighbours, so both land identically. A page
+    /// read in regions (#97) lands on `target` when given (`splitPageViewport`).
+    func singlePageViewport(
+        for page: PDFPage,
+        in view: YabrPDFView,
+        target: PDFReadingTarget? = nil
+    ) -> (fit: PDFPageViewportFit, restoresSavedPosition: Bool) {
         let pageNumber = page.pageRef?.pageNumber ?? 1
         let pageHistory = getPageViewPositionHistory(pageNumber)
+        if let plan = readingPlan(for: page, in: view) {
+            return splitPageViewport(plan, history: pageHistory, target: target, in: view)
+        }
         if let pageViewPosition = pageHistory,
            pageViewPosition.scaler > 0,
            pageViewPosition.viewSize == view.frame.size,
@@ -250,17 +259,7 @@ extension YabrPDFViewController {
         let pageBounds = CGRect(origin: .zero, size: display.size)
         let readableRect = view.bounds.inset(by: pageLayoutInsets)
         var fit = PDFPageViewportFitter.fit(
-            PDFPageViewportFitter.Input(
-                contentBounds: contentBounds,
-                pageBounds: pageBounds,
-                readableRect: readableRect,
-                autoScaler: pdfOptions.selectedAutoScaler,
-                hMarginPercent: pdfOptions.hMarginAutoScaler,
-                vMarginPercent: pdfOptions.vMarginAutoScaler,
-                customScale: pdfOptions.lastScale,
-                readingDirection: pdfOptions.readingDirection,
-                marginOffsetPercent: pdfOptions.marginOffset
-            )
+            viewportFitInput(content: contentBounds, pageBounds: pageBounds, readableRect: readableRect)
         )
 
         // Keep the axis the reader already positioned (saved position, rotation, or
@@ -298,8 +297,11 @@ extension YabrPDFViewController {
         let index = document.index(for: page)
         // The next page first: reading forward is the common case.
         let neighbours = [index + 1, index - 1].compactMap { $0 >= 0 ? document.page(at: $0) : nil }
+        let next = neighbours.first { document.index(for: $0) == index + 1 }
+        // A split neighbour is shown where a turn lands on it: the next page at
+        // its first step, the previous one at its last.
         surface.prepareBuffers(showing: neighbours) { [unowned self] page, view in
-            singlePageViewport(for: page, in: view).fit
+            singlePageViewport(for: page, in: view, target: page === next ? .first : .last).fit
         }
     }
 

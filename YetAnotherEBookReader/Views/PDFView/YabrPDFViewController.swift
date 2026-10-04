@@ -75,6 +75,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// Page number (1-based) of a pending jump; `handlePageChange` shows the jump
     /// mask once that page's viewport is applied.
     var pendingJumpMaskPage: Int?
+    /// Where a split page (#97) lands when the page change under way is handled.
+    let readingFlow = PDFReadingFlowController()
     /// Set while `invalidateRenderedPages` re-attaches the document; PDFKit's page
     /// changes meanwhile are not the reader's.
     var isReattachingDocument = false
@@ -282,12 +284,16 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         updatePageViewPositionHistory()
+        let region = readingRegionOnScreen()
         
         super.viewWillTransition(to: size, with: coordinator)
         
         coordinator.animate { _ in
             
         } completion: { [self] _ in
+            if let region {
+                readingFlow.setPendingTarget(.region(region.region), pageNumber: region.pageNumber)
+            }
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
             if pdfOptions.pageMode == .Page {
                 surface.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
@@ -315,10 +321,20 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// by a buffer or, under dark, a snapshot.
     func turnPage(forward: Bool) {
         updatePageViewPositionHistory()
+        // A split page (#97) is read through its regions first.
+        if stepWithinPage(forward: forward) {
+            return
+        }
+        // Arriving forward reads a split page from its start; back, from its end.
+        let arrival: PDFReadingTarget = forward ? .first : .last
+        let target = adjacentPage(forward: forward)
+        if let pageNumber = target?.pageRef?.pageNumber {
+            readingFlow.setPendingTarget(arrival, pageNumber: pageNumber)
+        }
         if pdfView.displayMode == .singlePage,
-           let target = adjacentPage(forward: forward),
+           let target,
            surface.takeOver(showing: target, viewport: { [unowned self] page, view in
-               singlePageViewport(for: page, in: view).fit
+               singlePageViewport(for: page, in: view, target: arrival).fit
            }) {
             return
         }
