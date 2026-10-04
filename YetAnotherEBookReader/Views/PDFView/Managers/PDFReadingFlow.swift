@@ -2,16 +2,16 @@
 //  PDFReadingFlow.swift
 //  YetAnotherEBookReader
 //
-//  Reading a page region by region (#97): the halves of a two-page spread, or
-//  columns with full-width blocks between them, each a screen at a time when it
-//  is longer than the view.
+//  Reading a page in steps (#97): region by region (the halves of a two-page
+//  spread, or columns with full-width blocks between them), each a screen at a
+//  time when it is longer than the view. A page read whole is one region.
 //
 
 import CoreGraphics
 
-/// How a page split into regions is read: every screen of every region, in
-/// reading order. Fits are in the page's display space (`display`), where the
-/// fitter works; `pageFit(at:)` maps one to page space for `applyViewport`.
+/// How a page is read in steps: every screen of every region, in reading
+/// order. Fits are in the page's display space (`display`), where the fitter
+/// works; `pageFit(at:)` maps one to page space for `applyViewport`.
 struct PDFPageReadingPlan: Equatable {
     struct Step: Equatable {
         var region: Int
@@ -53,30 +53,35 @@ struct PDFPageReadingPlan: Equatable {
     /// (`upperLeft`, page space, as `PageViewPosition.point`) and its scale: the
     /// nearest step at that scale, or at any scale when none matches (the view
     /// size changed). A NaN axis is left out; with both NaN it is the first step.
-    func stepIndex(nearestUpperLeft upperLeft: CGPoint, scale: CGFloat, viewBounds: CGRect) -> Int {
+    /// With `region`, only that region's steps count (a rotation or an options
+    /// change keeps the region on screen and the place within it).
+    func stepIndex(nearestUpperLeft upperLeft: CGPoint, scale: CGFloat, viewBounds: CGRect, region: Int? = nil) -> Int {
+        let first = region.map(stepIndex(region:)) ?? 0
         // NaN stays NaN through the turn, on whichever display axis it lands.
         let target = display.toDisplay(upperLeft)
-        guard !(target.x.isNaN && target.y.isNaN), !steps.isEmpty else { return 0 }
+        let inRegion = steps.indices.filter { region == nil || steps[$0].region == region }
+        guard !(target.x.isNaN && target.y.isNaN), !inRegion.isEmpty else { return first }
 
-        let atScale = steps.indices.filter { abs(steps[$0].fit.scale - scale) <= scale * 0.01 }
-        let candidates = atScale.isEmpty ? Array(steps.indices) : atScale
+        let atScale = inRegion.filter { abs(steps[$0].fit.scale - scale) <= scale * 0.01 }
+        let candidates = atScale.isEmpty ? inRegion : atScale
         func distance(_ index: Int) -> CGFloat {
             let point = PDFPageViewportFitter.upperLeft(of: steps[index].fit, viewBounds: viewBounds)
             let dx = target.x.isNaN ? 0 : point.x - target.x
             let dy = target.y.isNaN ? 0 : point.y - target.y
             return dx * dx + dy * dy
         }
-        return candidates.min { distance($0) < distance($1) } ?? 0
+        return candidates.min { distance($0) < distance($1) } ?? first
     }
 }
 
-/// Where to land on a split page when it comes on screen.
+/// Where to land on a page read in steps when it comes on screen.
 enum PDFReadingTarget: Equatable {
     /// Its first step: turning forward onto it.
     case first
     /// Its last step: turning back onto it.
     case last
-    /// The first step of a region: kept across a rotation or an options change.
+    /// A region, kept across a rotation or an options change: its step nearest
+    /// the saved position, else its first.
     case region(Int)
 }
 

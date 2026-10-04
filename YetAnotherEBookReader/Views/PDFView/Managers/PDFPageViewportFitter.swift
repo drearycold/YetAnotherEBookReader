@@ -109,7 +109,8 @@ enum PDFPageViewportFitter {
     /// The fits that show content longer than the view one screen at a time, in
     /// reading order: from its start to a last screen that ends at the far
     /// margin, in equal steps that keep at least `screenOverlap` of a screen.
-    /// One fit when the content fits along the reading direction.
+    /// One fit when the content fits along the reading direction, also when it
+    /// only fits by reaching into the far margin: a step would scroll that little.
     static func screens(_ input: Input) -> [PDFPageViewportFit] {
         var input = input
         input.flowOffset = 0
@@ -120,16 +121,19 @@ enum PDFPageViewportFitter {
         let readable = input.readableRect
         let length: CGFloat
         let available: CGFloat
+        let margin: CGFloat
         switch input.readingDirection {
         case .LtR_TtB:
             length = content.height
-            available = readable.height * (1 - 2 * CGFloat(input.vMarginPercent) / 100)
+            margin = readable.height * CGFloat(input.vMarginPercent) / 100
+            available = readable.height - 2 * margin
         case .TtB_RtL:
             length = content.width
-            available = readable.width * (1 - 2 * CGFloat(input.hMarginPercent) / 100)
+            margin = readable.width * CGFloat(input.hMarginPercent) / 100
+            available = readable.width - 2 * margin
         }
         let visible = max(available, 1) / first.scale
-        guard length * first.scale > available + 0.5 else { return [first] }
+        guard length * first.scale > available + margin + 0.5 else { return [first] }
 
         let last = length - visible
         let steps = Int((last / (visible * (1 - screenOverlap))).rounded(.up))

@@ -10,7 +10,7 @@ import UIKit
 extension YabrPDFViewController {
     func handleOptionsChange(pdfOptions: PDFPreferenceValue) {
         let oldOptions = self.pdfOptions
-        // Under the old options: the region on screen of a split page (#97).
+        // Under the old options: the region on screen of a page read in steps (#97).
         let region = readingRegionOnScreen()
         self.pdfOptions = pdfOptions
 

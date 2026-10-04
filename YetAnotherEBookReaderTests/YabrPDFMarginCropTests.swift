@@ -414,6 +414,98 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertNil(harness.controller.readingPlan(for: page, in: harness.pdfView))
     }
 
+    // MARK: - Long whole pages (#97)
+
+    /// A page longer than the view at its fit is read a screen at a time, like a
+    /// region: Next steps down it (overlapping), then turns; Prev onto it lands
+    /// on its last screen.
+    func testNextReadsALongPageAScreenAtATime() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.landscape)
+        let readable = readableRect(harness)
+        let top = readable.minY + readable.height * 0.05
+        let bottom = readable.maxY - readable.height * 0.05
+
+        var screens: [CGRect] = []
+        while harness.pdfView.currentPage === harness.page(0), screens.count < 30 {
+            screens.append(contentInView(harness, pageIndex: 0))
+            pressNext(harness)
+        }
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1))
+        XCTAssertGreaterThan(screens.count, 2)
+        XCTAssertEqual(screens.first?.minY ?? 0, top, accuracy: viewTolerance, "starts at the top margin")
+        XCTAssertEqual(screens.last?.maxY ?? 0, bottom, accuracy: viewTolerance, "ends at the bottom margin")
+        for (earlier, later) in zip(screens, screens.dropFirst()) {
+            let step = earlier.minY - later.minY
+            XCTAssertGreaterThan(step, 0)
+            XCTAssertLessThanOrEqual(step, (bottom - top) * 0.9 + viewTolerance, "keeps an overlap")
+        }
+        assertTopMargin(harness, pageIndex: 1, label: "the next page from its top")
+
+        pressPrev(harness)
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(0))
+        XCTAssertEqual(contentInView(harness, pageIndex: 0).maxY, bottom, accuracy: viewTolerance, "back onto a page: its last screen")
+    }
+
+    /// A page that fits is shown in one step, as before: Next turns it.
+    func testPageThatFitsIsShownInOneStep() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.portrait)
+        XCTAssertNil(harness.controller.readingPlan(for: harness.page(0), in: harness.pdfView))
+        pressNext(harness)
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1))
+    }
+
+    /// Vertical text wider than the view is read from its right edge to its
+    /// left one. Forward is Prev's arrow in right-to-left reading.
+    func testWideVerticalTextIsReadRightToLeft() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: content), count: 2),
+            viewSize: Self.portrait,
+            readingDirection: .TtB_RtL,
+            autoScaler: .Height
+        )
+        let readable = readableRect(harness)
+        let right = readable.maxX - readable.width * 0.05
+        let left = readable.minX + readable.width * 0.05
+
+        var screens: [CGRect] = []
+        while harness.pdfView.currentPage === harness.page(0), screens.count < 30 {
+            screens.append(contentInView(harness, pageIndex: 0))
+            pressPrev(harness)
+        }
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1))
+        XCTAssertGreaterThan(screens.count, 1)
+        XCTAssertEqual(screens.first?.maxX ?? 0, right, accuracy: viewTolerance, "starts at the right margin")
+        XCTAssertEqual(screens.last?.minX ?? 0, left, accuracy: viewTolerance, "ends at the left margin")
+        for (earlier, later) in zip(screens, screens.dropFirst()) {
+            XCTAssertGreaterThan(later.minX, earlier.minX, "moves right to left through the text")
+        }
+    }
+
+    /// An options change that refits a long page keeps the screen: the step of
+    /// the new fit nearest the old one, not the page's top.
+    func testOptionsChangeKeepsTheScreenOfALongPage() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: [PageSpec(content: content)], viewSize: Self.landscape)
+        let page = harness.page(0)
+        pressNext(harness)
+        pressNext(harness)
+        let before = harness.pdfView.convert(harness.pdfView.bounds.origin, to: page)
+        let screenHeight = readableRect(harness).height / harness.pdfView.scaleFactor
+
+        var options = harness.controller.pdfOptions
+        options.hMarginAutoScaler = 8
+        harness.controller.handleOptionsChange(pdfOptions: options)
+        settle()
+        let after = harness.pdfView.convert(harness.pdfView.bounds.origin, to: page)
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(after.y, before.y, accuracy: screenHeight / 2, "before=\(before) after=\(after)")
+        let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        XCTAssertGreaterThan(harness.controller.currentStep(in: plan, of: page), 0, "not back at the top")
+    }
+
     // MARK: - Columns (#19, #97)
 
     /// A paper's page: a title and abstract across the top, then two columns.
@@ -852,7 +944,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
                 viewSize: Self.landscape
             )
             scrollCurrentPage(harness, toFraction: scrolled)
-            pressNext(harness)
+            pressNextPage(harness)
 
             topGaps["prev scrolled \(scrolled)"] = topGap(harness, pageIndex: 1)
             tearDownWindow()
@@ -863,8 +955,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertLessThanOrEqual((values.max() ?? 0) - (values.min() ?? 0), viewTolerance, "topGaps=\(topGaps)")
     }
 
-    /// Paging forward then back (restore path) should show the page exactly as the
-    /// reader left it, i.e. with the same top margin as the first visit.
+    /// Paging forward then back through pages longer than the view: arriving
+    /// forward always shows a page's top at the same margin, arriving back its
+    /// end at the bottom margin (its last screen, #97).
     func testPageTopIsStableAcrossForwardAndBackTurns() throws {
         let content = CGRect(x: 81, y: 96, width: 450, height: 600)
         let harness = try makeHarness(
@@ -872,21 +965,31 @@ final class YabrPDFMarginCropTests: XCTestCase {
             viewSize: Self.landscape
         )
 
-        var sequence: [(page: Int, topGap: CGFloat)] = []
-        func sample() {
-            let index = harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) } ?? -1
-            sequence.append((index + 1, topGap(harness, pageIndex: index)))
+        var forward: [(page: Int, topGap: CGFloat)] = []
+        var back: [(page: Int, bottomGap: CGFloat)] = []
+        func index() -> Int {
+            harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) } ?? -1
         }
 
-        sample()
-        for press in [pressNext, pressNext, pressPrev, pressPrev, pressNext, pressNext, pressNext, pressPrev] {
-            press(harness)
-            sample()
+        forward.append((index() + 1, topGap(harness, pageIndex: index())))
+        for isForward in [true, true, false, false, true, true, true, false] {
+            if isForward {
+                pressNextPage(harness)
+                forward.append((index() + 1, topGap(harness, pageIndex: index())))
+            } else {
+                pressPrevPage(harness)
+                let bottomGap = harness.pdfView.bounds.maxY - contentInView(harness, pageIndex: index()).maxY
+                back.append((index() + 1, bottomGap))
+            }
         }
-        record("PDFTURN forward/back sequence=\(sequence.map { "p\($0.page):\(String(format: "%.1f", $0.topGap))" })")
+        record("PDFTURN forward=\(forward) back=\(back)")
 
-        let gaps = sequence.map(\.topGap)
-        XCTAssertLessThanOrEqual((gaps.max() ?? 0) - (gaps.min() ?? 0), viewTolerance, "sequence=\(sequence)")
+        XCTAssertEqual(forward.map(\.page), [1, 2, 3, 2, 3, 4])
+        XCTAssertEqual(back.map(\.page), [2, 1, 3])
+        let tops = forward.map(\.topGap)
+        XCTAssertLessThanOrEqual((tops.max() ?? 0) - (tops.min() ?? 0), viewTolerance, "forward=\(forward)")
+        let bottoms = back.map(\.bottomGap)
+        XCTAssertLessThanOrEqual((bottoms.max() ?? 0) - (bottoms.min() ?? 0), viewTolerance, "back=\(back)")
     }
 
     /// Pressing "next" repeatedly (no scrolling) through pages whose text blocks share
@@ -914,7 +1017,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         var sequence: [(page: Int, width: CGFloat, scale: CGFloat, topGap: CGFloat)] = []
         for index in pages.indices {
             if index > 0 {
-                pressNext(harness)
+                pressNextPage(harness)
             }
             let current = harness.pdfView.currentPage.flatMap { harness.pdfView.document?.index(for: $0) } ?? -1
             XCTAssertEqual(current, index)
@@ -947,7 +1050,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         var rows: [String] = []
         var bodyTops: [CGFloat] = []
         for index in pages.indices {
-            if index > 0 { pressNext(harness) }
+            if index > 0 { pressNextPage(harness) }
             let options = harness.controller.pdfOptions
             let key = PageVisibleContentKey(
                 pageNumber: index + 1,
@@ -2982,6 +3085,22 @@ final class YabrPDFMarginCropTests: XCTestCase {
         settle()
     }
 
+    /// Next until the page changes: a page longer than the view takes a press
+    /// per screen.
+    private func pressNextPage(_ harness: Harness) {
+        let page = harness.pdfView.currentPage
+        for _ in 0..<30 where harness.pdfView.currentPage === page {
+            pressNext(harness)
+        }
+    }
+
+    private func pressPrevPage(_ harness: Harness) {
+        let page = harness.pdfView.currentPage
+        for _ in 0..<30 where harness.pdfView.currentPage === page {
+            pressPrev(harness)
+        }
+    }
+
     /// Simulates a user drag within the current page: 0 = top, 1 = bottom.
     private func scrollCurrentPage(_ harness: Harness, toFraction fraction: CGFloat) {
         guard let scrollView = firstScrollView(in: harness.pdfView) else {
@@ -3029,7 +3148,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         initialPage: Int? = nil,
         initialPoint: CGPoint? = nil,
         spreadMode: PDFSpreadMode = .Off,
-        columnsMode: PDFColumnsMode = .Off
+        columnsMode: PDFColumnsMode = .Off,
+        autoScaler: PDFAutoScaler = .Width
     ) throws -> Harness {
         let url = try pdfURL ?? makePDF(pages: pages)
         let controller = AppearanceTrackingPDFViewController()
@@ -3051,7 +3171,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         controller.pdfView.displayMode = .singlePage
         controller.pdfOptions = PDFPreferenceValue(
             themeMode: themeMode,
-            selectedAutoScaler: .Width,
+            selectedAutoScaler: autoScaler,
             pageMode: .Page,
             readingDirection: readingDirection,
             spreadMode: spreadMode,

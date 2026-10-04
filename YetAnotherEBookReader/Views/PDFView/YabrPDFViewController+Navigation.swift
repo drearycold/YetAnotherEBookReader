@@ -225,7 +225,7 @@ extension YabrPDFViewController {
     /// The single-page viewport of `page` in `view`: its saved position, or a fit
     /// of its detected content that keeps any saved axis. Used for the page on
     /// screen and for the buffered neighbours, so both land identically. A page
-    /// read in regions (#97) lands on `target` when given (`splitPageViewport`).
+    /// read in steps (#97) lands on `target` when given (`plannedPageViewport`).
     func singlePageViewport(
         for page: PDFPage,
         in view: YabrPDFView,
@@ -234,7 +234,7 @@ extension YabrPDFViewController {
         let pageNumber = page.pageRef?.pageNumber ?? 1
         let pageHistory = getPageViewPositionHistory(pageNumber)
         if let plan = readingPlan(for: page, in: view) {
-            return splitPageViewport(plan, history: pageHistory, target: target, in: view)
+            return plannedPageViewport(plan, history: pageHistory, target: target, in: view)
         }
         if let pageViewPosition = pageHistory,
            pageViewPosition.scaler > 0,
@@ -298,8 +298,8 @@ extension YabrPDFViewController {
         // The next page first: reading forward is the common case.
         let neighbours = [index + 1, index - 1].compactMap { $0 >= 0 ? document.page(at: $0) : nil }
         let next = neighbours.first { document.index(for: $0) == index + 1 }
-        // A split neighbour is shown where a turn lands on it: the next page at
-        // its first step, the previous one at its last.
+        // A neighbour read in steps is shown where a turn lands on it: the next
+        // page at its first step, the previous one at its last.
         surface.prepareBuffers(showing: neighbours) { [unowned self] page, view in
             singlePageViewport(for: page, in: view, target: page === next ? .first : .last).fit
         }

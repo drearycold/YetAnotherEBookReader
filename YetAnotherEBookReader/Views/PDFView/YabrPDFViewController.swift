@@ -75,7 +75,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// Page number (1-based) of a pending jump; `handlePageChange` shows the jump
     /// mask once that page's viewport is applied.
     var pendingJumpMaskPage: Int?
-    /// Where a split page (#97) lands when the page change under way is handled.
+    /// Where a page read in steps (#97) lands when the page change under way is
+    /// handled.
     let readingFlow = PDFReadingFlowController()
     /// Set while `invalidateRenderedPages` re-attaches the document; PDFKit's page
     /// changes meanwhile are not the reader's.
@@ -321,11 +322,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     /// by a buffer or, under dark, a snapshot.
     func turnPage(forward: Bool) {
         updatePageViewPositionHistory()
-        // A split page (#97) is read through its regions first.
+        // A page read in steps (#97) is read through them first.
         if stepWithinPage(forward: forward) {
             return
         }
-        // Arriving forward reads a split page from its start; back, from its end.
+        // Arriving forward reads a page in steps from its start; back, from its end.
         let arrival: PDFReadingTarget = forward ? .first : .last
         let target = adjacentPage(forward: forward)
         if let pageNumber = target?.pageRef?.pageNumber {

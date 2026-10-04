@@ -98,6 +98,24 @@ final class PDFReadingFlowTests: XCTestCase {
         XCTAssertEqual(plan.steps[found].region, 1)
     }
 
+    /// Kept on a region (a rotation, an options change), the point is matched
+    /// among that region's steps only: the same height in the other half, or
+    /// its first step when the point is unknown.
+    func testRegionKeepsThePlaceWithinIt() {
+        let plan = plan(regions: [leftHalf, rightHalf], readable: landscape)
+        let rightSteps = plan.steps.indices.filter { plan.steps[$0].region == 1 }
+        let leftSteps = plan.steps.indices.filter { plan.steps[$0].region == 0 }
+        XCTAssertGreaterThan(rightSteps.count, 1)
+
+        for (left, right) in zip(leftSteps, rightSteps) {
+            let point = upperLeft(plan, right, landscape)
+            // At another view size: matched at any scale.
+            XCTAssertEqual(plan.stepIndex(nearestUpperLeft: point, scale: 0, viewBounds: landscape, region: 1), right)
+            XCTAssertEqual(plan.stepIndex(nearestUpperLeft: point, scale: 0, viewBounds: landscape, region: 0), left, "the same height in the other half")
+        }
+        XCTAssertEqual(plan.stepIndex(nearestUpperLeft: CGPoint(x: CGFloat.nan, y: .nan), scale: 0, viewBounds: landscape, region: 1), plan.stepIndex(region: 1))
+    }
+
     func testPendingTargetIsConsumedOnceAndOnlyForItsPage() {
         let flow = PDFReadingFlowController()
         flow.setPendingTarget(.last, pageNumber: 4)

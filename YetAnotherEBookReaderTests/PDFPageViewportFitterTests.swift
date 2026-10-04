@@ -76,6 +76,22 @@ final class PDFPageViewportFitterTests: XCTestCase {
         }
     }
 
+    /// Content that only ends on screen by reaching into the far margin is one
+    /// screen: a second would scroll a few points. Longer content steps.
+    func testScreensIsOneFitWhenContentEndsInTheFarMargin() {
+        let landscape = CGRect(x: 0, y: 0, width: 844, height: 390)
+        // Width fit: 600 pt wide to 759.6 pt, so 1.266 view pt per page pt; 351 pt
+        // of the 390 are inside the 5% margins.
+        let intoMargin = CGRect(x: 6, y: 200, width: 600, height: 285)
+        let fit = PDFPageViewportFitter.fit(input(content: intoMargin, readable: landscape))
+        XCTAssertGreaterThan(intoMargin.height * fit.scale, landscape.height * 0.9, "past the margin-inset height")
+        XCTAssertEqual(PDFPageViewportFitter.screens(input(content: intoMargin, readable: landscape)), [fit])
+        XCTAssertLessThanOrEqual(place(intoMargin, fit).maxY, landscape.maxY, "ends on screen")
+
+        let pastMargin = CGRect(x: 6, y: 200, width: 600, height: 300)
+        XCTAssertEqual(PDFPageViewportFitter.screens(input(content: pastMargin, readable: landscape)).count, 2)
+    }
+
     /// Vertical text steps from the right edge to the left one.
     func testScreensStepLeftThroughWideVerticalText() {
         let screens = PDFPageViewportFitter.screens(input(content: content, readable: readable, autoScaler: .Height, readingDirection: .TtB_RtL))
