@@ -66,19 +66,30 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         return view?.document
     }
     
+    /// A bookmark: `offset` is the `currentDestination` point it saved.
     func yabrPDFNavigate(_ view: YabrPDFView?, pageNumber: Int, offset: CGPoint) {
         guard let page = view?.document?.page(at: pageNumber - 1)
         else { return }
-        
-        yabrPDFNavigate(view, destination: PDFDestination(page: page, at: offset))
+
+        guard let controller = view?.yabrPDFViewController else {
+            view?.go(to: PDFDestination(page: page, at: offset))
+            return
+        }
+        if let curPage = view?.currentPage {
+            controller.updateHistoryMenu(curPage: curPage)
+        }
+        controller.jump(toBookmarkOn: page, at: offset)
     }
     
     func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination) {
-        if let curPage = view?.currentPage {
-            view?.yabrPDFViewController?.updateHistoryMenu(curPage: curPage)
+        guard let controller = view?.yabrPDFViewController else {
+            view?.go(to: destination)
+            return
         }
-        view?.yabrPDFViewController?.markJumpTarget(destination.page)
-        view?.go(to: destination)
+        if let curPage = view?.currentPage {
+            controller.updateHistoryMenu(curPage: curPage)
+        }
+        controller.jump(to: destination)
     }
     
     func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline? {

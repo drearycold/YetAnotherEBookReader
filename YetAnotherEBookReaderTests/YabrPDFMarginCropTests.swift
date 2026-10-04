@@ -545,6 +545,134 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertEqual(harness.controller.pageIndicator.title(for: .normal), "1 / 2 · \(count)/\(count)")
     }
 
+    // MARK: - Jumps (#97)
+
+    /// The top (top-down) of the right column's line that holds "Zanzibar".
+    private static let needleTop: CGFloat = 520
+    /// A point on that line, page space.
+    private static let needle = CGPoint(x: 330, y: 792 - needleTop - 4)
+
+    /// Paper pages (`drawPaperPage`) whose right column has "Zanzibar" on one
+    /// line, read with Columns Auto.
+    private func makePaperHarness(pageCount: Int = 2, viewSize: CGSize = YabrPDFMarginCropTests.portrait) throws -> Harness {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("paper.pdf")
+        try UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize)).writePDF(to: url) { context in
+            for _ in 0..<pageCount {
+                context.beginPage()
+                let needleLine = Int((Self.needleTop - 190) / 15)
+                drawBodyLines(y: 96, count: 5) { _ in 60...552 }
+                drawBodyLines(y: 190, count: 34) { _ in 60...290 }
+                drawBodyLines(y: 190, count: needleLine) { _ in 322...552 }
+                ("Zanzibar is the one word found in this whole document" as NSString).draw(
+                    at: CGPoint(x: 322, y: Self.needleTop),
+                    withAttributes: [.font: UIFont(name: "TimesNewRomanPSMT", size: 11) ?? .systemFont(ofSize: 11)]
+                )
+                drawBodyLines(y: Self.needleTop + 15, count: 34 - needleLine - 1) { _ in 322...552 }
+            }
+        }
+        tempURLs.append(url)
+        return try makeHarness(pages: [], viewSize: viewSize, pdfURL: url, columnsMode: .Auto)
+    }
+
+    /// The region of the step on screen.
+    private func regionOnScreen(_ harness: Harness) -> Int? {
+        guard let page = harness.pdfView.currentPage,
+              let plan = harness.controller.readingPlan(for: page, in: harness.pdfView)
+        else { return nil }
+        return plan.steps[harness.controller.currentStep(in: plan, of: page)].region
+    }
+
+    private func isReadable(_ harness: Harness, _ rect: CGRect, on page: PDFPage) -> Bool {
+        readableRect(harness).contains(harness.pdfView.convert(rect, from: page))
+    }
+
+    /// A contents or chapter jump to the right column of another page lands on
+    /// the right column, with its destination on screen.
+    func testContentsJumpLandsOnTheColumnHoldingItsDestination() throws {
+        let harness = try makePaperHarness()
+        let page = harness.page(1)
+        harness.controller.jump(to: PDFDestination(page: page, at: Self.needle))
+        settle()
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(regionOnScreen(harness), 2, "the right column")
+        XCTAssertTrue(isReadable(harness, CGRect(origin: Self.needle, size: .zero), on: page))
+    }
+
+    func testSearchHitLandsOnItsColumn() throws {
+        let harness = try makePaperHarness()
+        let hit = try XCTUnwrap(harness.pdfView.document?.findString("Zanzibar", withOptions: .caseInsensitive).last)
+        let page = try XCTUnwrap(hit.pages.first)
+        XCTAssertTrue(page === harness.page(1))
+        harness.controller.jump(to: hit)
+        settle()
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(regionOnScreen(harness), 2, "the right column")
+        XCTAssertTrue(isReadable(harness, hit.bounds(for: page), on: page))
+    }
+
+    /// A bookmark saves `currentDestination`; jumping to it from another page
+    /// reopens the step it was made on.
+    func testBookmarkReopensOnItsStep() throws {
+        let harness = try makePaperHarness()
+        let page = harness.page(0)
+        pressNext(harness)
+        pressNext(harness)
+        let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        let step = harness.controller.currentStep(in: plan, of: page)
+        XCTAssertEqual(step, 2)
+        let point = try XCTUnwrap(harness.pdfView.currentDestination?.point)
+
+        pressNextPage(harness)
+        harness.controller.jump(toBookmarkOn: page, at: point)
+        settle()
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(harness.controller.currentStep(in: plan, of: page), step)
+    }
+
+    /// A jump within the page on screen moves to the step showing it, under the
+    /// jump mask (PDFKit would place it its own way).
+    func testJumpOnThePageOnScreenMovesToItsStep() throws {
+        let harness = try makePaperHarness()
+        waitForJumpMaskToClear(harness)
+        let page = harness.page(0)
+        harness.controller.jump(to: PDFDestination(page: page, at: Self.needle))
+        XCTAssertTrue(harness.surface.isJumpMaskVisible)
+        settle()
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(regionOnScreen(harness), 2, "the right column")
+    }
+
+    func testLinkLandsOnTheColumnHoldingItsDestination() throws {
+        let harness = try makePaperHarness()
+        let page = harness.page(0)
+        // In the abstract, on screen at the first step.
+        let linkBounds = CGRect(x: 100, y: 792 - 120, width: 200, height: 14)
+        let link = PDFAnnotation(bounds: linkBounds, forType: .link, withProperties: nil)
+        link.action = PDFActionGoTo(destination: PDFDestination(page: harness.page(1), at: Self.needle))
+        page.addAnnotation(link)
+        settle()
+
+        harness.pdfView.handleTap(at: harness.pdfView.convert(CGPoint(x: linkBounds.midX, y: linkBounds.midY), from: page))
+        settle()
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1))
+        XCTAssertEqual(regionOnScreen(harness), 2, "the right column")
+    }
+
+    /// A destination near the end of a long whole page shows on its last screen.
+    func testDestinationLowOnALongPageShowsOnItsLastScreen() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.landscape)
+        let page = harness.page(1)
+        let point = CGPoint(x: 100, y: 792 - 690)
+        harness.controller.jump(to: PDFDestination(page: page, at: point))
+        settle()
+        let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        XCTAssertEqual(harness.controller.currentStep(in: plan, of: page), plan.steps.count - 1)
+        XCTAssertTrue(isReadable(harness, CGRect(origin: point, size: .zero), on: page))
+    }
+
     // MARK: - Columns (#19, #97)
 
     /// A paper's page: a title and abstract across the top, then two columns.

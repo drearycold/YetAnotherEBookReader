@@ -76,7 +76,13 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
               let pdfPage = yabrPDFView?.document?.page(at: page - 1)
         else { return }
         
-        yabrPDFView?.go(to: pdfPage)
+        // The step showing its first line, on a page read in steps (#97).
+        if let pdfViewController,
+           let rect = pdfViewController.surface.highlights[highlight.uuid]?.first?.selection.bounds(for: pdfPage) {
+            pdfViewController.jump(to: pdfPage, showing: rect)
+        } else {
+            yabrPDFView?.go(to: pdfPage)
+        }
         self.dismiss(animated: true)
     }
 

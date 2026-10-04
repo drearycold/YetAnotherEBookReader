@@ -153,7 +153,13 @@ class YabrPDFView: PDFView {
                         location: self.convert(.zero, to: currentPage)
                     )
                 }
-                self.perform(annotationAction)
+                // A link within the document lands on the step showing its
+                // destination on a page read in steps (#97).
+                if let goTo = annotationAction as? PDFActionGoTo, let controller = yabrPDFViewController {
+                    controller.jump(to: goTo.destination)
+                } else {
+                    self.perform(annotationAction)
+                }
                 followedLink = true
             default:
                 break

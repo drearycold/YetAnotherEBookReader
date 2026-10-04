@@ -73,6 +73,11 @@ extension YabrPDFViewController {
             guard let history else { return (plan.pageFit(at: plan.stepIndex(region: region)), false) }
             let step = plan.stepIndex(nearestUpperLeft: history.point, scale: history.scaler, viewBounds: view.bounds, region: region)
             return (plan.pageFit(at: step), false)
+        case .destination(let focus):
+            let step = plan.stepIndex(showing: focus, readableRect: view.bounds.inset(by: pageLayoutInsets))
+            return (plan.pageFit(at: step), false)
+        case .lowerLeft(let point):
+            return (plan.pageFit(at: plan.stepIndex(nearestLowerLeft: point, viewBounds: view.bounds)), false)
         case nil:
             break
         }
@@ -114,6 +119,66 @@ extension YabrPDFViewController {
         updateReadingProgress()
         updatePageIndicator()
         return true
+    }
+
+    // MARK: Jumps
+
+    /// Jumps to an outline or link destination: a page read in steps lands on
+    /// the step showing its point.
+    func jump(to destination: PDFDestination) {
+        guard let page = destination.page else { return }
+        // PDFKit marks an unspecified coordinate with a huge value.
+        func specified(_ value: CGFloat) -> CGFloat { abs(value) < 1e30 ? value : .nan }
+        let point = CGPoint(x: specified(destination.point.x), y: specified(destination.point.y))
+        jump(to: page, target: .destination(CGRect(origin: point, size: .zero))) { $0.go(to: destination) }
+    }
+
+    /// Jumps to a search hit: the step showing it.
+    func jump(to selection: PDFSelection) {
+        guard let page = selection.pages.first else { return }
+        jump(to: page, target: .destination(selection.bounds(for: page))) { $0.go(to: selection) }
+    }
+
+    /// Jumps to `rect` on `page` (a highlight): the step showing it.
+    func jump(to page: PDFPage, showing rect: CGRect) {
+        jump(to: page, target: .destination(rect)) { $0.go(to: page) }
+    }
+
+    /// Jumps to a bookmark, whose `point` is the `currentDestination` it saved:
+    /// the step that showed it.
+    func jump(toBookmarkOn page: PDFPage, at point: CGPoint) {
+        jump(to: page, target: .lowerLeft(point)) { $0.go(to: PDFDestination(page: page, at: point)) }
+    }
+
+    /// Lands a jump on `page`'s step for `target` when it is read in steps;
+    /// `go` is PDFKit's own jump, which places it in Scroll mode.
+    private func jump(to page: PDFPage, target: PDFReadingTarget, go: (YabrPDFView) -> Void) {
+        guard page === pdfView.currentPage else {
+            if let pageNumber = page.pageRef?.pageNumber {
+                readingFlow.setPendingTarget(target, pageNumber: pageNumber)
+            }
+            markJumpTarget(page)
+            if pdfView.displayMode == .singlePage {
+                // `handlePageChange` places the page. PDFKit's jump to a point or
+                // a selection would scroll on after it, sideways.
+                pdfView.go(to: page)
+            } else {
+                go(pdfView)
+            }
+            return
+        }
+        // On the page on screen there is no page change to land it; PDFKit
+        // would place it its own way.
+        guard pdfView.displayMode == .singlePage, let plan = readingPlan(for: page, in: pdfView) else {
+            go(pdfView)
+            return
+        }
+        menuManager.dismissHighlightMenu()
+        pdfView.applyViewport(plannedPageViewport(plan, history: nil, target: target, in: pdfView).fit, on: page)
+        surface.showJumpMask(for: page)
+        updatePageViewPositionHistory()
+        updateReadingProgress()
+        updatePageIndicator()
     }
 
     /// "12 / 300", and on a page read in steps the step on screen of its turns:

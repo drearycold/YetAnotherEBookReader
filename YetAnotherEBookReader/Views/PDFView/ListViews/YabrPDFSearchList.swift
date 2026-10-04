@@ -214,7 +214,11 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         let selection = searchResults[indexPath.row]
         recordCurrentQuery()
 
-        yabrPDFView?.go(to: selection)
+        if let pdfViewController {
+            pdfViewController.jump(to: selection)
+        } else {
+            yabrPDFView?.go(to: selection)
+        }
         yabrPDFView?.setCurrentSelection(selection, animate: true)
         
         self.dismiss(animated: true)

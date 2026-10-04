@@ -29,9 +29,7 @@ extension YabrPDFViewController {
                     else { return }
 
                     self.updateHistoryMenu(curPage: curPage)
-
-                    self.markJumpTarget(dest.page)
-                    self.pdfView.go(to: dest)
+                    self.jump(to: dest)
                 })
             }
         }

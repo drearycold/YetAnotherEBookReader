@@ -11,7 +11,9 @@ final class PDFReadingFlowTests: XCTestCase {
     private func plan(
         regions: [CGRect],
         readable: CGRect,
-        rotation: Int = 0
+        rotation: Int = 0,
+        autoScaler: PDFAutoScaler = .Width,
+        readingDirection: PDFReadDirection = .LtR_TtB
     ) -> PDFPageReadingPlan {
         let display = PDFPageDisplaySpace(box: spread, rotation: rotation)
         return PDFPageReadingPlan(regions: regions, display: display) { region in
@@ -19,11 +21,11 @@ final class PDFReadingFlowTests: XCTestCase {
                 contentBounds: region,
                 pageBounds: CGRect(origin: .zero, size: display.size),
                 readableRect: readable,
-                autoScaler: .Width,
+                autoScaler: autoScaler,
                 hMarginPercent: 5,
                 vMarginPercent: 5,
                 customScale: 1,
-                readingDirection: .LtR_TtB,
+                readingDirection: readingDirection,
                 marginOffsetPercent: 0
             )
         }
@@ -114,6 +116,79 @@ final class PDFReadingFlowTests: XCTestCase {
             XCTAssertEqual(plan.stepIndex(nearestUpperLeft: point, scale: 0, viewBounds: landscape, region: 0), left, "the same height in the other half")
         }
         XCTAssertEqual(plan.stepIndex(nearestUpperLeft: CGPoint(x: CGFloat.nan, y: .nan), scale: 0, viewBounds: landscape, region: 1), plan.stepIndex(region: 1))
+    }
+
+    // MARK: - Jumps
+
+    private func point(_ point: CGPoint) -> CGRect {
+        CGRect(origin: point, size: .zero)
+    }
+
+    /// The steps of `region` after `index` that also show `focus`'s point: none
+    /// when `index` is the last step showing it.
+    private func laterSteps(_ plan: PDFPageReadingPlan, after index: Int, showing point: CGPoint, readable: CGRect) -> [Int] {
+        plan.steps.indices.filter {
+            $0 > index && plan.steps[$0].region == plan.steps[index].region
+                && plan.shownRect(at: $0, viewRect: readable).contains(point)
+        }
+    }
+
+    /// A destination low in the right half lands on that half, on the last
+    /// screen showing it (nearest its top); a search hit at the top of the
+    /// left half on its first screen.
+    func testDestinationLandsOnTheStepShowingIt() {
+        let plan = plan(regions: [leftHalf, rightHalf], readable: landscape)
+        let low = CGPoint(x: rightHalf.midX, y: rightHalf.minY + 100)
+        let found = plan.stepIndex(showing: point(low), readableRect: landscape)
+        XCTAssertEqual(plan.steps[found].region, 1)
+        XCTAssertGreaterThan(plan.steps[found].screen, 0)
+        XCTAssertTrue(plan.shownRect(at: found, viewRect: landscape).contains(low))
+        XCTAssertEqual(laterSteps(plan, after: found, showing: low, readable: landscape), [])
+
+        let hit = CGRect(x: leftHalf.minX + 10, y: leftHalf.maxY - 20, width: 60, height: 12)
+        XCTAssertEqual(plan.stepIndex(showing: hit, readableRect: landscape), 0)
+    }
+
+    /// An unspecified x: matched by height, the first region in reading order
+    /// holding it.
+    func testUnspecifiedXIsMatchedByHeightInReadingOrder() {
+        let plan = plan(regions: [leftHalf, rightHalf], readable: landscape)
+        let low = CGPoint(x: CGFloat.nan, y: rightHalf.minY + 100)
+        let found = plan.stepIndex(showing: point(low), readableRect: landscape)
+        XCTAssertEqual(plan.steps[found].region, 0)
+        let shown = plan.shownRect(at: found, viewRect: landscape)
+        XCTAssertTrue(shown.minY <= low.y && low.y <= shown.maxY, "\(shown)")
+    }
+
+    /// A point between the halves goes to the nearer one.
+    func testPointInAGapGoesToTheNearestRegion() {
+        let plan = plan(regions: [leftHalf, rightHalf], readable: landscape)
+        let gap = CGPoint(x: rightHalf.minX - 20, y: rightHalf.maxY - 10)
+        XCTAssertEqual(plan.steps[plan.stepIndex(showing: point(gap), readableRect: landscape)].region, 1)
+    }
+
+    /// Vertical text is read from the right: a destination near its left end is
+    /// on the last screen, near its right end on the first.
+    func testVerticalTextDestinations() {
+        let portrait = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let wide = CGRect(x: 81, y: 96, width: 1062, height: 600)
+        let plan = plan(regions: [wide], readable: portrait, autoScaler: .Height, readingDirection: .TtB_RtL)
+        XCTAssertGreaterThan(plan.steps.count, 2)
+        XCTAssertEqual(plan.stepIndex(showing: point(CGPoint(x: wide.minX + 20, y: 400)), readableRect: portrait), plan.steps.count - 1)
+        XCTAssertEqual(plan.stepIndex(showing: point(CGPoint(x: wide.maxX - 20, y: 400)), readableRect: portrait), 0)
+    }
+
+    /// A bookmark's point (the lower-left corner of what a step showed) finds
+    /// that step again, also on a turned page.
+    func testEveryStepIsFoundFromItsLowerLeftPoint() {
+        for rotation in [0, 90] {
+            let plan = plan(regions: [leftHalf, rightHalf], readable: landscape, rotation: rotation)
+            for index in plan.steps.indices {
+                let shown = plan.display.toPage(plan.shownRect(at: index, viewRect: landscape))
+                let found = plan.stepIndex(nearestLowerLeft: CGPoint(x: shown.minX, y: shown.minY), viewBounds: landscape)
+                XCTAssertEqual(found, index, "rotation \(rotation)")
+            }
+        }
     }
 
     func testPendingTargetIsConsumedOnceAndOnlyForItsPage() {
