@@ -301,11 +301,13 @@ never store it, and observe the surface's notifications. Keep specialized behavi
 - `PDFBookmarkManager`
 - `PDFSearchController`
 - `PDFMarginCropController`
+- `PDFColumnDetector` and `PDFReadingFlow` (reading regions, #97/#19)
 - `YabrPDFViewController+Chrome`
 - `YabrPDFViewController+Navigation`
 - `YabrPDFViewController+Options`
 - `YabrPDFViewController+Selection`
 - `YabrPDFViewController+Sharing`
+- `YabrPDFViewController+ReadingFlow`
 
 Avoid growing the main controller again.
 

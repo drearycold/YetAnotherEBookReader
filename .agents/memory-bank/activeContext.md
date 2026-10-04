@@ -7,6 +7,49 @@ placement (content right of center, top offset / drift after page turns).
 
 ## Current Branch Notes
 
+- Reading regions (#97 spreads + columns, #19 column detection). Options
+  `spreadMode` (Off/Auto/On) and `columnsMode` (Off/Auto), per book, default Off.
+  - **Storage.** Optional Realm columns (schema 143): a nil row reads Off. A
+    non-optional enum column reads "" on old rows and crashes RealmSwift's
+    enum decode in every reader.
+  - **Detection** (`PDFMarginCropController`).
+    - `PageVisibleContentValue.regions` holds the regions in reading order,
+      crop-relative and top-down like `bounds`; empty means the page reads
+      whole. The region modes are part of `PageVisibleContentKey`
+      (`init(pageNumber:options:)`; columns are forced Off for TtB_RtL).
+    - **Spreads:** split at the crop box centre. Each half goes through
+      `detectContentEdges` on a `PageRaster.cropped` sub-raster, so the spine
+      shadow is the half's inner edge artifact. Auto needs a landscape page
+      plus `hasSpreadSpine`: a blank or dark strip ≥ 2% of the width, the full
+      height of the central sixth (a word space in a slide title is narrower).
+      With one blank half, the page reads whole, fitted to the other half.
+    - **Columns:** `PDFColumnDetector` runs on a `PDFInkMap` of the content
+      box (or of each spread half). It classifies windows of about 4 lines,
+      merges them into bands, and moves boundaries into the blank gap between
+      blocks. It needs ≥ 40% of the content in columns.
+  - **Reading** (`YabrPDFViewController+ReadingFlow`, `PDFReadingFlow.swift`).
+    - `PDFPageReadingPlan` holds every screen of every region
+      (`PDFPageViewportFitter.screens`: equal steps, ≥ 10% overlap, last
+      screen at the far margin), in display space.
+    - The current step is derived from the view itself (top-left page point
+      plus scale), not stored, so drags, zooms and restores need no
+      bookkeeping.
+    - **`turnPage`:** steps within the page first (`stepWithinPage`: apply the
+      viewport plus the jump mask). Otherwise it sets `readingFlow`'s pending
+      `.first`/`.last` before PDFKit or `takeOver` changes page;
+      `handlePageChange` consumes it.
+    - Buffers are prepared at the same arrival targets (next `.first`,
+      previous `.last`), so `PDFReaderSurface` stays page-keyed.
+    - Rotation and option changes that keep the region modes set a pending
+      `.region` (`readingRegionOnScreen`).
+    - Unsplit pages and Scroll mode behave as before.
+  - **Deferred:**
+    - same-page step buffering (needs viewport-keyed buffers and per-view tile
+      attribution; the mask covers the re-render for now);
+    - jumps landing on the region holding their destination;
+    - stepping on unsplit pages;
+    - columns for TtB_RtL;
+    - a page-indicator region suffix.
 - Margin-crop detection fixes (#94, #96), `PDFMarginCropController`:
   - **Ink by luminance** (Rec. 601 Y < 200): coloured text counts. The thumbnail
     is B G R A in memory; `PixelChannelOffsets` reads the real channel order.
