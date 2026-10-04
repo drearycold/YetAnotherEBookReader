@@ -411,8 +411,15 @@ final class YabrPDFViewControllerTests: XCTestCase {
         realmObject.marginOffset = 3
         realmObject.lastScale = 2.2
         realmObject.rememberInPagePosition = false
+        realmObject.spreadMode = .Auto
+        realmObject.columnsMode = .Auto
 
         let value = realmObject.toValue()
+        XCTAssertEqual(value.spreadMode, .Auto)
+        XCTAssertEqual(value.columnsMode, .Auto)
+        // A row saved before schema 143 has neither: both read as Off.
+        XCTAssertEqual(PDFOptions().toValue().spreadMode, .Off)
+        XCTAssertEqual(PDFOptions().toValue().columnsMode, .Off)
         XCTAssertEqual(value.fillColor.components, CGColor(gray: 0.0, alpha: 1.0).components)
         XCTAssertTrue(value.isDark)
         XCTAssertEqual(value.isDark("dark", "light"), "dark")

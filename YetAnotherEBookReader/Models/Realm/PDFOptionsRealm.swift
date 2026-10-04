@@ -11,6 +11,8 @@ extension PDFAutoScaler: PersistableEnum {}
 extension PDFLayoutMode: PersistableEnum {}
 extension PDFReadDirection: PersistableEnum {}
 extension PDFScrollDirection: PersistableEnum {}
+extension PDFSpreadMode: PersistableEnum {}
+extension PDFColumnsMode: PersistableEnum {}
 
 class PDFOptions: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
@@ -31,6 +33,10 @@ class PDFOptions: Object, ObjectKeyIdentifiable {
     @Persisted var marginOffset = 0.0
     @Persisted var lastScale = 1.0
     @Persisted var rememberInPagePosition = true
+    /// Optional (schema 143): rows saved before have no value, which reads as Off.
+    /// A non-optional enum column would come back as "" for them and crash on read.
+    @Persisted var spreadMode: PDFSpreadMode?
+    @Persisted var columnsMode: PDFColumnsMode?
     
     public func update(other: PDFOptions) {
         self.themeMode = other.themeMode
@@ -45,6 +51,8 @@ class PDFOptions: Object, ObjectKeyIdentifiable {
         self.marginOffset = other.marginOffset
         self.lastScale = other.lastScale
         self.rememberInPagePosition = other.rememberInPagePosition
+        self.spreadMode = other.spreadMode
+        self.columnsMode = other.columnsMode
     }
 
 }

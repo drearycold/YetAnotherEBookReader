@@ -131,6 +131,11 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
                         }
                     }
                 }
+
+                if oldSchemaVersion < 143 {
+                    // Added optional PDFOptions.spreadMode and columnsMode. Existing rows
+                    // read nil, which PDFOptions.toValue() maps to Off.
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,

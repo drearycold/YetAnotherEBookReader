@@ -20,7 +20,9 @@ extension PDFOptions {
             vMarginDetectStrength: vMarginDetectStrength,
             marginOffset: marginOffset,
             lastScale: lastScale,
-            rememberInPagePosition: rememberInPagePosition
+            rememberInPagePosition: rememberInPagePosition,
+            spreadMode: spreadMode ?? .Off,
+            columnsMode: columnsMode ?? .Off
         )
     }
 
@@ -37,5 +39,7 @@ extension PDFOptions {
         marginOffset = value.marginOffset
         lastScale = value.lastScale
         rememberInPagePosition = value.rememberInPagePosition
+        spreadMode = value.spreadMode
+        columnsMode = value.columnsMode
     }
 }
