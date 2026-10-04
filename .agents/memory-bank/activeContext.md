@@ -7,6 +7,21 @@ placement (content right of center, top offset / drift after page turns).
 
 ## Current Branch Notes
 
+- Margin-crop detection fixes (#94, #96), `PDFMarginCropController`:
+  - **Ink by luminance** (Rec. 601 Y < 200): coloured text counts. The thumbnail
+    is B G R A in memory; `PixelChannelOffsets` reads the real channel order.
+  - **The reader's highlights are excluded.** Detection runs on a `PDFPage.copy()`
+    without annotations carrying `highlightId`. Every highlight colour is ink by
+    luminance, and a highlight on the first lines moved the top edge by ~37 pt
+    (green highlights already did before). File annotations still count.
+  - **Scans cross the whole page** (were stopped at mid-page). Text in one half,
+    such as a chapter's last lines or a late opening, is found from the far edge.
+  - **Side scans are scaled by the detected text height**, not by white lines in
+    the outer quarters. On short pages the old scaling cut ~13 pt off line starts.
+  - Folios were already ignored on full pages (too sparse to anchor, too far to
+    pull in). #96's chapter-end symptom was the mid-page scan limit.
+  - Still open: #92 (heading after a wide gap dropped: `maxGap` is ~7 pt for 11/15
+    text), #93 (sparse right edge clipped), #95 (scan borders).
 - Auto-hiding bars (FolioReader style):
   - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on

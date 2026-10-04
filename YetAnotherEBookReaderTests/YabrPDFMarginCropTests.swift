@@ -80,6 +80,82 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// #94: a heading in red, orange or blue has a channel above 200 but is ink,
+    /// so it is found where the same heading in black is.
+    func testDetectsColouredHeading() throws {
+        func detectedTop(_ colour: UIColor) throws -> CGFloat {
+            try detectDrawnPage { _ in
+                ("CHAPTER HEADING IN COLOUR" as NSString).draw(
+                    at: CGPoint(x: 81, y: 96),
+                    withAttributes: [.font: UIFont.boldSystemFont(ofSize: 28), .foregroundColor: colour]
+                )
+                drawBodyLines(y: 140, count: 30)
+            }.minY
+        }
+        let black = try detectedTop(.black)
+        XCTAssertLessThan(black, 110, "reference heading should be detected")
+        let colours: [(String, UIColor)] = [
+            ("red", UIColor(red: 230 / 255, green: 30 / 255, blue: 30 / 255, alpha: 1)),
+            ("orange", UIColor(red: 1, green: 0.5, blue: 0, alpha: 1)),
+            ("blue", UIColor(red: 0.2, green: 0.5, blue: 1, alpha: 1)),
+        ]
+        for (name, colour) in colours {
+            XCTAssertEqual(try detectedTop(colour), black, accuracy: detectTolerance, "\(name) heading")
+        }
+    }
+
+    /// #94: a page of red text used to be blank to the detector, so nothing was cropped.
+    func testDetectsColouredBodyText() throws {
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 40, colour: UIColor(red: 230 / 255, green: 30 / 255, blue: 30 / 255, alpha: 1))
+        }
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.minY, 96, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxY, 96 + 40 * 15, accuracy: 4, "\(detected)")
+    }
+
+    /// Luminance weighs the channels differently, so they must be read in the
+    /// thumbnail's real byte order (B G R A for PDFKit).
+    func testPixelChannelOffsetsReadThumbnailColours() throws {
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize))
+        let data = renderer.pdfData { context in
+            context.beginPage()
+            UIColor.red.setFill()
+            context.fill(CGRect(origin: .zero, size: Self.pageSize))
+        }
+        let page = try XCTUnwrap(PDFDocument(data: data)?.page(at: 0))
+        let cgImage = try XCTUnwrap(page.thumbnail(of: Self.pageSize, for: .mediaBox).cgImage)
+        let channels = try XCTUnwrap(PixelChannelOffsets(cgImage: cgImage))
+        let bytes = try XCTUnwrap(CFDataGetBytePtr(cgImage.dataProvider?.data))
+        let pixel = (cgImage.height / 2) * cgImage.bytesPerRow + (cgImage.width / 2) * 4
+        XCTAssertGreaterThan(bytes[pixel + channels.red], 240)
+        XCTAssertLessThan(bytes[pixel + channels.green], 40)
+        XCTAssertLessThan(bytes[pixel + channels.blue], 40)
+    }
+
+    /// #96: a chapter's last lines at the top of the page. The bottom scan stopped
+    /// at mid-page and fell back to the page edge, and the side scans, diluted by
+    /// the blank below, cut into the start of the lines. The folio stays out.
+    func testDetectsShortPageAboveFolio() throws {
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 10)
+            ("127" as NSString).draw(
+                at: CGPoint(x: 296, y: 750),
+                withAttributes: [.font: UIFont(name: "TimesNewRomanPSMT", size: 10) ?? .systemFont(ofSize: 10)]
+            )
+        }
+        XCTAssertEqual(detected.minY, 96, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxY, 96 + 10 * 15, accuracy: 4, "\(detected)")
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// #96: a chapter opening whose text starts below mid-page.
+    func testDetectsContentInLowerHalf() throws {
+        try assertDetection(content: CGRect(x: 81, y: 92, width: 450, height: 250))
+    }
+
     // MARK: - Horizontal fit (Width auto scaler)
 
     func testPortraitFitWidthCentersCenteredContent() throws {
@@ -919,6 +995,25 @@ final class YabrPDFMarginCropTests: XCTestCase {
         manager.setNote(uuid: highlightId, note: "again")
         manager.removeHighlight(uuid: highlightId)
         XCTAssertTrue(noteMarkers(harness).isEmpty, "removed highlight removes the marker")
+    }
+
+    /// A highlight's box is taller than its glyphs, and every style's colour is ink
+    /// by luminance (#94). Detection runs on a copy without the reader's
+    /// annotations, which must leave the page's own annotations in place.
+    func testHighlightsDoNotChangeMarginDetection() throws {
+        for style in BookHighlightStyle.allCases {
+            let (harness, highlightId) = try makeHighlightHarness(style: style)
+            let page = harness.page(0)
+            let annotationCount = page.annotations.count
+            XCTAssertGreaterThan(annotationCount, 0)
+
+            let highlighted = detectedBounds(harness, pageIndex: 0)
+            XCTAssertEqual(page.annotations.count, annotationCount, "\(style) detection removed annotations")
+
+            harness.controller.annotationManager.removeHighlight(uuid: highlightId)
+            XCTAssertEqual(detectedBounds(harness, pageIndex: 0), highlighted, "\(style)")
+            tearDownWindow()
+        }
     }
 
     /// The fixture highlight sits on the page's first lines, so a marker that read
@@ -2419,6 +2514,46 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private func settle(_ interval: TimeInterval = 0.15) {
         RunLoop.main.run(until: Date().addingTimeInterval(interval))
         window?.layoutIfNeeded()
+    }
+
+    /// Detected bounds (crop-box relative, top-down) of a single page drawn by
+    /// `draw` in top-left coordinates, straight from the detector.
+    private func detectDrawnPage(_ draw: (UIGraphicsPDFRendererContext) -> Void) throws -> CGRect {
+        let pageRect = CGRect(origin: .zero, size: Self.pageSize)
+        let data = UIGraphicsPDFRenderer(bounds: pageRect).pdfData { context in
+            context.beginPage()
+            draw(context)
+        }
+        let page = try XCTUnwrap(PDFDocument(data: data)?.page(at: 0))
+        let defaults = PDFPreferenceValue()
+        let key = PageVisibleContentKey(
+            pageNumber: 1,
+            readingDirection: .LtR_TtB,
+            hMarginDetectStrength: defaults.hMarginDetectStrength,
+            vMarginDetectStrength: defaults.vMarginDetectStrength
+        )
+        let detected = PDFMarginCropController().visibleBounds(for: page, key: key)
+        record("PDFDETECT drawn page detected=\(detected)")
+        return detected
+    }
+
+    /// 11pt justified-looking body lines on a 15pt pitch, x 81...531, each
+    /// starting on a different word.
+    private func drawBodyLines(y: CGFloat, count: Int, colour: UIColor = .black) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont(name: "TimesNewRomanPSMT", size: 11) ?? .systemFont(ofSize: 11),
+            .foregroundColor: colour,
+        ]
+        let words = "Margins of a page frame the text block where every line begins on some word and runs to the measure".split(separator: " ")
+        for index in 0..<count {
+            let rotated = words[(index % words.count)...] + words[..<(index % words.count)]
+            let text = String(repeating: rotated.joined(separator: " ") + " ", count: 3) as NSString
+            let line = CGRect(x: 81, y: y + CGFloat(index) * 15, width: 450, height: 15)
+            UIGraphicsGetCurrentContext()?.saveGState()
+            UIRectClip(line)
+            text.draw(at: line.origin, withAttributes: attributes)
+            UIGraphicsGetCurrentContext()?.restoreGState()
+        }
     }
 
     private func makePDF(pages: [PageSpec]) throws -> URL {
