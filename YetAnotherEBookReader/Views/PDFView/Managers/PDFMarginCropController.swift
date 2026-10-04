@@ -118,6 +118,11 @@ class PDFMarginCropController {
     }
 
     private func analyzeVisibleContents(pdfPage: PDFPage, key: PageVisibleContentKey) -> PageVisibleContentValue {
+        // Points of Interest in Instruments: the detection, and its render,
+        // edge and region stages.
+        let detection = AppPerformanceSignpost.begin("PDFMarginDetection", "page \(key.pageNumber)")
+        defer { AppPerformanceSignpost.end("PDFMarginDetection", detection) }
+
         let pdfPage = Self.pageWithoutReaderAnnotations(pdfPage)
         let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
@@ -129,6 +134,7 @@ class PDFMarginCropController {
         let mediaDisplay = PDFPageDisplaySpace(box: boundsForMediaBox, rotation: pdfPage.rotation)
         let cropDisplaySize = PDFPageDisplaySpace(box: boundsForCropBox, rotation: pdfPage.rotation).size
 
+        let render = AppPerformanceSignpost.begin("PDFMarginRender")
         let imageMediaBox = pdfPage.thumbnail(
             of: CGSize(
                 width: mediaDisplay.size.width * thumbnailScale,
@@ -137,6 +143,7 @@ class PDFMarginCropController {
             for: .mediaBox
         )
         let imageCropBox = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
+        AppPerformanceSignpost.end("PDFMarginRender", render)
 
         guard let cgimage = imageMediaBox.cgImage,
               let channels = PixelChannelOffsets(cgImage: cgimage) else {
@@ -169,6 +176,7 @@ class PDFMarginCropController {
                 pixelsPerRow: Int(imageMediaBox.size.width) + padding,
                 channels: channels
             )
+            let edgesInterval = AppPerformanceSignpost.begin("PDFMarginEdges")
             let edges = detectContentEdges(
                 in: raster,
                 readingDirection: key.readingDirection,
@@ -179,11 +187,14 @@ class PDFMarginCropController {
                     height: mediaDisplay.size.height / cropDisplaySize.height
                 )
             )
+            AppPerformanceSignpost.end("PDFMarginEdges", edgesInterval)
             top = edges.top
             bottom = edges.bottom
             leading = edges.leading
             trailing = edges.trailing
 
+            let regionsInterval = AppPerformanceSignpost.begin("PDFMarginRegions")
+            defer { AppPerformanceSignpost.end("PDFMarginRegions", regionsInterval) }
             if key.spreadMode != .Off {
                 // The crop box's part of the media-box thumbnail, top-down.
                 let crop = mediaDisplay.toDisplay(boundsForCropBox)
