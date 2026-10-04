@@ -20,8 +20,16 @@ placement (content right of center, top offset / drift after page turns).
     the outer quarters. On short pages the old scaling cut ~13 pt off line starts.
   - Folios were already ignored on full pages (too sparse to anchor, too far to
     pull in). #96's chapter-end symptom was the mid-page scan limit.
+  - **Ragged edges (#93):** after the dense side edge, `extendBorderOverSparseInk`
+    walks outward over any ink within the detected text rows, across gaps up to
+    `max(4, lines/100)` px (about a word space). A few long lines, a long word or
+    a trailing dash are kept. A marginal note further out, and running heads or
+    folios outside the rows, are not. Both side edges are covered, so ragged-left
+    text works too.
+    - #93's scale jumps (Width mode) and left-margin wiggle (Page/Height mode
+      only) were left alone by choice. Width mode already pins the left margin.
   - Still open: #92 (heading after a wide gap dropped: `maxGap` is ~7 pt for 11/15
-    text), #93 (sparse right edge clipped), #95 (scan borders).
+    text), #95 (scan borders).
 - Auto-hiding bars (FolioReader style):
   - **Behaviour.** A tap-zone page turn (not the toolbar arrows) and a drag of the page view on
     screen hide the nav bar and toolbar. The drag is detected by a target on

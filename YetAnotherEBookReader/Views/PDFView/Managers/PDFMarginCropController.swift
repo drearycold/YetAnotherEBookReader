@@ -213,7 +213,8 @@ class PDFMarginCropController {
                     data: data,
                     channels: channels,
                     ratio: sideRatio,
-                    hMarginDetectStrength: vMarginDetectStrength
+                    hMarginDetectStrength: vMarginDetectStrength,
+                    sparseInkSpan: min(top, bottom)...max(top, bottom)
                 )
                 trailing = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -223,7 +224,8 @@ class PDFMarginCropController {
                     data: data,
                     channels: channels,
                     ratio: sideRatio,
-                    hMarginDetectStrength: vMarginDetectStrength
+                    hMarginDetectStrength: vMarginDetectStrength,
+                    sparseInkSpan: min(top, bottom)...max(top, bottom)
                 )
             case .TtB_RtL:
                 leading = blankBorderWidth(
@@ -257,7 +259,8 @@ class PDFMarginCropController {
                     data: data,
                     channels: channels,
                     ratio: sideRatio,
-                    hMarginDetectStrength: hMarginDetectStrength
+                    hMarginDetectStrength: hMarginDetectStrength,
+                    sparseInkSpan: min(leading, trailing)...max(leading, trailing)
                 )
                 bottom = blankBorderWidth(
                     size: imageMediaBox.size,
@@ -267,7 +270,8 @@ class PDFMarginCropController {
                     data: data,
                     channels: channels,
                     ratio: sideRatio,
-                    hMarginDetectStrength: hMarginDetectStrength
+                    hMarginDetectStrength: hMarginDetectStrength,
+                    sparseInkSpan: min(leading, trailing)...max(leading, trailing)
                 )
             }
         }
@@ -334,7 +338,9 @@ class PDFMarginCropController {
     /// strength. With `extendsAcrossLineGaps`, the border then walks outward over
     /// any ink separated from the body by no more than ~1.5x its first inter-line
     /// gap, so a short first line (paragraph tail) and ascenders are kept while a
-    /// running head further out is not.
+    /// running head further out is not. With `sparseInkSpan`, it walks outward over
+    /// any ink within those perpendicular lines instead, so the few long lines of
+    /// ragged text are kept (`extendBorderOverSparseInk`).
     private func blankBorderWidth(
         size: CGSize,
         padding: Int,
@@ -344,7 +350,8 @@ class PDFMarginCropController {
         channels: PixelChannelOffsets,
         ratio: Double = 1.0,
         hMarginDetectStrength: Double,
-        extendsAcrossLineGaps: Bool = false
+        extendsAcrossLineGaps: Bool = false,
+        sparseInkSpan: ClosedRange<Int>? = nil
     ) -> Int {
         let lineNumMax = { () -> Int in
             switch orientation {
@@ -365,7 +372,7 @@ class PDFMarginCropController {
         let pixelNumInRow = Int(size.width) + padding
         let scanLimit = lineNumMax - 1
 
-        func density(ofLine line: Int) -> Double {
+        func density(ofLine line: Int, pixels: Range<Int> = 1..<pixelNumMax) -> Double {
             let lineIndex: Int
             switch orientation {
             case .up, .upMirrored, .right, .rightMirrored:
@@ -374,7 +381,7 @@ class PDFMarginCropController {
                 lineIndex = lineNumMax - line - 1
             }
             var nonWhiteDensity = 0.0
-            for pixelInLine in 1..<pixelNumMax {
+            for pixelInLine in pixels {
                 let pixelIndex: Int
                 switch orientation {
                 case .up, .down, .upMirrored, .downMirrored:
@@ -412,7 +419,12 @@ class PDFMarginCropController {
 
         var result = border ?? 1
         if let border, extendsAcrossLineGaps {
-            result = extendBorderAcrossLineGaps(from: border, scanLimit: scanLimit, lineNumMax: lineNumMax, density: density(ofLine:))
+            result = extendBorderAcrossLineGaps(from: border, scanLimit: scanLimit, lineNumMax: lineNumMax, density: { density(ofLine: $0) })
+        } else if let border, let sparseInkSpan {
+            let pixels = max(sparseInkSpan.lowerBound, 1)..<min(sparseInkSpan.upperBound + 1, pixelNumMax)
+            if !pixels.isEmpty {
+                result = extendBorderOverSparseInk(from: border, lineNumMax: lineNumMax, density: { density(ofLine: $0, pixels: pixels) })
+            }
         }
 
         switch orientation {
@@ -421,6 +433,35 @@ class PDFMarginCropController {
         case .down, .downMirrored, .left, .leftMirrored:
             return lineNumMax - result - 1
         }
+    }
+
+    /// The side passes need several columns that are dense over the whole text
+    /// height, so where only a few lines run long (ragged right, a long word, a
+    /// trailing dash) the edge lands at the common line length and clips them.
+    /// Walks outward over any ink within the text's lines, across gaps up to about
+    /// a word space; a marginal note or folio further out is not reached.
+    private func extendBorderOverSparseInk(
+        from border: Int,
+        lineNumMax: Int,
+        density: (Int) -> Double
+    ) -> Int {
+        // Any ink at all: a thin dash at thumbnail scale is a few faint pixels,
+        // and the gap limit, not a floor, keeps stray specks out.
+        let maxGap = max(4, lineNumMax / 100)
+        var extended = border
+        var whiteRun = 0
+        var probe = border - 1
+        while probe >= 1 {
+            if density(probe) > 0 {
+                extended = probe
+                whiteRun = 0
+            } else {
+                whiteRun += 1
+                if whiteRun > maxGap { break }
+            }
+            probe -= 1
+        }
+        return extended
     }
 
     private func extendBorderAcrossLineGaps(

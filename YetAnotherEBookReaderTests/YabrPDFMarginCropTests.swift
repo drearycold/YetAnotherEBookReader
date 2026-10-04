@@ -156,6 +156,52 @@ final class YabrPDFMarginCropTests: XCTestCase {
         try assertDetection(content: CGRect(x: 81, y: 92, width: 450, height: 250))
     }
 
+    /// #93: ragged-right text where only two lines run to the full measure. The
+    /// side pass anchored at the common line length and cut those two off.
+    func testDetectsRaggedRightLongLines() throws {
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 40) { [5, 20].contains($0) ? 81...531 : 81...381 }
+        }
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// #93, mirrored: right-aligned text with two lines reaching further left.
+    func testDetectsRaggedLeftLongLines() throws {
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 40) { [5, 20].contains($0) ? 81...531 : 231...531 }
+        }
+        XCTAssertEqual(detected.minX, 81, accuracy: detectTolerance, "\(detected)")
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// #93: one line ending in an em dash past the others; the dash is a thin
+    /// stroke, the sparsest ink there is.
+    func testDetectsTrailingDashPastRaggedLines() throws {
+        let font = UIFont(name: "TimesNewRomanPSMT", size: 11) ?? .systemFont(ofSize: 11)
+        let line = "and then, as the river turned toward the old mill by the long road, the evening light\u{2014}" as NSString
+        let width = line.size(withAttributes: [.font: font]).width
+        XCTAssertGreaterThan(width, 330, "the line must run past the others")
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 40) { _ in 81...381 }
+            line.draw(at: CGPoint(x: 81, y: 96 + 40 * 15), withAttributes: [.font: font])
+        }
+        XCTAssertEqual(detected.maxX, 81 + width, accuracy: detectTolerance, "\(detected)")
+    }
+
+    /// The outward walk only crosses word-sized gaps: a marginal note beside the
+    /// text block stays out.
+    func testMarginalNoteBesideTextIsNotPulledIn() throws {
+        let detected = try detectDrawnPage { _ in
+            drawBodyLines(y: 96, count: 40)
+            ("note" as NSString).draw(
+                at: CGPoint(x: 552, y: 300),
+                withAttributes: [.font: UIFont(name: "TimesNewRomanPSMT", size: 8) ?? .systemFont(ofSize: 8)]
+            )
+        }
+        XCTAssertEqual(detected.maxX, 531, accuracy: detectTolerance, "\(detected)")
+    }
+
     // MARK: - Horizontal fit (Width auto scaler)
 
     func testPortraitFitWidthCentersCenteredContent() throws {
@@ -2539,7 +2585,12 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     /// 11pt justified-looking body lines on a 15pt pitch, x 81...531, each
     /// starting on a different word.
-    private func drawBodyLines(y: CGFloat, count: Int, colour: UIColor = .black) {
+    private func drawBodyLines(
+        y: CGFloat,
+        count: Int,
+        colour: UIColor = .black,
+        span: (Int) -> ClosedRange<CGFloat> = { _ in 81...531 }
+    ) {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont(name: "TimesNewRomanPSMT", size: 11) ?? .systemFont(ofSize: 11),
             .foregroundColor: colour,
@@ -2548,7 +2599,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         for index in 0..<count {
             let rotated = words[(index % words.count)...] + words[..<(index % words.count)]
             let text = String(repeating: rotated.joined(separator: " ") + " ", count: 3) as NSString
-            let line = CGRect(x: 81, y: y + CGFloat(index) * 15, width: 450, height: 15)
+            let x = span(index)
+            let line = CGRect(x: x.lowerBound, y: y + CGFloat(index) * 15, width: x.upperBound - x.lowerBound, height: 15)
             UIGraphicsGetCurrentContext()?.saveGState()
             UIRectClip(line)
             text.draw(at: line.origin, withAttributes: attributes)
