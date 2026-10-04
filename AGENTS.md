@@ -301,7 +301,9 @@ never store it, and observe the surface's notifications. Keep specialized behavi
 - `PDFBookmarkManager`
 - `PDFSearchController`
 - `PDFMarginCropController`
-- `PDFColumnDetector` and `PDFReadingFlow` (reading regions, #97/#19)
+- `PDFColumnDetector` and `PDFReadingFlow` (reading regions and steps, #97/#19);
+  jumps go through `YabrPDFViewController.jump(to:)` so they land on the step
+  showing their destination
 - `YabrPDFViewController+Chrome`
 - `YabrPDFViewController+Navigation`
 - `YabrPDFViewController+Options`

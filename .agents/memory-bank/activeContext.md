@@ -16,7 +16,7 @@ placement (content right of center, top offset / drift after page turns).
     - `PageVisibleContentValue.regions` holds the regions in reading order,
       crop-relative and top-down like `bounds`; empty means the page reads
       whole. The region modes are part of `PageVisibleContentKey`
-      (`init(pageNumber:options:)`; columns are forced Off for TtB_RtL).
+      (`init(pageNumber:options:)`).
     - **Spreads:** split at the crop box centre. Each half goes through
       `detectContentEdges` on a `PageRaster.cropped` sub-raster, so the spine
       shadow is the half's inner edge artifact. Auto needs a landscape page
@@ -27,29 +27,58 @@ placement (content right of center, top offset / drift after page turns).
       box (or of each spread half). It classifies windows of about 4 lines,
       merges them into bands, and moves boundaries into the blank gap between
       blocks. It needs ≥ 40% of the content in columns.
+      - **Text rule:** a split band stays split only if each column reads like
+        running text: ≥ 4 lines of text height (≤ 4% of the content height)
+        inked across ≥ half the column with no gap over an eighth of it,
+        covering ≥ 30% of the column's inked height. Tables (label ... number)
+        and figure grids read whole; a column that also holds a figure passes.
+      - **Vertical text (TtB_RtL):** tiers (段). The ink map is turned a
+        quarter (`turnedForVerticalText`), detected as columns, and turned
+        back: read from the right, band by band, top tier first.
   - **Reading** (`YabrPDFViewController+ReadingFlow`, `PDFReadingFlow.swift`).
     - `PDFPageReadingPlan` holds every screen of every region
       (`PDFPageViewportFitter.screens`: equal steps, ≥ 10% overlap, last
-      screen at the far margin), in display space.
+      screen at the far margin; one screen if the content ends on screen by
+      using the far margin), in display space. **A page read whole is one
+      region** (its content box): in Page mode any page longer than the view
+      at its fit steps a screen at a time. `readingPlan` is nil only for a
+      page shown in one step (and in Scroll mode), which keeps the old
+      fit/restore path.
     - The current step is derived from the view itself (top-left page point
       plus scale), not stored, so drags, zooms and restores need no
       bookkeeping.
     - **`turnPage`:** steps within the page first (`stepWithinPage`: apply the
       viewport plus the jump mask). Otherwise it sets `readingFlow`'s pending
       `.first`/`.last` before PDFKit or `takeOver` changes page;
-      `handlePageChange` consumes it.
+      `handlePageChange` consumes it. Prev onto a long page lands on its last
+      screen, not its saved position.
     - Buffers are prepared at the same arrival targets (next `.first`,
       previous `.last`), so `PDFReaderSurface` stays page-keyed.
-    - Rotation and option changes that keep the region modes set a pending
-      `.region` (`readingRegionOnScreen`).
-    - Unsplit pages and Scroll mode behave as before.
-  - **Deferred:**
-    - same-page step buffering (needs viewport-keyed buffers and per-view tile
-      attribution; the mask covers the re-render for now);
-    - jumps landing on the region holding their destination;
-    - stepping on unsplit pages;
-    - columns for TtB_RtL;
-    - a page-indicator region suffix.
+    - Rotation and option changes set a pending `.region`
+      (`readingRegionOnScreen`); it resolves to that region's step nearest the
+      saved point (`stepIndex(nearestUpperLeft:…region:)`).
+    - **Jumps** go through `jump(to:)` (destination, selection, highlight
+      rect, bookmark). Targets: `.destination(rect)` lands on the last step of
+      the region holding it that shows it; `.lowerLeft(point)` (bookmarks save
+      `currentDestination`, the visible lower-left) the step with that corner.
+      In single-page mode the page changes with `go(to: page)`: PDFKit's jump
+      to a point or selection scrolls on sideways after `handlePageChange`.
+      On the page on screen the step is applied directly under the mask.
+    - **Page indicator:** `12 / 300 · 3/7` (turns) on a page with a plan;
+      refreshed on page change, step, and when the bars come back.
+    - **Step masks:** the next and previous step's masks are drawn ahead on a
+      background queue (`prepareJumpMasks`, layouts from
+      `PDFPageViewportFit.pageToView`), matched by page, size and layout and
+      shifted by PDFKit's few-point landing offset. Dropped on theme,
+      highlight, buffer release and memory warnings. Measured on a heavy scan:
+      a step takes 1–4 ms with a prepared mask, 36–56 ms drawing it. A step's
+      mask holds past 400 ms (≤ 1 s) while its newly shown tiles draw; a drag
+      fades it.
+  - **Still deferred:**
+    - unmasked same-page steps (buffer takeover: viewport-keyed buffers plus
+      per-view tile attribution);
+    - two-axis stepping for over-wide regions;
+    - per-page overrides; regions in Scroll mode.
 - Margin-crop detection fixes (#94, #96), `PDFMarginCropController`:
   - **Ink by luminance** (Rec. 601 Y < 200): coloured text counts. The thumbnail
     is B G R A in memory; `PixelChannelOffsets` reads the real channel order.
