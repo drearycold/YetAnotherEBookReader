@@ -112,7 +112,19 @@ extension YabrPDFViewController {
         surface.showJumpMask(for: page)
         updatePageViewPositionHistory()
         updateReadingProgress()
+        updatePageIndicator()
         return true
+    }
+
+    /// "12 / 300", and on a page read in steps the step on screen of its turns:
+    /// "12 / 300 · 3/7".
+    func updatePageIndicator() {
+        guard let page = pdfView.currentPage else { return }
+        var title = "\(page.pageRef?.pageNumber ?? 1) / \(pdfView.document?.pageCount ?? 1)"
+        if pdfView.displayMode == .singlePage, let plan = readingPlan(for: page, in: pdfView) {
+            title += " · \(currentStep(in: plan, of: page) + 1)/\(plan.steps.count)"
+        }
+        pageIndicator.setTitle(title, for: .normal)
     }
 
     /// The page and region on screen, for keeping the region through a change

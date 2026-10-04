@@ -163,7 +163,7 @@ extension YabrPDFViewController {
         let showsJumpMask = isJumpTarget || pdfOptions.themePalette.drawsInverted
         pendingJumpMaskPage = nil
         let readingTarget = readingFlow.consumeTarget(for: curPageNum)
-        pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
+        updatePageIndicator()
         pageSlider.setValue(Float(curPageNum), animated: true)
 
         print("\(#function) curPageNum=\(curPageNum) pageIndicator=\(pageIndicator.title(for: .normal) ?? "Untitled") pageSlider=\(pageSlider.value)")
@@ -203,6 +203,8 @@ extension YabrPDFViewController {
 
         let viewport = singlePageViewport(for: curPage, in: pdfView, target: readingTarget)
         pdfView.applyViewport(viewport.fit, on: curPage)
+        // The step is known once the viewport is applied.
+        updatePageIndicator()
         // A buffered neighbour already rendered at this viewport hides PDFKit's
         // low-resolution placeholder while the page's tiles render; under dark it
         // also replaces the page-change mask (explicit jumps keep theirs).

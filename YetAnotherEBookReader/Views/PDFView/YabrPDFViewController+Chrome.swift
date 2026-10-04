@@ -237,6 +237,8 @@ extension YabrPDFViewController {
                 right: 0
             )
         } else {
+            // A drag may have moved to another step while the bars were hidden.
+            updatePageIndicator()
             additionalSafeAreaInsets = .zero
             nav.setNavigationBarHidden(false, animated: animated)
             nav.setToolbarHidden(false, animated: animated)

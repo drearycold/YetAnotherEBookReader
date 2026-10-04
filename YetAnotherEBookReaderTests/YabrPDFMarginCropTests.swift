@@ -506,6 +506,45 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertGreaterThan(harness.controller.currentStep(in: plan, of: page), 0, "not back at the top")
     }
 
+    /// The page indicator counts a page's turns: "page / pages · step/steps".
+    func testPageIndicatorCountsTheTurnsOfAPage() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.landscape)
+        let indicator = harness.controller.pageIndicator
+        let count = try XCTUnwrap(harness.controller.readingPlan(for: harness.page(0), in: harness.pdfView)).steps.count
+
+        for step in 1...count {
+            XCTAssertEqual(indicator.title(for: .normal), "1 / 2 · \(step)/\(count)")
+            pressNext(harness)
+        }
+        XCTAssertEqual(indicator.title(for: .normal), "2 / 2 · 1/\(count)")
+        pressPrev(harness)
+        XCTAssertEqual(indicator.title(for: .normal), "1 / 2 · \(count)/\(count)")
+    }
+
+    func testPageIndicatorShowsNoStepOnAPageThatFits() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(pages: Array(repeating: PageSpec(content: content), count: 2), viewSize: Self.portrait)
+        XCTAssertEqual(harness.controller.pageIndicator.title(for: .normal), "1 / 2")
+    }
+
+    /// A drag moves to another step while the bars are hidden; the indicator
+    /// shows it when they come back.
+    func testPageIndicatorFollowsADragOnceTheBarsComeBack() throws {
+        let content = CGRect(x: 81, y: 96, width: 450, height: 600)
+        let harness = try makeHarness(
+            pages: Array(repeating: PageSpec(content: content), count: 2),
+            viewSize: Self.landscape,
+            inNavigationController: true
+        )
+        let count = try XCTUnwrap(harness.controller.readingPlan(for: harness.page(0), in: harness.pdfView)).steps.count
+        harness.controller.setReaderBarsHidden(true, animated: false)
+        settle()
+        scrollCurrentPage(harness, toFraction: 1)
+        harness.controller.setReaderBarsHidden(false, animated: false)
+        XCTAssertEqual(harness.controller.pageIndicator.title(for: .normal), "1 / 2 · \(count)/\(count)")
+    }
+
     // MARK: - Columns (#19, #97)
 
     /// A paper's page: a title and abstract across the top, then two columns.
