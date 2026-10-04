@@ -251,6 +251,32 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(controller.searchList.history, ["posting", "inverted index"])
     }
 
+    /// The search list outlives its sheets, so a theme changed in between is
+    /// applied when it is shown again.
+    func testKeptSearchListFollowsThemeChanges() throws {
+        let controller = SpyYabrPDFViewController()
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: try makePDFURL(name: "search-theme", pageCount: 1))
+        XCTAssertEqual(controller.open(), 0)
+        controller.pdfOptions = PDFPreferenceValue(themeMode: .none)
+        let list = controller.searchList
+        list.loadViewIfNeeded()
+        list.viewWillAppear(false)
+        let light = PDFThemePalette(themeMode: .none).listStyle
+        XCTAssertEqual(list.searchBar.searchTextField.textColor, light.text)
+
+        var options = controller.pdfOptions
+        options.themeMode = .dark
+        controller.pdfOptions = options
+        controller.presentSearch()
+        list.viewWillAppear(false)
+
+        let dark = PDFThemePalette(themeMode: .dark).listStyle
+        XCTAssertEqual(list.searchBar.searchTextField.textColor, dark.text)
+        XCTAssertEqual(list.tableView.backgroundColor, dark.background)
+        XCTAssertEqual(list.searchBar.barTintColor, dark.background)
+        XCTAssertEqual(list.tableView.separatorColor, dark.separator)
+    }
+
     func testAnnotationsSheetHasNoSearchTab() {
         let controller = SpyYabrPDFViewController()
         controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil)

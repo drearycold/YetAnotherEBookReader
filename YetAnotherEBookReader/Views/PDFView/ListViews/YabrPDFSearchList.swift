@@ -33,16 +33,9 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         searchBar.placeholder = "Search in PDF"
         searchBar.sizeToFit()
         searchBar.searchBarStyle = .default
-        
-        // The field takes the system colours of the sheet's interface style.
-        let style = listStyle
-        searchBar.barTintColor = style.background
-        searchBar.backgroundColor = style.background
         searchBar.backgroundImage = UIImage()
-        searchBar.tintColor = style.accent
-        searchBar.searchTextField.textColor = style.text
-        searchBar.searchTextField.font = style.bodyFont
-        
+        applyListStyle()
+
         self.tableView.tableHeaderView = searchBar
         
         activityIndicator.translatesAutoresizingMaskIntoConstraints = false
@@ -55,6 +48,21 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         ])
     }
     
+    /// The field takes the system colours of the sheet's interface style; the
+    /// rest follows the reader theme, also when it changed since the last time.
+    override func applyListStyle() {
+        super.applyListStyle()
+        let style = listStyle
+        searchBar.barTintColor = style.background
+        searchBar.backgroundColor = style.background
+        searchBar.tintColor = style.accent
+        searchBar.searchTextField.textColor = style.text
+        searchBar.searchTextField.font = style.bodyFont
+        if isViewLoaded {
+            tableView.reloadData()
+        }
+    }
+
     /// Kept once a result of it is opened, as FolioReader records queries.
     func recordCurrentQuery() {
         searchHistory.record(currentQuery)

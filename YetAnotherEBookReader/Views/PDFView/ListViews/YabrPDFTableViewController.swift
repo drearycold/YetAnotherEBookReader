@@ -45,14 +45,25 @@ class YabrPDFTableViewController: UITableViewController {
         self.dateFormatter.timeStyle = .medium
         self.dateFormatter.doesRelativeDateFormatting = true
         
-        let style = listStyle
         self.tableView.separatorInset = UIEdgeInsets.zero
-        self.tableView.backgroundColor = style.background
-        self.tableView.separatorColor = style.separator
         self.tableView.rowHeight = UITableView.automaticDimension
         self.tableView.estimatedRowHeight = 60
+        applyListStyle()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // A list kept between presentations (search) follows a theme change.
+        applyListStyle()
+    }
+
+    /// Colours from the reader's current theme; subclasses style their own views.
+    func applyListStyle() {
+        let style = listStyle
+        tableView.backgroundColor = style.background
+        tableView.separatorColor = style.separator
+    }
+
     // MARK: - sections
     override func numberOfSections(in tableView: UITableView) -> Int {
         return sections.count

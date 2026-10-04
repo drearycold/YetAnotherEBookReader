@@ -1063,6 +1063,20 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
     }
 
+    /// A highlight on a page that is not shown takes no taps, even where its
+    /// line would be on screen.
+    func testHighlightOnHiddenPageTakesNoTaps() throws {
+        let (harness, highlightId) = try makeHighlightHarness(style: .yellow)
+        let point = highlightCenter(harness, highlightId)
+        XCTAssertEqual(harness.surface.highlight(at: point)?.0, highlightId, "on its page")
+
+        pressNext(harness)
+        settle(0.5)
+        XCTAssertEqual(harness.pdfView.currentPage, harness.page(1))
+        XCTAssertNil(harness.surface.highlight(at: point), "page 1's highlight from page 2")
+        XCTAssertFalse(harness.surface.handleHighlightTap(at: point))
+    }
+
     /// Tapping anywhere on an underlined line shows its menu, under dark too,
     /// where the drawn bar is only the bottom of the line.
     func testUnderlineIsTappableAcrossItsLine() throws {
