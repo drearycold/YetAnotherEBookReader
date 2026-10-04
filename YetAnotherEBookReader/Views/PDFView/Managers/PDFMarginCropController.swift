@@ -148,7 +148,7 @@ class PDFMarginCropController {
         var leading = 0
         var trailing = 0
         /// Reading regions, in thumbnail pixels.
-        var regionRects: [CGRect] = []
+        var regionRects: [(rect: CGRect, kind: PDFReadingRegion.Kind)] = []
 
         print("\(#function) bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
         print("\(#function) sizeForThumbnailImage \(sizeForThumbnailImage)")
@@ -195,16 +195,30 @@ class PDFMarginCropController {
                         limit: raster.height
                     )
                 )
-                regionRects = spreadHalves(of: page, key: key)
+                regionRects = spreadHalves(of: page, key: key).map { ($0, .spreadHalf) }
                 // One half holds everything (a blank verso): the page reads whole,
                 // fitted to that half. Text across half the width is too thin for
                 // the whole-page passes to find its top and bottom.
-                if regionRects.count == 1, let half = regionRects.first {
+                if regionRects.count == 1, let half = regionRects.first?.rect {
                     top = Int(half.minY)
                     bottom = Int(half.maxY) - 1
                     leading = Int(half.minX)
                     trailing = Int(half.maxX) - 2
                     regionRects = []
+                }
+            }
+
+            if key.columnsMode == .Auto {
+                // Columns (#19) of each half of a spread, or of the page's content.
+                let parts = regionRects.isEmpty
+                    ? [(rect: CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1), kind: PDFReadingRegion.Kind.spreadHalf)]
+                    : regionRects
+                let columned = parts.flatMap { part -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] in
+                    let columns = columnRegions(in: raster, rect: part.rect)
+                    return columns.isEmpty && !regionRects.isEmpty ? [part] : columns
+                }
+                if columned.count >= 2 {
+                    regionRects = columned
                 }
             }
         }
@@ -223,7 +237,7 @@ class PDFMarginCropController {
         UIColor.black.setFill()
         UIRectFrame(rectangle)
         UIColor.systemBlue.setFill()
-        regionRects.forEach(UIRectFrame)
+        regionRects.map(\.rect).forEach(UIRectFrame)
 
         #if DEBUG
         UIColor.red.setStroke()
@@ -244,7 +258,7 @@ class PDFMarginCropController {
         }
         return PageVisibleContentValue(
             bounds: pageRect(rectangle),
-            regions: regionRects.map { PDFReadingRegion(rect: pageRect($0), kind: .spreadHalf) },
+            regions: regionRects.map { PDFReadingRegion(rect: pageRect($0.rect), kind: $0.kind) },
             thumbImage: newImage
         )
     }
@@ -285,6 +299,21 @@ class PDFMarginCropController {
         }
         // Vertical text runs right to left, and so do its spreads.
         return key.readingDirection == .TtB_RtL ? halves.reversed() : halves
+    }
+
+    /// The columns (#19) in `rect` (thumbnail pixels) as reading regions in
+    /// reading order, in thumbnail pixels; empty when it is not set in columns.
+    private func columnRegions(in raster: PageRaster, rect: CGRect) -> [(rect: CGRect, kind: PDFReadingRegion.Kind)] {
+        let part = raster.cropped(
+            columns: Self.pixelRange(rect.minX, rect.maxX, limit: raster.width),
+            lines: Self.pixelRange(rect.minY, rect.maxY, limit: raster.height)
+        )
+        let map = PDFInkMap(width: part.width, height: part.height) { x, y in
+            part.darkness(line: y, pixel: x, .up) > 0
+        }
+        return PDFColumnDetector.regions(in: map).map { region in
+            (region.rect.offsetBy(dx: CGFloat(part.originX), dy: CGFloat(part.originY)), region.kind)
+        }
     }
 
     /// Whole pixels from `lower` to `upper`, within `0..<limit`.

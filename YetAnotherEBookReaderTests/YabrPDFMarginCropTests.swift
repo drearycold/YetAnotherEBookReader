@@ -414,6 +414,90 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertNil(harness.controller.readingPlan(for: page, in: harness.pdfView))
     }
 
+    // MARK: - Columns (#19, #97)
+
+    /// A paper's page: a title and abstract across the top, then two columns.
+    private func drawPaperPage(_ context: UIGraphicsPDFRendererContext) {
+        drawBodyLines(y: 96, count: 5) { _ in 60...552 }
+        drawBodyLines(y: 190, count: 34) { _ in 60...290 }
+        drawBodyLines(y: 190, count: 34) { _ in 322...552 }
+    }
+
+    func testDetectsColumnsBelowAFullWidthBlock() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto, draw: drawPaperPage)
+        XCTAssertEqual(layout.regions.map(\.kind), [.spanning, .column, .column])
+        guard layout.regions.count == 3 else { return }
+        let (abstract, left, right) = (layout.regions[0].rect, layout.regions[1].rect, layout.regions[2].rect)
+        XCTAssertEqual(abstract.minX, 60, accuracy: detectTolerance, "\(abstract)")
+        XCTAssertEqual(abstract.maxX, 552, accuracy: detectTolerance, "\(abstract)")
+        XCTAssertEqual(abstract.minY, 96, accuracy: detectTolerance, "\(abstract)")
+        XCTAssertEqual(abstract.maxY, 96 + 5 * 15, accuracy: 4, "\(abstract)")
+        for (column, x) in [(left, CGFloat(60)...290), (right, CGFloat(322)...552)] {
+            XCTAssertEqual(column.minX, x.lowerBound, accuracy: detectTolerance, "\(column)")
+            XCTAssertEqual(column.maxX, x.upperBound, accuracy: detectTolerance, "\(column)")
+            XCTAssertEqual(column.minY, 190, accuracy: detectTolerance, "\(column)")
+            XCTAssertEqual(column.maxY, 190 + 34 * 15, accuracy: 4, "\(column)")
+        }
+    }
+
+    func testColumnsOffOrSingleColumnReadsWhole() throws {
+        XCTAssertTrue(try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Off, draw: drawPaperPage).regions.isEmpty)
+        let single = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto) { _ in
+            drawBodyLines(y: 96, count: 40)
+        }
+        XCTAssertTrue(single.regions.isEmpty)
+    }
+
+    /// Vertical text is not read in columns: the key turns them off.
+    func testColumnsAreOffForVerticalText() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.pageSize, spreadMode: .Off, columnsMode: .Auto, readingDirection: .TtB_RtL, draw: drawPaperPage)
+        XCTAssertTrue(layout.regions.isEmpty)
+    }
+
+    /// A spread of two-column pages: each half's columns, half by half.
+    func testColumnsWithinSpreadHalves() throws {
+        let layout = try detectDrawnLayout(pageSize: Self.spreadSize, spreadMode: .Auto, columnsMode: .Auto) { _ in
+            for x in [CGFloat(81), 693] {
+                drawBodyLines(y: 96, count: 40) { _ in x...(x + 210) }
+                drawBodyLines(y: 96, count: 40) { _ in (x + 240)...(x + 450) }
+            }
+        }
+        XCTAssertEqual(layout.regions.map(\.kind), [.column, .column, .column, .column])
+        XCTAssertEqual(layout.regions.map(\.rect.minX), layout.regions.map(\.rect.minX).sorted(), "left half's columns, then the right half's")
+    }
+
+    /// A paper page is read title, then the left column a screen at a time, then
+    /// the right one, then the next page.
+    func testNextReadsAPaperPageRegionByRegion() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("paper.pdf")
+        try UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: Self.pageSize)).writePDF(to: url) { context in
+            for _ in 0..<2 {
+                context.beginPage()
+                drawPaperPage(context)
+            }
+        }
+        tempURLs.append(url)
+        let harness = try makeHarness(pages: [], viewSize: Self.portrait, pdfURL: url, columnsMode: .Auto)
+        let page = harness.page(0)
+        let plan = try XCTUnwrap(harness.controller.readingPlan(for: page, in: harness.pdfView))
+        XCTAssertEqual(Set(plan.steps.map(\.region)), [0, 1, 2])
+        XCTAssertGreaterThan(plan.steps.count, 3, "a column is taller than the view at its width")
+
+        for step in plan.steps.indices {
+            XCTAssertTrue(harness.pdfView.currentPage === page)
+            XCTAssertEqual(harness.controller.currentStep(in: plan, of: page), step)
+            pressNext(harness)
+        }
+        XCTAssertTrue(harness.pdfView.currentPage === harness.page(1), "the next page after the last step")
+        XCTAssertEqual(harness.controller.readingPlan(for: harness.page(1), in: harness.pdfView).map { harness.controller.currentStep(in: $0, of: harness.page(1)) }, 0)
+
+        pressPrev(harness)
+        XCTAssertTrue(harness.pdfView.currentPage === page)
+        XCTAssertEqual(harness.controller.currentStep(in: plan, of: page), plan.steps.count - 1, "back onto a page: its last step")
+    }
+
     /// A part of the raster reads in its own coordinates from every edge, so the
     /// passes can run on one half of a spread or one column as on a whole page.
     func testCroppedRasterReadsItsOwnCoordinates() throws {
@@ -2944,7 +3028,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
         inNavigationController: Bool = false,
         initialPage: Int? = nil,
         initialPoint: CGPoint? = nil,
-        spreadMode: PDFSpreadMode = .Off
+        spreadMode: PDFSpreadMode = .Off,
+        columnsMode: PDFColumnsMode = .Off
     ) throws -> Harness {
         let url = try pdfURL ?? makePDF(pages: pages)
         let controller = AppearanceTrackingPDFViewController()
@@ -2969,7 +3054,8 @@ final class YabrPDFMarginCropTests: XCTestCase {
             selectedAutoScaler: .Width,
             pageMode: .Page,
             readingDirection: readingDirection,
-            spreadMode: spreadMode
+            spreadMode: spreadMode,
+            columnsMode: columnsMode
         )
         if let initialPage {
             // Same shape as a restored reading position (no in-page offset by default).
@@ -3075,6 +3161,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private func detectDrawnLayout(
         pageSize: CGSize,
         spreadMode: PDFSpreadMode,
+        columnsMode: PDFColumnsMode = .Off,
         readingDirection: PDFReadDirection = .LtR_TtB,
         rotation: Int = 0,
         draw: (UIGraphicsPDFRendererContext) -> Void
@@ -3088,8 +3175,9 @@ final class YabrPDFMarginCropTests: XCTestCase {
         var options = PDFPreferenceValue()
         options.readingDirection = readingDirection
         options.spreadMode = spreadMode
+        options.columnsMode = columnsMode
         let layout = PDFMarginCropController().readingLayout(for: page, key: PageVisibleContentKey(pageNumber: 1, options: options))
-        record("PDFREGIONS size=\(pageSize) spread=\(spreadMode) rotation=\(rotation) bounds=\(layout.bounds) regions=\(layout.regions.map(\.rect))")
+        record("PDFREGIONS size=\(pageSize) spread=\(spreadMode) columns=\(columnsMode) rotation=\(rotation) bounds=\(layout.bounds) regions=\(layout.regions.map(\.rect))")
         return layout
     }
 

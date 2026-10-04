@@ -93,6 +93,21 @@ struct PDFOptionView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                     }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Columns")
+                            Spacer()
+                            Text(model.preferences.readingDirection == .LtR_TtB ? "read one column at a time" : "left-to-right text only")
+                                .font(.caption)
+                        }
+                        Picker(selection: $model.preferences.columnsMode, label: Text("Columns")) {
+                            ForEach(PDFColumnsMode.allCases, id: \.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .disabled(model.preferences.readingDirection != .LtR_TtB)
+                    }
                 case .Scroll:
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Scroll Direction")
@@ -170,6 +185,7 @@ struct PDFOptionView: View {
             .onChange(of: model.preferences.marginOffset) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.rememberInPagePosition) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.spreadMode) { _ in handleOptionsChange() }
+            .onChange(of: model.preferences.columnsMode) { _ in handleOptionsChange() }
         }
     }
     

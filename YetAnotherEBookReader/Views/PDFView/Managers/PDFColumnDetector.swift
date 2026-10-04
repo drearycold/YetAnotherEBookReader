@@ -244,27 +244,49 @@ enum PDFColumnDetector {
     /// the full-width block's first or last line across them.
     private static func refined(_ bands: [Band], in map: PDFInkMap) -> [Band] {
         var bands = bands
+        func rowBlank(_ row: Int) -> Bool {
+            (0..<map.width).allSatisfy { !map.isInked(x: $0, y: row) }
+        }
+        // The whole gutter: a full-width line may have a gap between two
+        // letters at any one column of it.
         func gutterBlank(_ row: Int, _ gutters: [Range<Int>]) -> Bool {
             gutters.allSatisfy { gutter in
-                let core = (gutter.lowerBound + gutter.upperBound) / 2
-                return !map.isInked(x: core, y: row)
+                gutter.allSatisfy { !map.isInked(x: $0, y: row) }
             }
         }
         for index in bands.indices {
             guard case .split(let gutters) = bands[index].kind else { continue }
             var rows = bands[index].rows
             if index > 0, bands[index - 1].kind == .spanning {
+                // Up to the full-width block's last line across the gutter...
                 var top = rows.lowerBound
                 while top > bands[index - 1].rows.lowerBound, gutterBlank(top - 1, gutters) {
                     top -= 1
+                }
+                // ...then past that line's descenders, to the gap between blocks.
+                var start = top
+                while start < rows.upperBound, !rowBlank(start) {
+                    start += 1
+                }
+                if start < rows.upperBound {
+                    top = start
                 }
                 rows = top..<rows.upperBound
                 bands[index - 1].rows = bands[index - 1].rows.lowerBound..<top
             }
             if index + 1 < bands.count, bands[index + 1].kind == .spanning {
+                // Down to the full-width block's first line across the gutter...
                 var bottom = rows.upperBound
                 while bottom < bands[index + 1].rows.upperBound, gutterBlank(bottom, gutters) {
                     bottom += 1
+                }
+                // ...then back past that line's ascenders, to the gap.
+                var end = bottom
+                while end > rows.lowerBound, !rowBlank(end - 1) {
+                    end -= 1
+                }
+                if end > rows.lowerBound {
+                    bottom = end
                 }
                 rows = rows.lowerBound..<bottom
                 bands[index + 1].rows = bottom..<bands[index + 1].rows.upperBound
