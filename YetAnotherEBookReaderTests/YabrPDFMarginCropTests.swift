@@ -175,7 +175,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         var options = PDFPreferenceValue()
         _ = detector.readingLayout(for: page, key: PageVisibleContentKey(pageNumber: 1, options: options))
         let render = try XCTUnwrap(detector.reusableRender(of: page)?.image)
-        // A neighbour rendered meanwhile, as a buffer refresh can.
+        // A neighbour rendered meanwhile, as a turn onto a buffered page can.
         _ = detector.readingLayout(for: try XCTUnwrap(document.page(at: 1)), key: PageVisibleContentKey(pageNumber: 2, options: options))
 
         options.hMarginDetectStrength = 6
@@ -3108,6 +3108,36 @@ final class YabrPDFMarginCropTests: XCTestCase {
         settle()
 
         XCTAssertEqual(harness.pdfView.viewportExtraInset, .zero)
+    }
+
+    /// A buffer refresh (as when a cover ends) never detects a neighbour on the
+    /// main thread: one not yet detected is left to the analysis queue, which
+    /// refreshes the buffers once it has detected it.
+    func testBufferRefreshLeavesUndetectedNeighboursToTheQueue() throws {
+        let harness = try makeJumpHarness(initialPage: 3)
+        try waitForBuffers(harness, pages: [4, 2])
+        let controller = harness.controller
+        let detector = controller.marginCropController
+        func key(_ number: Int) -> PageVisibleContentKey {
+            PageVisibleContentKey(pageNumber: number, options: controller.pdfOptions)
+        }
+
+        detector.clearCache()
+        controller.refreshPageBuffers()
+        for number in [2, 4] {
+            XCTAssertNil(detector.cachedValue(for: key(number)), "page \(number) detected on the main thread")
+        }
+        XCTAssertTrue(detector.recentRenders.isEmpty)
+
+        detector.preAnalyzeAdjacentPages(currentPageNumber: 3, document: harness.pdfView.document, key: key) {
+            controller.refreshPageBuffers()
+        }
+        let deadline = Date().addingTimeInterval(3)
+        while [2, 4].contains(where: { detector.cachedValue(for: key($0)) == nil }) && Date() < deadline {
+            settle(0.05)
+        }
+        XCTAssertTrue(detector.recentRenders.isEmpty, "detected by the queue, not the main thread")
+        try waitForBuffers(harness, pages: [4, 2])
     }
 
     /// A page whose saved position (here, scale) differs from the buffer's is not

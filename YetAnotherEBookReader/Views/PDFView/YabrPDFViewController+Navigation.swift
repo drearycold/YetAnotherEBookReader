@@ -298,6 +298,13 @@ extension YabrPDFViewController {
         let index = document.index(for: page)
         // The next page first: reading forward is the common case.
         let neighbours = [index + 1, index - 1].compactMap { $0 >= 0 ? document.page(at: $0) : nil }
+        // Laying out a neighbour not yet detected under these options would
+        // detect it here on the main thread, while the analysis queue detects
+        // it too: leave it to `preAnalyzeAdjacentPages`, which refreshes the
+        // buffers once both are.
+        guard neighbours.allSatisfy({ neighbour in
+            marginCropController.cachedValue(for: PageVisibleContentKey(pageNumber: neighbour.pageRef?.pageNumber ?? 1, options: pdfOptions)) != nil
+        }) else { return }
         let next = neighbours.first { document.index(for: $0) == index + 1 }
         // A neighbour read in steps is shown where a turn lands on it: the next
         // page at its first step, the previous one at its last.

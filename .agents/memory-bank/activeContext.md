@@ -149,8 +149,8 @@ placement (content right of center, top offset / drift after page turns).
     - Whole-page summed-area tables were tried and dropped: building them
       (1–2.6 ms at -O) cost more than a text page's passes.
   - **Options changes.** The page on screen is re-detected from its render:
-    `recentRenders` keeps three (the page and its neighbours, since a buffer
-    refresh can detect a neighbour on the main thread between slider steps).
+    `recentRenders` keeps three (the page and its neighbours, since a turn onto
+    a buffered page can detect it on the main thread).
     It is main-thread only, and is dropped on `clearCache` and on memory
     warnings.
   - **Same results.** An A/B run against the old detector over every page the
@@ -183,9 +183,12 @@ placement (content right of center, top offset / drift after page turns).
       `PDFPage.thumbnail`.
     - 8-bit gray: CoreGraphics' gray isn't Rec. 601 on encoded values.
     - A smaller raster.
-  - **Follow-up.** `refreshPageBuffers` (after a cover ends) can detect a
-    neighbour on the main thread while the analysis queue is still detecting
-    it.
+  - **Buffers wait for detection.** `refreshPageBuffers` lays out the
+    neighbours only once both are detected under the current options. Before,
+    a refresh after a cover ended could detect a neighbour on the main thread
+    while the analysis queue was still detecting it, a render on the main
+    thread (19 ms on the benchmark's scan). The queue's completion refreshes
+    them instead (`testBufferRefreshLeavesUndetectedNeighboursToTheQueue`).
 - Rotated pages (`page.rotation` ≠ 0) are detected and fitted as displayed:
   - **`PDFPageDisplaySpace`** (in `PDFPageViewportFitter.swift`) maps a page box
     to display space and back. PDFKit turns pages clockwise; display space has a

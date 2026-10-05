@@ -12,7 +12,8 @@ class PDFMarginCropController {
     /// The pages last rendered for `readingLayout`, oldest first, with their
     /// renders. An options change re-detects the page on screen from its render
     /// instead of rendering the page again (a detect-strength slider re-detects
-    /// at each of its steps), even when a neighbour was rendered meanwhile.
+    /// at each of its steps), even when a neighbour was rendered meanwhile, as
+    /// a turn onto a buffered page can.
     /// Main thread only, as `readingLayout` is.
     private(set) var recentRenders: [(page: PDFPage, thumbnail: Thumbnail)] = []
     private static let keptRenders = 3
