@@ -19,6 +19,16 @@ enum UITestingConfiguration {
         arguments.contains(mockLibraryArgument)
     }
 
+    /// UI tests and the unit-test host skip the tracking and ad-consent prompts, as
+    /// if answered: the system and ad SDK dialogs would cover the app under test.
+    /// Ads are not started either.
+    static func skipsConsentPrompts(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        isEnabled(arguments: arguments) || environment["XCTestConfigurationFilePath"] != nil
+    }
+
     static func folioReaderCloseButtonEnabled(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         isEnabled(arguments: arguments)
     }

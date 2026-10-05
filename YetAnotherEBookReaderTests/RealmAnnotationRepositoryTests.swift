@@ -28,6 +28,27 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
         realmConfig = nil
     }
     
+    /// YabrPDF highlights saved under the shelf identity move to the annotation
+    /// id; other readers' highlights and the ones already in place stay.
+    func testRefileHighlightsMovesMisfiledYabrPDFHighlights() throws {
+        let shelfId = "server^lib@1"
+        let prefId = "lib-key - 1"
+        let misfiled = TestFixtures.makeHighlight(bookId: shelfId, readerName: ReaderType.YabrPDF.rawValue, note: "kept")
+        let removed = TestFixtures.makeHighlight(bookId: shelfId, readerName: ReaderType.YabrPDF.rawValue, removed: true)
+        let otherReader = TestFixtures.makeHighlight(bookId: shelfId, readerName: ReaderType.YabrEPUB.rawValue)
+        let inPlace = TestFixtures.makeHighlight(bookId: prefId, readerName: ReaderType.YabrPDF.rawValue)
+        [misfiled, removed, otherReader, inPlace].forEach(repository.saveHighlight)
+
+        XCTAssertEqual(repository.refileHighlights(fromBookId: shelfId, toBookId: prefId, readerName: ReaderType.YabrPDF.rawValue), 2)
+
+        let visible = repository.getHighlights(forBookId: prefId, excludeRemoved: true)
+        XCTAssertEqual(Set(visible.map(\.id)), [misfiled.id, inPlace.id])
+        XCTAssertEqual(visible.first { $0.id == misfiled.id }?.note, "kept")
+        XCTAssertEqual(repository.getHighlights(forBookId: prefId, excludeRemoved: false).count, 3, "a removed one moves too, still removed")
+        XCTAssertEqual(repository.getHighlights(forBookId: shelfId, excludeRemoved: false).map(\.id), [otherReader.id])
+        XCTAssertEqual(repository.refileHighlights(fromBookId: shelfId, toBookId: prefId, readerName: ReaderType.YabrPDF.rawValue), 0, "idempotent")
+    }
+
     func testBookmarkCRUD() throws {
         let bookId = "1^test_lib@server-uuid"
         let pos = "epubcfi(/4/2/10/1:0)"

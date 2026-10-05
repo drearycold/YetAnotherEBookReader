@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFReferenceListCell: UITableViewCell {
     let titleLabel = UILabel()
     
@@ -17,7 +18,7 @@ class YabrPDFReferenceListCell: UITableViewCell {
         self.backgroundColor = UIColor.clear
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.numberOfLines = 1
+        titleLabel.numberOfLines = 0
         
         contentView.addSubview(titleLabel)
 
@@ -26,14 +27,14 @@ class YabrPDFReferenceListCell: UITableViewCell {
         
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "H:|-[title]-|",
+                withVisualFormat: "H:|-15-[title]-15-|",
                 metrics: nil,
                 views: views
             )
         )
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "V:|-[title]-|",
+                withVisualFormat: "V:|-12-[title]-12-|",
                 metrics: nil,
                 views: views
             )

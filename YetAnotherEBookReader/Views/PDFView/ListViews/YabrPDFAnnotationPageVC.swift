@@ -11,9 +11,11 @@ import UIKit
 internal let kReuseCellIdentifier = "io.github.drearycold.DSReader.Cell.ReuseIdentifier"
 internal let kReuseHeaderFooterIdentifier = "io.github.drearycold.DSReader.Cell.ReuseHeaderFooterIdentifier"
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFAnnotationPageVC: UIPageViewController {
     weak var pdfViewController: YabrPDFViewController?
-    var yabrPDFView: YabrPDFView?
+    /// Read from the reader each time; the page view on screen can change.
+    var yabrPDFView: YabrPDFView? { pdfViewController?.pdfView }
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
     var segmentedControl: UISegmentedControl!
@@ -23,7 +25,6 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     
     let bookmarkViewController = YabrPDFBookmarkList()
     let highlightViewController = YabrPDFHighlightList()
-    let searchViewController = YabrPDFSearchList()
     let referenceViewController = YabrPDFReferenceList()
 
     var index: Int = 0
@@ -44,12 +45,12 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        viewList = [bookmarkViewController, highlightViewController, searchViewController]
+        // Search has its own button (`YabrPDFViewController.presentSearch`).
+        viewList = [bookmarkViewController, highlightViewController]
         bookmarkViewController.didMove(toParent: self)
         highlightViewController.didMove(toParent: self)
-        searchViewController.didMove(toParent: self)
-        
-        segmentedControlItems = ["Bookmark", "Highlight", "Search"]
+
+        segmentedControlItems = ["Bookmark", "Highlight"]
         
         if self.yabrPDFMetaSource?.yabrPDFReferenceText(yabrPDFView) != nil {
             viewList.append(referenceViewController)
@@ -67,7 +68,8 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
         self.delegate = self
         self.dataSource = self
 
-        self.view.backgroundColor = UIColor.white
+        let listStyle = (pdfViewController?.pdfOptions.themePalette ?? PDFThemePalette(themeMode: .none)).listStyle
+        self.view.backgroundColor = listStyle.background
         if index >= viewList.count {
             index = 0
         }
@@ -83,13 +85,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
 
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", style: .plain, target: self, action: #selector(dismiss))
         
-        if let fillColor = PDFPageWithBackground.fillColor {
-            segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
-        }
-        
-        if let textColor = bookmarkViewController.textColor {
-            segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
-        }
+        listStyle.apply(to: segmentedControl)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -147,6 +143,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
 
 // MARK: UIPageViewControllerDelegate
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFAnnotationPageVC: UIPageViewControllerDelegate {
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -160,6 +157,7 @@ extension YabrPDFAnnotationPageVC: UIPageViewControllerDelegate {
 
 // MARK: UIPageViewControllerDataSource
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFAnnotationPageVC: UIPageViewControllerDataSource {
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {

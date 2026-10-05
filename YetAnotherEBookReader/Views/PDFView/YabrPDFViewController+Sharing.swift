@@ -6,7 +6,7 @@
 import PDFKit
 import UIKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
     func sharePDF(annotated: Bool) {
         let provider = YabrPDFSharingProvider(placeholderItem: "")
@@ -32,12 +32,7 @@ extension YabrPDFViewController {
                 try FileManager.default.removeItem(at: tmpFile)
             }
             if annotated {
-                let fillColor = PDFPageWithBackground.fillColor
-                PDFPageWithBackground.fillColor = nil
-                defer {
-                    PDFPageWithBackground.fillColor = fillColor
-                }
-                guard pdfView.document?.write(to: tmpFile) == true
+                guard writeAnnotatedPDF(to: tmpFile)
                 else {
                     return
                 }
@@ -61,5 +56,11 @@ extension YabrPDFViewController {
         }
 
         present(vc, animated: true, completion: nil)
+    }
+
+    /// Writes the document with its highlights; notes travel as the highlights'
+    /// comments. The page theme is not rendered.
+    func writeAnnotatedPDF(to url: URL) -> Bool {
+        surface.annotatedExportDocument()?.write(to: url) == true
     }
 }

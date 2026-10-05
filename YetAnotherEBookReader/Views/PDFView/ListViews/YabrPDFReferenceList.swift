@@ -9,6 +9,7 @@
 import UIKit
 import SwiftSoup
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFReferenceList: YabrPDFTableViewController {
     fileprivate var sectionBookmarks = [Int: [PDFBookmark]]()
     
@@ -42,20 +43,13 @@ class YabrPDFReferenceList: YabrPDFTableViewController {
             return cell
         }
 
-        cell.titleLabel.textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor.lightGray,
-            UIColor.black
-        )
+        cell.titleLabel.font = listStyle.bodyFont
+        cell.titleLabel.textColor = listStyle.text
         cell.titleLabel.text = bookmark.title
         
         return cell
     }
 
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 40
-    }
-    
     // MARK: - Table view delegate
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

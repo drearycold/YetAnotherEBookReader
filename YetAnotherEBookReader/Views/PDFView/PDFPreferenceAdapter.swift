@@ -15,22 +15,12 @@ extension PDFPreferenceValue {
         isDark ? darkValue : lightValue
     }
 
+    var themePalette: PDFThemePalette {
+        PDFThemePalette(themeMode: themeMode)
+    }
+
     var fillColor: CGColor {
-        switch themeMode {
-        case .none:
-            return .init(gray: 0.0, alpha: 0.0)
-        case .serpia:
-            return CGColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
-        case .forest:
-            return CGColor(
-                red: CGFloat(Int("BA", radix: 16) ?? 255) / 255.0,
-                green: CGFloat(Int("D5", radix: 16) ?? 255) / 255.0,
-                blue: CGFloat(Int("C1", radix: 16) ?? 255) / 255.0,
-                alpha: 1.0
-            )
-        case .dark:
-            return .init(gray: 0.0, alpha: 1.0)
-        }
+        themePalette.background
     }
 
     func toReaderEnginePreferences() -> ReaderEnginePreferences {

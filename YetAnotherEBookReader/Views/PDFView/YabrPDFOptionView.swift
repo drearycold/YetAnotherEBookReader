@@ -25,6 +25,20 @@ final class PDFOptionViewModel: ObservableObject {
     }
 }
 
+/// Reports its dismissal however it happens: a tap outside, a swipe down, or
+/// in code.
+final class DismissAwareHostingController<Content: View>: UIHostingController<Content> {
+    var onDismiss: (() -> Void)?
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed {
+            onDismiss?()
+            onDismiss = nil
+        }
+    }
+}
+
 struct PDFOptionView: View {
     @ObservedObject var model: PDFOptionViewModel
     
@@ -61,6 +75,33 @@ struct PDFOptionView: View {
                         Text("Reading Direction")
                         Picker(selection: $model.preferences.readingDirection, label: Text("Reading Direction")) {
                             ForEach(PDFReadDirection.allCases, id:\.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Two-Page Spreads")
+                            Spacer()
+                            Text("read one half at a time").font(.caption)
+                        }
+                        Picker(selection: $model.preferences.spreadMode, label: Text("Two-Page Spreads")) {
+                            ForEach(PDFSpreadMode.allCases, id: \.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Columns")
+                            Spacer()
+                            Text(model.preferences.readingDirection == .LtR_TtB ? "read one column at a time" : "read one tier at a time")
+                                .font(.caption)
+                        }
+                        Picker(selection: $model.preferences.columnsMode, label: Text("Columns")) {
+                            ForEach(PDFColumnsMode.allCases, id: \.self) {
                                 Text($0.id).tag($0)
                             }
                         }
@@ -142,6 +183,8 @@ struct PDFOptionView: View {
             .onChange(of: model.preferences.vMarginDetectStrength) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.marginOffset) { _ in handleOptionsChange() }
             .onChange(of: model.preferences.rememberInPagePosition) { _ in handleOptionsChange() }
+            .onChange(of: model.preferences.spreadMode) { _ in handleOptionsChange() }
+            .onChange(of: model.preferences.columnsMode) { _ in handleOptionsChange() }
         }
     }
     

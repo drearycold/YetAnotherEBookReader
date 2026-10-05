@@ -8,6 +8,7 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFHighlightList: YabrPDFTableViewController {
     fileprivate var sectionHighlights = [Int: [PDFHighlight]]()
 
@@ -55,66 +56,16 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFHighlightListCell
 
-        guard let yabrPDFView = yabrPDFView,
-              let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row] else {
+        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row] else {
             return cell
         }
 
-        // Format date
-        let dateString = dateFormatter.string(from: highlight.date)
-
-        // Date
-        cell.dateLabel.text = dateString.uppercased()
-        cell.dateLabel.textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor(white: 5, alpha: 0.3),
-            UIColor.lightGray
+        cell.configure(
+            highlight: highlight,
+            date: dateFormatter.string(from: highlight.date).uppercased(),
+            style: listStyle
         )
-        
-        // Text
-        let text = NSMutableAttributedString(string: highlight.content)
-        let range = NSRange(location: 0, length: text.length)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 3
-        let textColor = yabrPDFMetaSource?.yabrPDFOptionsIsNight(
-            yabrPDFView,
-            UIColor.lightGray,
-            UIColor.black
-        ) ?? UIColor.darkText
-
-        text.addAttribute(NSAttributedString.Key.paragraphStyle, value: paragraph, range: range)
-        text.addAttribute(NSAttributedString.Key.font, value: UIFont(name: "Avenir-Light", size: 16)!, range: range)
-        text.addAttribute(NSAttributedString.Key.foregroundColor, value: textColor, range: range)
-
-        if (highlight.type == BookHighlightStyle.underline.rawValue) {
-            text.addAttribute(NSAttributedString.Key.backgroundColor, value: UIColor.clear, range: range)
-            text.addAttribute(NSAttributedString.Key.underlineColor, value: BookHighlightStyle.colorForStyle(highlight.type, nightMode: yabrPDFMetaSource?.yabrPDFOptionsIsNight(yabrPDFView, true, false) ?? false), range: range)
-            text.addAttribute(NSAttributedString.Key.underlineStyle, value: NSNumber(value: NSUnderlineStyle.single.rawValue as Int), range: range)
-        } else {
-            text.addAttribute(NSAttributedString.Key.backgroundColor, value: BookHighlightStyle.colorForStyle(highlight.type, nightMode: yabrPDFMetaSource?.yabrPDFOptionsIsNight(yabrPDFView, true, false) ?? false), range: range)
-        }
-
-        // Text
-        
-        cell.highlightLabel.attributedText = text
-        
-        // Note text if it exists
-        if let note = highlight.note {
-            cell.noteLabel.text = note
-        } else {
-            cell.noteLabel.text = nil
-        }
-
-        
         return cell
-    }
-
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row] else {
-            return 0.0
-        }
-
-        return 80 + (highlight.note != nil ? 40 : 0)
     }
 
     // MARK: - Table view delegate
@@ -125,24 +76,53 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
               let pdfPage = yabrPDFView?.document?.page(at: page - 1)
         else { return }
         
-        yabrPDFView?.go(to: pdfPage)
+        // The step showing its first line, on a page read in steps (#97).
+        if let pdfViewController,
+           let rect = pdfViewController.surface.highlights[highlight.uuid]?.first?.selection.bounds(for: pdfPage) {
+            pdfViewController.jump(to: pdfPage, showing: rect)
+        } else {
+            yabrPDFView?.go(to: pdfPage)
+        }
         self.dismiss(animated: true)
     }
 
-    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete {
-            guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
-            else { return }
+    override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
+        else { return nil }
 
-            //TODO: remove
-            yabrPDFMetaSource?.yabrPDFHighlights(yabrPDFView, remove: highlight)
-            
-            sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
-            if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
-                sectionHighlights.removeValue(forKey: sections[indexPath.section])
-                sections.remove(at: indexPath.section)
-            }
+        let delete = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, completion in
+            self?.removeHighlight(highlight, at: indexPath)
+            completion(true)
+        }
+        let note = UIContextualAction(style: .normal, title: highlight.note == nil ? "Note" : "Edit Note") { [weak self] _, _, completion in
+            self?.editNote(of: highlight)
+            completion(true)
+        }
+        note.backgroundColor = .systemBlue
+        return UISwipeActionsConfiguration(actions: [delete, note])
+    }
+
+    /// Removes through the annotation manager so the page and the persisted
+    /// highlights stay in step.
+    private func removeHighlight(_ highlight: PDFHighlight, at indexPath: IndexPath) {
+        pdfViewController?.annotationManager.removeHighlight(uuid: highlight.uuid)
+
+        guard tableView.window != nil else { return }
+        sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
+        if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
+            sectionHighlights.removeValue(forKey: sections[indexPath.section])
+            sections.remove(at: indexPath.section)
+            tableView.deleteSections(IndexSet(integer: indexPath.section), with: .fade)
+        } else {
             tableView.deleteRows(at: [indexPath], with: .fade)
+        }
+    }
+
+    private func editNote(of highlight: PDFHighlight) {
+        guard let pdfViewController else { return }
+        pdfViewController.presentNoteEditor(for: highlight.uuid, from: self) { [weak self] in
+            self?.loadItems()
+            self?.tableView.reloadData()
         }
     }
     

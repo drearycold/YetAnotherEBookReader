@@ -11,15 +11,15 @@ import PDFKit
 import OSLog
 import SwiftUI
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, ObservableObject {
-    let pdfView = YabrPDFView()
-    let pdfViewAux = YabrPDFView()
-    
-    let thumbController = UIViewController()
-
-    let blankView = UIImageView()
-    let blankActivityView = UIActivityIndicatorView()
+    /// Hosts the page views; see `PDFReaderSurface`.
+    let surface = PDFReaderSurface()
+    /// The page view on screen. Read it at the point of use; never store it.
+    var pdfView: YabrPDFView { surface.activeView }
+    /// The floating reference view (the chrome's aux button).
+    let auxSurface = PDFReaderSurface()
+    var pdfViewAux: YabrPDFView { auxSurface.activeView }
     
     let logger = Logger()
     
@@ -38,46 +38,70 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let pageBackButton = UIButton()
     let pageAuxButton = UIButton()
     
-    let annotationView = YabrPDFAnnotationView()
-    
     let shareBarButtonItem = UIBarButtonItem()
     
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
-    
-    let thumbImageView = UIImageView()
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
     weak var readerEngineDelegate: ReaderEngineDelegate?
     var initialPosition: ReaderEnginePosition?
     
     lazy var annotationManager: PDFAnnotationManager = {
-        let bookId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Key") ?? ""
-        return PDFAnnotationManager(pdfView: pdfView, delegate: readerEngineDelegate, bookId: bookId)
+        // The id the highlights are read back with, not the shelf identity.
+        let bookId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "PrefId") ?? ""
+        return PDFAnnotationManager(surface: surface, delegate: readerEngineDelegate, bookId: bookId)
     }()
-    lazy var bookmarkManager = PDFBookmarkManager(pdfView: pdfView, metaSource: yabrPDFMetaSource)
-    lazy var searchController = PDFSearchController(pdfView: pdfView, metaSource: yabrPDFMetaSource)
-    lazy var marginCropController = PDFMarginCropController(
-        pdfView: pdfView,
-        blankView: blankView,
-        blankActivityView: blankActivityView
-    )
+    lazy var bookmarkManager = PDFBookmarkManager(surface: surface, metaSource: yabrPDFMetaSource)
+    lazy var searchController = PDFSearchController(surface: surface, metaSource: yabrPDFMetaSource)
+    lazy var menuManager = PDFMenuManager(controller: self)
+    /// The search sheet's list, kept while the reader is open so reopening
+    /// shows the last query and its results, as FolioReader's search does.
+    lazy var searchList: YabrPDFSearchList = {
+        let list = YabrPDFSearchList()
+        list.hostController = self
+        list.title = "Search"
+        return list
+    }()
+    let marginCropController = PDFMarginCropController()
+
+    /// Read by `PDFPageWithBackground.draw` on PDFKit's render threads.
+    nonisolated let pageRenderTheme = PDFPageRenderTheme()
+
+    /// Page number (1-based) of a pending jump; `handlePageChange` shows the jump
+    /// mask once that page's viewport is applied.
+    var pendingJumpMaskPage: Int?
+    /// Where a page read in steps (#97) lands when the page change under way is
+    /// handled.
+    let readingFlow = PDFReadingFlowController()
+    /// Set while `invalidateRenderedPages` re-attaches the document; PDFKit's page
+    /// changes meanwhile are not the reader's.
+    var isReattachingDocument = false
+    /// Set while `handleScaleChange` stores the page view's scale.
+    var isRecordingScale = false
+    /// A tap's pending reveal of the hidden bars; see `requestBarToggle`.
+    var pendingBarReveal: DispatchWorkItem?
+    static let barRevealDelay: TimeInterval = 0.3
+    /// PDF Options is open; the bars stay hidden until it closes.
+    var isPresentingOptions = false
     
     @Published var pdfOptions = PDFPreferenceValue() {
         didSet {
-            PDFPageWithBackground.fillColor = pdfOptions.fillColor
-            
+            if isRecordingScale {
+                // PDFKit rescaled (every fitted page turn): only remember the scale.
+                yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
+                return
+            }
+
+            applyThemePalette()
+
             let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
-            self.navigationController?.navigationBar.barTintColor = backgroundColor
-            self.navigationController?.navigationBar.backgroundColor = backgroundColor
             self.navigationController?.toolbar.barTintColor = backgroundColor
             self.navigationController?.toolbar.backgroundColor = backgroundColor
             self.tabBarController?.tabBar.barTintColor = backgroundColor
             self.tabBarController?.tabBar.backgroundColor = backgroundColor
             applyChromeTheme()
-            
-            self.pdfView.backgroundColor = backgroundColor
-            
+
             guard let curPage = self.pdfView.currentPage,
                   let curPageNum = curPage.pageRef?.pageNumber else { return }
             
@@ -100,6 +124,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
                 }
             case .Scroll:
                 self.pdfView.displayMode = .singlePageContinuous
+                self.pdfView.restoreDefaultPageBreakMargins()
                 pageSlider.semanticContentAttribute = .forceLeftToRight
                 pdfView.displaysRTL = false
                 switch pdfOptions.scrollDirection {
@@ -116,6 +141,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
                 }
                 
                 let viewPosition = getPageViewPositionHistory(curPageNum)?.point
+                markJumpTarget(curPage)
                 if viewPosition != nil {
                     pdfView.go(to: PDFDestination(page: curPage, at: viewPosition!))
                 } else {
@@ -128,9 +154,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             }
             
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapResize(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                surface.pageTapResize(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
-                pdfView.pageTapDisable()
+                surface.pageTapDisable()
             }
             
             yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
@@ -178,43 +204,64 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         
         // pdfView.usePageViewController(true, withViewOptions: nil)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .PDFViewScaleChanged, object: pdfView)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .PDFViewDisplayBoxChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .readerSurfacePageChanged, object: surface)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .readerSurfaceScaleChanged, object: surface)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .readerSurfaceDisplayBoxChanged, object: surface)
         
         pdfView.autoScales = false
+        surface.drawLog = pageRenderTheme
+        surface.onCoverEnded = { [weak self] in
+            DispatchQueue.main.async { self?.refreshPageBuffers() }
+        }
+        // The bars float over the page (see `pageLayoutInsets`); keep the view
+        // under them whatever their appearance.
+        extendedLayoutIncludesOpaqueBars = true
+        surface.onUserScroll = { [weak self] in
+            self?.setReaderBarsHidden(true, animated: true)
+        }
+        // Turning with the toolbar's arrows keeps the toolbar, and the bars, up.
+        surface.onTapZonePageTurn = { [weak self] in
+            self?.setReaderBarsHidden(true, animated: true)
+        }
+        surface.onPageTap = { [weak self] in
+            self?.requestBarToggle()
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(handleSelectionChangeForBars(_:)), name: .PDFViewSelectionChanged, object: nil)
 
         configureReaderChrome()
-        configureSelectionOverlay()
+        configureSelectionMenus()
         
         self.annotationManager.injectAllHighlights()
         
         
-        marginCropController.configureBlankOverlay()
-        
-        pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
-        
-        configureThumbnailPreview()
+        surface.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if let navigationBar = navigationController?.navigationBar {
+            pdfOptions.themePalette.apply(to: navigationBar)
+        }
+        // Hide PDFKit's placeholder and the unfitted first layout until the first
+        // page is positioned.
+        surface.showLoadingCover()
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
 //        self.viewSafeAreaInsetsDidChange()
 //        self.viewLayoutMarginsDidChange()
         
-//        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
         if pdfOptions.pageMode == .Page {
-            pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+            surface.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
         }
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
         if let page = pdfView.document?.page(at: destPageIndex) {
-            if page.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                self.addBlankSubView(page: page)
-            }
             self.pdfView.goToFirstPage(self)
+            markJumpTarget(page)
             self.pdfView.go(to: page)
             
 //                if self.pdfView.currentPage?.pageRef?.pageNumber != destPageIndex {
@@ -227,21 +274,26 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         if destPageIndex == 0 {
             self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
+        surface.finishLoadingCover()
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         updatePageViewPositionHistory()
+        let region = readingRegionOnScreen()
         
         super.viewWillTransition(to: size, with: coordinator)
         
         coordinator.animate { _ in
             
         } completion: { [self] _ in
+            if let region {
+                readingFlow.setPendingTarget(.region(region.region), pageNumber: region.pageNumber)
+            }
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                surface.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
-                pdfView.pageTapDisable()
+                surface.pageTapDisable()
             }
         }
     }
@@ -251,28 +303,103 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         updateChromeContainerLayout()
     }
     
-    func addBlankSubView(page: PDFPage?) {
-        marginCropController.showBlankOverlay(page: page, options: pdfOptions)
+    /// The page after (`forward`) or before the current one in document order.
+    func adjacentPage(forward: Bool) -> PDFPage? {
+        guard let document = pdfView.document, let page = pdfView.currentPage else { return nil }
+        let index = document.index(for: page) + (forward ? 1 : -1)
+        guard index >= 0, index < document.pageCount else { return nil }
+        return document.page(at: index)
     }
-    
-    func clearBlankSubView() {
-        marginCropController.hideBlankOverlay()
+
+    /// Turns to the next (`forward`) or previous page in document order. A rendered
+    /// buffer of that page becomes the page view; otherwise PDFKit turns, covered
+    /// by a buffer or, under dark, a snapshot.
+    func turnPage(forward: Bool) {
+        updatePageViewPositionHistory()
+        // A page read in steps (#97) is read through them first.
+        if stepWithinPage(forward: forward) {
+            return
+        }
+        // Arriving forward reads a page in steps from its start; back, from its end.
+        let arrival: PDFReadingTarget = forward ? .first : .last
+        let target = adjacentPage(forward: forward)
+        if let pageNumber = target?.pageRef?.pageNumber {
+            readingFlow.setPendingTarget(arrival, pageNumber: pageNumber)
+        }
+        if pdfView.displayMode == .singlePage,
+           let target,
+           surface.takeOver(showing: target, viewport: { [unowned self] page, view in
+               singlePageViewport(for: page, in: view, target: arrival).fit
+           }) {
+            return
+        }
+
+        coverPageTurnIfNeeded(forward: forward)
+        if forward {
+            pdfView.goToNextPage(nil)
+        } else {
+            pdfView.goToPreviousPage(nil)
+        }
     }
-    
+
+    /// Dark page turns: PDFKit's page transition starts before `handlePageChange`
+    /// can cover it, so freeze the current page first; `handlePageChange` then
+    /// swaps in the new page. Not needed when the target page's buffer has
+    /// rendered: it covers the page change exactly, and a snapshot's glyphs render
+    /// a little heavier than PDFKit's tiles, which shows as the mask fades. An
+    /// unrendered buffer would show PDFKit's white placeholder.
+    func coverPageTurnIfNeeded(forward: Bool) {
+        guard pdfOptions.themePalette.drawsInverted,
+              pdfView.displayMode == .singlePage,
+              let page = pdfView.currentPage
+        else { return }
+        if let target = adjacentPage(forward: forward), surface.hasRenderedBuffer(showing: target) {
+            return
+        }
+        surface.freezeWithJumpMask(showing: page)
+    }
+
+    /// Call before navigating to a different page by a jump (TOC, history, slider,
+    /// lists, restore). Ordinary next/prev turns do not show the mask.
+    func markJumpTarget(_ page: PDFPage?) {
+        guard let pageNumber = page?.pageRef?.pageNumber,
+              pageNumber != pdfView.currentPage?.pageRef?.pageNumber
+        else { return }
+        pendingJumpMaskPage = pageNumber
+    }
+
+    func applyThemePalette() {
+        let palette = pdfOptions.themePalette
+        // navigationItem exists before the reader is pushed, so this also holds
+        // when `open()` sets the options ahead of presentation.
+        palette.apply(to: navigationItem)
+        if let navigationBar = navigationController?.navigationBar {
+            palette.apply(to: navigationBar)
+        }
+        pageRenderTheme.drawsInverted = palette.drawsInverted
+        surface.applyTheme(palette)
+        auxSurface.applyTheme(palette)
+        pdfViewAux.invertsPagePlaceholders = palette.drawsInverted
+        // The aux view shows the same pages, whose annotations `surface` owns.
+        surface.highlightAppearance = palette.drawsInverted ? .dark : .standard
+    }
 }
 
-extension YabrPDFViewController: PDFDocumentDelegate {
+@available(iOS 16.0, macCatalyst 16.0, *)
+extension YabrPDFViewController: PDFDocumentDelegate, PDFPageRenderThemeProviding {
     func classForPage() -> AnyClass {
         return PDFPageWithBackground.self
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController: PDFViewDelegate {
     func pdfViewParentViewController() -> UIViewController {
         return self
     }
 }
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 protocol YabrPDFMetaSource {
     func yabrPDFBook(_ view: YabrPDFView?, info: String) -> String?
     

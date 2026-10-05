@@ -231,7 +231,9 @@ struct MainView: View {
         }
         .onChange(of: viewModel.consentRequestTriggered) { triggered in
             if triggered {
-                requestIDFA()
+                if !UITestingConfiguration.skipsConsentPrompts() {
+                    requestIDFA()
+                }
                 viewModel.consentRequestTriggered = false
             }
         }

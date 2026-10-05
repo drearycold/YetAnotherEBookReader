@@ -8,7 +8,7 @@
 import SwiftUI
 import PDFKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 struct PDFViewUI: UIViewControllerRepresentable {
     let pdfViewContainer = PDFViewContainer()
     

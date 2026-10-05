@@ -6,40 +6,35 @@
 import PDFKit
 import UIKit
 
-@available(macCatalyst 14.0, *)
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFViewController {
+    /// Builds the Contents menu from the outline's top level. Cheap, so it runs on
+    /// the main thread (it used to fill `tocList` from a background queue).
     func buildTocList() {
-        DispatchQueue.global(qos: .utility).async {
-            var tableOfContents = [UIMenuElement]()
+        var tableOfContents = [UIMenuElement]()
+        tocList.removeAll()
 
-            if let pdfDoc = self.pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
-                while outlineRoot.numberOfChildren == 1 {
-                    outlineRoot = outlineRoot.child(at: 0)!
-                }
-                for i in (0..<outlineRoot.numberOfChildren) {
-                    self.tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
-                    tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { _ in
-                        guard let dest = outlineRoot.child(at: i)?.destination,
-                              let curPage = self.pdfView.currentPage
-                        else { return }
-
-                        self.updateHistoryMenu(curPage: curPage)
-
-                        if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                            self.addBlankSubView(page: dest.page)
-                        }
-                        self.pdfView.go(to: dest)
-                    })
-
-                }
+        if let pdfDoc = pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
+            while outlineRoot.numberOfChildren == 1, let onlyChild = outlineRoot.child(at: 0) {
+                outlineRoot = onlyChild
             }
+            for i in 0..<outlineRoot.numberOfChildren {
+                let item = outlineRoot.child(at: i)
+                let label = item?.label ?? "Label at \(i)"
+                tocList.append((label, item?.destination?.page?.pageRef?.pageNumber ?? 1))
+                tableOfContents.append(UIAction(title: label) { [weak self] _ in
+                    guard let self,
+                          let dest = item?.destination,
+                          let curPage = self.pdfView.currentPage
+                    else { return }
 
-            let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
-
-            DispatchQueue.main.async {
-                self.titleInfoButton.menu = navContentsMenu
+                    self.updateHistoryMenu(curPage: curPage)
+                    self.jump(to: dest)
+                })
             }
         }
+
+        titleInfoButton.menu = UIMenu(title: "Contents", children: tableOfContents)
     }
 
     func updateHistoryMenu(curPage: PDFPage, location: CGRect? = nil) {
@@ -97,9 +92,7 @@ extension YabrPDFViewController {
                     }
                 }
             }
-            if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                self.addBlankSubView(page: curPage)
-            }
+            self.markJumpTarget(curPage)
             if let location = location {
                 self.pdfView.go(to: location, on: curPage)
             } else {
@@ -138,6 +131,8 @@ extension YabrPDFViewController {
     }
 
     @objc func handlePageChange(notification: Notification) {
+        // Re-attaching shows the first page for a moment.
+        guard !isReattachingDocument else { return }
         var titleLabel = initialPosition?.chapterName
         guard let curPage = pdfView.currentPage else { return }
 
@@ -159,7 +154,14 @@ extension YabrPDFViewController {
         self.titleInfoButton.setTitle(titleLabel, for: .normal)
 
         let curPageNum = pdfView.currentPage?.pageRef?.pageNumber ?? 1
-        pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
+        // Dark pages are drawn into PDFKit's tiles and a newly shown page is a
+        // white placeholder until they render, so every dark page change is
+        // covered; light themes only cover jumps.
+        let isJumpTarget = pendingJumpMaskPage == curPageNum
+        let showsJumpMask = isJumpTarget || pdfOptions.themePalette.drawsInverted
+        pendingJumpMaskPage = nil
+        let readingTarget = readingFlow.consumeTarget(for: curPageNum)
+        updatePageIndicator()
         pageSlider.setValue(Float(curPageNum), animated: true)
 
         print("\(#function) curPageNum=\(curPageNum) pageIndicator=\(pageIndicator.title(for: .normal) ?? "Untitled") pageSlider=\(pageSlider.value)")
@@ -167,6 +169,8 @@ extension YabrPDFViewController {
         guard pdfView.frame.width > 1.0 else { return }
 
         if pdfView.displayMode != .singlePage {
+            surface.discardBuffers()
+            pdfView.restoreDefaultPageBreakMargins()
             pdfView.scaleFactor = pdfOptions.lastScale
 
             if let pageViewPosition = getPageViewPositionHistory(curPageNum),
@@ -188,190 +192,124 @@ extension YabrPDFViewController {
             return
         }
 
-        addBlankSubView(page: curPage)
-
-        [PDFDisplayBox.mediaBox, PDFDisplayBox.cropBox, PDFDisplayBox.trimBox, PDFDisplayBox.bleedBox, PDFDisplayBox.artBox].forEach {
-            let bounds = curPage.bounds(for: $0)
-            print("\(#function) boundsForBox box=\($0.rawValue) bounds=\(bounds)")
-        }
-        let boundsForCropBox = curPage.bounds(for: .cropBox)
-        let boundsForMediaBox = curPage.bounds(for: .mediaBox)
-        let boundForVisibleContentKey = PageVisibleContentKey(
-            pageNumber: curPageNum,
-            readingDirection: pdfOptions.readingDirection,
-            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
-        )
-
-        let boundForVisibleContent = marginCropController.visibleBounds(
-            for: curPage,
-            key: boundForVisibleContentKey,
-            marginOffset: pdfOptions.marginOffset
-        )
-
         marginCropController.preAnalyzeAdjacentPages(
             currentPageNumber: curPageNum,
             document: pdfView.document,
-            readingDirection: pdfOptions.readingDirection,
-            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-            vMarginDetectStrength: pdfOptions.vMarginDetectStrength,
-            marginOffset: pdfOptions.marginOffset
+            key: { [pdfOptions] in PageVisibleContentKey(pageNumber: $0, options: pdfOptions) },
+            completion: { [weak self] in self?.refreshPageBuffers() }
         )
-        print("\(#function) pageVisibleContentBounds.count=\(marginCropController.visibleContentBounds.count)")
 
-        if let pageViewPosition = getPageViewPositionHistory(curPageNum),
-           pageViewPosition.scaler > 0,
-           pageViewPosition.viewSize == pdfView.frame.size {
-            let lastDest = PDFDestination(
-                page: curPage,
-                at: pageViewPosition.point
-            )
-            lastDest.zoom = pageViewPosition.scaler
-            print("\(#function) displayMode=\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
-
-            let bottomRight = PDFDestination(
-                page: curPage,
-                at: CGPoint(x: lastDest.point.x + boundsForCropBox.width, y: lastDest.point.y + boundsForCropBox.height)
-            )
-            bottomRight.zoom = 1.0
-
-            pdfView.scaleFactor = pageViewPosition.scaler
-
-            pdfView.go(to: bottomRight)
-            pdfView.go(to: lastDest)
-            return
+        let viewport = singlePageViewport(for: curPage, in: pdfView, target: readingTarget)
+        pdfView.applyViewport(viewport.fit, on: curPage)
+        // The step is known once the viewport is applied.
+        updatePageIndicator()
+        // A buffered neighbour already rendered at this viewport hides PDFKit's
+        // low-resolution placeholder while the page's tiles render; under dark it
+        // also replaces the page-change mask (explicit jumps keep theirs).
+        // A takeover already shows the page, fully rendered. Under dark only a
+        // rendered buffer replaces the mask (an unrendered one shows PDFKit's
+        // white placeholder).
+        let takenOver = surface.consumeTakeover(of: curPage)
+        let covered = !takenOver && surface.coverWithBuffer(showing: curPage)
+        let coveredByRenderedBuffer = takenOver || (covered && surface.hasRenderedBuffer(showing: curPage))
+        if isJumpTarget || (showsJumpMask && !coveredByRenderedBuffer) {
+            surface.showJumpMask(for: curPage)
         }
-
-        guard pdfView.scaleFactor > 0 else { return }
-
-        let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
-        let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
-        print("\(#function) curScale scaleFactor=\(pdfView.scaleFactor) visibleWidthRatio=\(visibleWidthRatio) visibleHeightRatio=\(visibleHeightRatio) boundsForCropBox=\(boundsForCropBox) boundForVisibleContent=\(boundForVisibleContent)")
-
-        let newDestX = boundForVisibleContent.minX + boundsForMediaBox.minX + 2
-        let newDestY = boundsForCropBox.height - boundForVisibleContent.minY + 2
-
-        let visibleRectInView = pdfView.convert(
-            CGRect(
-                x: newDestX,
-                y: newDestY,
-                width: boundsForCropBox.width * visibleWidthRatio,
-                height: boundsForCropBox.height * visibleHeightRatio
-            ),
-            from: curPage
-        )
-
-        print("\(#function) pdfView pdfView.frame=\(pdfView.frame)")
-        print("\(#function) initialRect visibleRectInView=\(visibleRectInView)")
-
-        let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
-        let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
-        let scaleFactor = { () -> CGFloat in
-            if pdfOptions.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
-                switch pdfOptions.selectedAutoScaler {
-                case .Width:
-                    return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
-                case .Height:
-                    return pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                default:
-                    return min(
-                        pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
-                        pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                    )
-                }
-            } else {
-                return pdfOptions.lastScale
-            }
-        }()
-        pdfView.scaleFactor = scaleFactor
-
-        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-
-        var newDestPoint = CGPoint(
-            x: newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
-            y: newDestY + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
-        )
-
-        if let pageViewPositionHistory = getPageViewPositionHistory(curPageNum) {
-            if pageViewPositionHistory.point.x.isNaN == false {
-                newDestPoint.x = pageViewPositionHistory.point.x
-            }
-            if pageViewPositionHistory.point.y.isNaN == false {
-                newDestPoint.y = pageViewPositionHistory.point.y
-            }
-            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory.point.x)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory.point.y)")
-        } else {
-            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)")
+        // A restored position is already in the history.
+        if !viewport.restoresSavedPosition {
+            updatePageViewPositionHistory()
         }
-
-        let newDest = PDFDestination(page: curPage, at: newDestPoint)
-        let initialDestPoint = pdfView.currentDestination!.point
-
-        print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        let bottomRight = PDFDestination(
-            page: curPage,
-            at: CGPoint(x: boundsForMediaBox.width, y: 0)
-        )
-
-        pdfView.go(to: bottomRight)
-        print("\(#function) BEFORE POINT BOTTOM RIGHT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        pdfView.go(to: newDest)
-
-        var afterPointX = pdfView.currentDestination!.point.x
-        var afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
-
-        print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
-
-        let newDestForCompensation = PDFDestination(
-            page: curPage,
-            at: CGPoint(
-                x: newDest.point.x - (afterPointX - newDest.point.x),
-                y: newDest.point.y - (afterPointY - newDest.point.y) - (initialDestPoint.y < 0 ? initialDestPoint.y : 0)
-            )
-        )
-
-        pdfView.go(to: bottomRight)
-        pdfView.go(to: newDestForCompensation)
-        afterPointX = pdfView.currentDestination!.point.x
-        afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
-        print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
-        print("\(#function) scaleFactor=\(pdfOptions.lastScale)")
-
-        #if DEBUG
-        let newDestAnnotation = PDFAnnotation(
-            bounds: .init(origin: newDest.point, size: .init(width: 4, height: 4)),
-            forType: .circle,
-            withProperties: nil
-        )
-        curPage.addAnnotation(newDestAnnotation)
-
-        let newDestForCompensationAnnotation = PDFAnnotation(
-            bounds: .init(origin: newDestForCompensation.point, size: .init(width: 4, height: 4)),
-            forType: .square,
-            withProperties: nil
-        )
-        newDestForCompensationAnnotation.color = .red
-        curPage.addAnnotation(newDestForCompensationAnnotation)
-
-        print("\(#function) newDestPoint=\(newDest.point) cropBox=\(curPage.bounds(for: .cropBox)) mediaBox=\(curPage.bounds(for: .mediaBox))")
-        #endif
-
-        updatePageViewPositionHistory()
         updateReadingProgress()
+        prepareStepMasks()
     }
 
-    @objc func finishReading(sender: UIBarButtonItem) {
-        updatePageViewPositionHistory()
-        updateReadingProgress()
+    /// The single-page viewport of `page` in `view`: its saved position, or a fit
+    /// of its detected content that keeps any saved axis. Used for the page on
+    /// screen and for the buffered neighbours, so both land identically. A page
+    /// read in steps (#97) lands on `target` when given (`plannedPageViewport`).
+    func singlePageViewport(
+        for page: PDFPage,
+        in view: YabrPDFView,
+        target: PDFReadingTarget? = nil
+    ) -> (fit: PDFPageViewportFit, restoresSavedPosition: Bool) {
+        let pageNumber = page.pageRef?.pageNumber ?? 1
+        let pageHistory = getPageViewPositionHistory(pageNumber)
+        if let plan = readingPlan(for: page, in: view) {
+            return plannedPageViewport(plan, history: pageHistory, target: target, in: view)
+        }
+        if let pageViewPosition = pageHistory,
+           pageViewPosition.scaler > 0,
+           pageViewPosition.viewSize == view.frame.size,
+           !pageViewPosition.point.x.isNaN,
+           !pageViewPosition.point.y.isNaN {
+            let fit = PDFPageViewportFitter.restore(
+                scale: pageViewPosition.scaler,
+                upperLeft: pageViewPosition.point,
+                viewBounds: view.bounds
+            )
+            return (fit, true)
+        }
 
-        self.dismiss(animated: true) {
-            self.pdfView.document = nil
-            self.yabrPDFMetaSource = nil
-            self.tocList.removeAll()
+        let key = PageVisibleContentKey(pageNumber: pageNumber, options: pdfOptions)
+        let boundForVisibleContent = marginCropController.visibleBounds(for: page, key: key)
+        let boundsForCropBox = page.bounds(for: .cropBox)
+        // The fit works in display space, so a rotated page is fitted as shown;
+        // its anchor is mapped back to page space at the end.
+        let display = PDFPageDisplaySpace(box: boundsForCropBox, rotation: page.rotation)
+        let contentBounds = display.toDisplay(PDFPageViewportFitter.pageSpaceRect(detected: boundForVisibleContent, pageBounds: boundsForCropBox))
+        let pageBounds = CGRect(origin: .zero, size: display.size)
+        let readableRect = view.bounds.inset(by: pageLayoutInsets)
+        var fit = PDFPageViewportFitter.fit(
+            viewportFitInput(content: contentBounds, pageBounds: pageBounds, readableRect: readableRect)
+        )
+
+        // Keep the axis the reader already positioned (saved position, rotation, or
+        // an options change that only reset the other axis), if the content still
+        // needs scrolling along it. A saved top-left point is meaningless once the
+        // content fits: after switching TtB_RtL from Width to Height it would put
+        // the page at the left of the view.
+        let fitted = contentBounds.width > 0 && contentBounds.height > 0 ? contentBounds : pageBounds
+        if let pageHistory {
+            // A NaN axis stays NaN through the turn, on whichever display axis it lands.
+            let saved = display.toDisplay(pageHistory.point)
+            if !saved.x.isNaN, fitted.width * fit.scale > readableRect.width + 0.5 {
+                fit.pageAnchor.x = saved.x
+                fit.viewAnchor.x = view.bounds.minX
+            }
+            if !saved.y.isNaN, fitted.height * fit.scale > readableRect.height + 0.5 {
+                fit.pageAnchor.y = saved.y
+                fit.viewAnchor.y = view.bounds.minY
+            }
+        }
+        fit.pageAnchor = display.toPage(fit.pageAnchor)
+        return (fit, false)
+    }
+
+    /// Renders the neighbours of the page on screen in the surface's buffers
+    /// (issues #54 / #55); single-page mode only.
+    func refreshPageBuffers() {
+        guard pdfView.displayMode == .singlePage,
+              let document = pdfView.document,
+              let page = pdfView.currentPage
+        else {
+            surface.discardBuffers()
+            return
+        }
+        let index = document.index(for: page)
+        // The next page first: reading forward is the common case.
+        let neighbours = [index + 1, index - 1].compactMap { $0 >= 0 ? document.page(at: $0) : nil }
+        // Laying out a neighbour not yet detected under these options would
+        // detect it here on the main thread, while the analysis queue detects
+        // it too: leave it to `preAnalyzeAdjacentPages`, which refreshes the
+        // buffers once both are.
+        guard neighbours.allSatisfy({ neighbour in
+            marginCropController.cachedValue(for: PageVisibleContentKey(pageNumber: neighbour.pageRef?.pageNumber ?? 1, options: pdfOptions)) != nil
+        }) else { return }
+        let next = neighbours.first { document.index(for: $0) == index + 1 }
+        // A neighbour read in steps is shown where a turn lands on it: the next
+        // page at its first step, the previous one at its last.
+        surface.prepareBuffers(showing: neighbours) { [unowned self] page, view in
+            singlePageViewport(for: page, in: view, target: page === next ? .first : .last).fit
         }
     }
 
@@ -422,25 +360,14 @@ extension YabrPDFViewController {
     }
 
     func getPagePoint() -> (Int, PageViewPosition)? {
-        guard let curDest = pdfView.currentDestination,
-              let curDestPage = curDest.page,
-              let curPage = pdfView.page(for: .zero, nearest: true),
+        guard let curPage = pdfView.page(for: .zero, nearest: true),
               let curPageNum = curPage.pageRef?.pageNumber
         else { return nil }
 
-        var curDestPoint = curDest.point
-        if curPage != curDestPage {
-            let curDestPointInView = pdfView.convert(curDestPoint, from: curDestPage)
-            let curDestPointInCurPage = pdfView.convert(curDestPointInView, to: curPage)
-            curDestPoint = curDestPointInCurPage
-        }
-
-        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-
-        let pointUpperLeft = CGPoint(
-            x: curDestPoint.x,
-            y: curDestPoint.y + viewFrameInPDF.height
-        )
+        // The page point at the view's top-left corner; same upper-left semantics
+        // as the persisted pageOffsetX/Y. Converted as a point: on a rotated page
+        // that corner is not the top-left of the visible rect in page space.
+        let pointUpperLeft = pdfView.convert(CGPoint(x: pdfView.bounds.minX, y: pdfView.bounds.minY), to: curPage)
 
         return (
             curPageNum,

@@ -45,6 +45,10 @@ final class DatabaseMigrator {
                     // Added indexes on libraryId, search, and sortAsc in CalibreLibrarySearchObject.
                     // Realm automatically applies index changes during schema migration.
                 }
+                if oldSchemaVersion < 143 {
+                    // Added optional PDFOptions.spreadMode and columnsMode. Existing rows
+                    // read nil, which PDFOptions.toValue() maps to Off.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

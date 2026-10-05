@@ -28,6 +28,23 @@ protocol AnnotationRepositoryProtocol {
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int
 }
 
+extension AnnotationRepositoryProtocol {
+    /// Moves `readerName`'s highlights stored under `fromBookId` to `toBookId`.
+    /// From June 2026 YabrPDF saved new highlights under the book's shelf
+    /// identity instead of its annotation id, so they were never read back.
+    /// Returns how many moved.
+    @discardableResult
+    func refileHighlights(fromBookId: String, toBookId: String, readerName: String) -> Int {
+        guard fromBookId != toBookId else { return 0 }
+        let misfiled = getHighlights(forBookId: fromBookId, excludeRemoved: false).filter { $0.readerName == readerName }
+        for var highlight in misfiled {
+            highlight.bookId = toBookId
+            saveHighlight(highlight)
+        }
+        return misfiled.count
+    }
+}
+
 final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     private let databaseService: DatabaseService
     private let logger = Logger(subsystem: "io.github.drearycold.DSReader", category: "AnnotationRepository")

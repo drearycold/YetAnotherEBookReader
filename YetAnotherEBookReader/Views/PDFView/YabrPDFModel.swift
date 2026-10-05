@@ -21,12 +21,55 @@ struct PageVisibleContentKey: Hashable {
     let readingDirection: PDFReadDirection
     let hMarginDetectStrength: Double
     let vMarginDetectStrength: Double
+    /// The region modes are part of the key, so changing one never reuses the
+    /// regions found under the other.
+    var spreadMode = PDFSpreadMode.Off
+    var columnsMode = PDFColumnsMode.Off
+}
+
+extension PageVisibleContentKey {
+    /// The key for `pageNumber` under `options`.
+    init(pageNumber: Int, options: PDFPreferenceValue) {
+        self.init(
+            pageNumber: pageNumber,
+            readingDirection: options.readingDirection,
+            hMarginDetectStrength: options.hMarginDetectStrength,
+            vMarginDetectStrength: options.vMarginDetectStrength,
+            spreadMode: options.spreadMode,
+            columnsMode: options.columnsMode
+        )
+    }
 }
 
 struct PageVisibleContentValue {
     let bounds: CGRect
-    let thumbImage: UIImage?
+    /// The parts of the page read one after another (#97), in reading order.
+    /// Empty when the page reads whole.
+    var regions: [PDFReadingRegion] = []
     var lastUsed = Date()
+}
+
+/// A part of a page read on its own (#97): one half of a two-page spread, one
+/// column, or a full-width block between columns. `rect` is in the same space as
+/// `PageVisibleContentValue.bounds`: crop-relative page space, top-down.
+struct PDFReadingRegion: Equatable {
+    enum Kind: Equatable {
+        case spreadHalf
+        case spanning
+        case column
+    }
+
+    var rect: CGRect
+    var kind: Kind
+}
+
+/// What detection found on a page: its content bounds, and the regions it is
+/// read in when there are two or more.
+struct PDFPageReadingLayout: Equatable {
+    var bounds: CGRect
+    var regions: [PDFReadingRegion]
+
+    var readsWhole: Bool { regions.count < 2 }
 }
 
 struct PDFBookmark {

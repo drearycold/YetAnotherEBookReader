@@ -124,7 +124,9 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
             vMarginDetectStrength: 4,
             marginOffset: 2,
             lastScale: 1.8,
-            rememberInPagePosition: false
+            rememberInPagePosition: false,
+            spreadMode: .On,
+            columnsMode: .Auto
         )
 
         repository.savePDFPreferences(preferences, for: book)
@@ -154,7 +156,9 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
             vMarginDetectStrength: 5,
             marginOffset: -1,
             lastScale: 2.1,
-            rememberInPagePosition: true
+            rememberInPagePosition: true,
+            spreadMode: .Auto,
+            columnsMode: .Off
         )
 
         repository.savePDFPreferences(preferences, for: book)

@@ -6,6 +6,7 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFSearchListCell: UITableViewCell {
     let pageLabel: UILabel = .init()
     let snippetLabel: UILabel = .init()
@@ -46,7 +47,7 @@ class YabrPDFSearchListCell: UITableViewCell {
         )
         constraints.append(
             contentsOf: NSLayoutConstraint.constraints(
-                withVisualFormat: "V:|-10-[page]-[snippet]-10-|",
+                withVisualFormat: "V:|-12-[page]-6-[snippet]-12-|",
                 metrics: nil,
                 views: views
             )

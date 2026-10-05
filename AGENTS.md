@@ -27,7 +27,9 @@ This file is the working guide for agents contributing to YetAnotherEBookReader
 - App: iOS 15+ and macOS 12+ via Catalyst ebook reader.
 - UI: SwiftUI for app structure/settings and UIKit for reader-heavy surfaces.
 - Readers: Readium R2 for EPUB/PDF/CBZ, FolioReaderKit for legacy EPUB, custom
-  PDFKit stack for YabrPDF.
+  PDFKit stack for YabrPDF. YabrPDF requires iOS 16 / Mac Catalyst 16 (native
+  edit menus); `ReaderInfo` resolves it to Readium PDF on older systems via
+  `ReaderType.resolved()`.
 - Persistence: RealmSwift for metadata, shelves, annotations, reading positions,
   preferences, search/category cache, and activity logs.
 - Networking: Calibre content server APIs through `CalibreServerService`,
@@ -63,6 +65,26 @@ Mac Catalyst build command:
 ```bash
 xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages build
 ```
+
+### Simulator Set
+
+Keep one iPhone and one iPad per major iOS version; do not create extra device
+models. Look UDIDs up with `xcrun simctl list devices available` rather than
+hard-coding them.
+
+| iOS | iPhone | iPad |
+|---|---|---|
+| 17.5 | none | iPad Pro (10.5-inch) |
+| 18.5 | iPhone 16 | iPad mini (A17 Pro) |
+| 26.5 | iPhone 17 | iPad mini (A17 Pro) |
+
+- `name=iPhone 17` in the commands above resolves to the iOS 26.5 device. For
+  iOS 18 runs pass `platform=iOS Simulator,id=<iPhone 16 UDID>`.
+- When a simulator runtime is removed in Xcode, its devices stay on disk as
+  `unavailable`. Clear them with `xcrun simctl delete unavailable`.
+- If a delete fails with "Operation not permitted", QuickLook thumbnails under
+  `data/.DocumentRevisions-V100` are read-only directories. Run
+  `chmod -R u+w <device dir>` on the device directory, then delete it again.
 
 If a full test run is too expensive for the change, run the narrowest relevant
 test target or class first, then state exactly what was and was not verified.
@@ -264,18 +286,30 @@ FolioReader paths when the behavior is shared.
 
 ### PDF Reader
 
-`YabrPDFViewController` is a coordinator. Keep specialized behavior in the
-existing managers/extensions:
+`YabrPDFViewController` is a coordinator. It hosts its page view in a
+`PDFReaderSurface`, which owns what page views share:
+- the theme overlay, jump mask and loading cover;
+- the page-turn tap zones and the app's taps, plus the highlight edit menu;
+- the highlight annotations.
+
+It also keeps the neighbour pages rendered in buffer page views (#54/#55). A
+page turn onto a rendered buffer makes that buffer the active page view, so the
+active view changes. Read `pdfView` (the active page view) at the point of use,
+never store it, and observe the surface's notifications. Keep specialized behavior in the existing managers/extensions:
 
 - `PDFAnnotationManager`
 - `PDFBookmarkManager`
 - `PDFSearchController`
 - `PDFMarginCropController`
+- `PDFColumnDetector` and `PDFReadingFlow` (reading regions and steps, #97/#19);
+  jumps go through `YabrPDFViewController.jump(to:)` so they land on the step
+  showing their destination
 - `YabrPDFViewController+Chrome`
 - `YabrPDFViewController+Navigation`
 - `YabrPDFViewController+Options`
 - `YabrPDFViewController+Selection`
 - `YabrPDFViewController+Sharing`
+- `YabrPDFViewController+ReadingFlow`
 
 Avoid growing the main controller again.
 

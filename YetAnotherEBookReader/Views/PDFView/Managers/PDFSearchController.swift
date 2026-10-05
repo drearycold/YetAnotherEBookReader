@@ -6,12 +6,14 @@
 import UIKit
 import PDFKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class PDFSearchController: NSObject {
-    private weak var pdfView: YabrPDFView?
+    private weak var surface: PDFReaderSurface?
+    private var pdfView: YabrPDFView? { surface?.activeView }
     private var yabrPDFMetaSource: YabrPDFMetaSource?
 
-    init(pdfView: YabrPDFView, metaSource: YabrPDFMetaSource?) {
-        self.pdfView = pdfView
+    init(surface: PDFReaderSurface, metaSource: YabrPDFMetaSource?) {
+        self.surface = surface
         self.yabrPDFMetaSource = metaSource
     }
 
@@ -30,5 +32,32 @@ class PDFSearchController: NSObject {
                 completion(selections)
             }
         }
+    }
+}
+
+/// Recent search queries, newest first, as FolioReader's
+/// `FolioReaderSearchHistoryStore`: a query is kept once (case and diacritics
+/// ignored), and only the last `maxCount`. Held for the reader session only,
+/// as FolioReader's history is in this app (its preference provider does not
+/// persist it).
+struct PDFSearchHistory: Equatable {
+    static let maxCount = 100
+
+    private(set) var queries: [String] = []
+
+    mutating func record(_ rawQuery: String) {
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        queries.removeAll { Self.isEquivalent($0, query) }
+        queries.insert(query, at: 0)
+        queries = Array(queries.prefix(Self.maxCount))
+    }
+
+    mutating func remove(_ query: String) {
+        queries.removeAll { $0 == query }
+    }
+
+    private static func isEquivalent(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
 }

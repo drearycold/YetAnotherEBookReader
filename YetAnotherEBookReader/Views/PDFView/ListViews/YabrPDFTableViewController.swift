@@ -8,26 +8,28 @@
 import Foundation
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFTableViewController: UITableViewController {
+    /// The reader of a list presented on its own (search), outside the
+    /// Annotations / Navigations pages.
+    weak var hostController: YabrPDFViewController?
+
     var pdfViewController: YabrPDFViewController? {
         (self.parent as? YabrPDFAnnotationPageVC)?.pdfViewController
         ?? (self.parent as? YabrPDFNavigationPageVC)?.pdfViewController
+        ?? hostController
     }
     var yabrPDFView: YabrPDFView? {
-        (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFView
-        ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFView
+        pdfViewController?.pdfView
     }
     var yabrPDFMetaSource: YabrPDFMetaSource? {
         (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFMetaSource
         ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFMetaSource
+        ?? hostController?.yabrPDFMetaSource
     }
-    var backgroundColor: UIColor? {
-        guard let fillColor = yabrPDFMetaSource?.yabrPDFOptions(yabrPDFView)?.fillColor
-        else { return nil }
-        return UIColor(cgColor: fillColor)
-    }
-    var textColor: UIColor? {
-        yabrPDFMetaSource?.yabrPDFOptions(yabrPDFView)?.isDark(.lightText, .darkText)
+    /// The reader theme's list look (FolioReader's colours and fonts).
+    var listStyle: PDFThemePalette.ListStyle {
+        (pdfViewController?.pdfOptions.themePalette ?? PDFThemePalette(themeMode: .none)).listStyle
     }
     
     let dateFormatter = DateFormatter()
@@ -44,10 +46,24 @@ class YabrPDFTableViewController: UITableViewController {
         self.dateFormatter.doesRelativeDateFormatting = true
         
         self.tableView.separatorInset = UIEdgeInsets.zero
-        self.tableView.backgroundColor = backgroundColor
-        self.navigationController?.navigationBar.backgroundColor = backgroundColor
+        self.tableView.rowHeight = UITableView.automaticDimension
+        self.tableView.estimatedRowHeight = 60
+        applyListStyle()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // A list kept between presentations (search) follows a theme change.
+        applyListStyle()
+    }
+
+    /// Colours from the reader's current theme; subclasses style their own views.
+    func applyListStyle() {
+        let style = listStyle
+        tableView.backgroundColor = style.background
+        tableView.separatorColor = style.separator
+    }
+
     // MARK: - sections
     override func numberOfSections(in tableView: UITableView) -> Int {
         return sections.count
@@ -73,10 +89,13 @@ class YabrPDFTableViewController: UITableViewController {
         
         var headerContentConfiguration = headerView.defaultContentConfiguration()
         headerContentConfiguration.text = titleFrags.reversed().joined(separator: ", ")
-        if let textColor = textColor {
-            headerContentConfiguration.textProperties.color = textColor
-        }
+        let style = listStyle
+        headerContentConfiguration.textProperties.color = style.secondaryText
+        headerContentConfiguration.textProperties.font = style.captionFont
         headerView.contentConfiguration = headerContentConfiguration
+        var background = UIBackgroundConfiguration.listPlainHeaderFooter()
+        background.backgroundColor = style.background
+        headerView.backgroundConfiguration = background
         
         return headerView
     }

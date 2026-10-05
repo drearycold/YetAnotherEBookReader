@@ -44,6 +44,26 @@ enum PDFLayoutMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Two-page spreads (#97): a landscape scan of two book pages, read one half at
+/// a time. Auto splits a landscape page that shows a gutter or binding shadow at
+/// its centre; On splits every page.
+enum PDFSpreadMode: String, CaseIterable, Identifiable {
+    case Off
+    case Auto
+    case On
+
+    var id: String { rawValue }
+}
+
+/// Multi-column text (#19, #97): Auto reads the columns a page is found to have
+/// one at a time, with full-width blocks in between.
+enum PDFColumnsMode: String, CaseIterable, Identifiable {
+    case Off
+    case Auto
+
+    var id: String { rawValue }
+}
+
 struct PDFPreferenceValue: Equatable {
     var themeMode = PDFThemeMode.serpia
     var selectedAutoScaler = PDFAutoScaler.Width
@@ -58,4 +78,6 @@ struct PDFPreferenceValue: Equatable {
     var marginOffset = 0.0
     var lastScale = 1.0
     var rememberInPagePosition = true
+    var spreadMode = PDFSpreadMode.Off
+    var columnsMode = PDFColumnsMode.Off
 }

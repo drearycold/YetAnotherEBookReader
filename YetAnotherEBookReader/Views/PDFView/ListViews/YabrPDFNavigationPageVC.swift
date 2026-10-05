@@ -8,9 +8,11 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFNavigationPageVC: UIPageViewController {
     weak var pdfViewController: YabrPDFViewController?
-    var yabrPDFView: YabrPDFView?
+    /// Read from the reader each time; the page view on screen can change.
+    var yabrPDFView: YabrPDFView? { pdfViewController?.pdfView }
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
     var segmentedControl: UISegmentedControl!
@@ -62,7 +64,8 @@ class YabrPDFNavigationPageVC: UIPageViewController {
         self.delegate = self
         self.dataSource = self
 
-        self.view.backgroundColor = UIColor.white
+        let listStyle = (pdfViewController?.pdfOptions.themePalette ?? PDFThemePalette(themeMode: .none)).listStyle
+        self.view.backgroundColor = listStyle.background
         if index >= viewList.count {
             index = 0
         }
@@ -78,13 +81,7 @@ class YabrPDFNavigationPageVC: UIPageViewController {
 
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", style: .plain, target: self, action: #selector(dismiss))
         
-        if let fillColor = PDFPageWithBackground.fillColor {
-            segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
-        }
-        
-        if let textColor = chapterViewController.textColor {
-            segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
-        }
+        listStyle.apply(to: segmentedControl)
     }
 
     // MARK: - Segmented control changes
@@ -110,6 +107,7 @@ class YabrPDFNavigationPageVC: UIPageViewController {
 
 // MARK: UIPageViewControllerDelegate
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFNavigationPageVC: UIPageViewControllerDelegate {
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -123,6 +121,7 @@ extension YabrPDFNavigationPageVC: UIPageViewControllerDelegate {
 
 // MARK: UIPageViewControllerDataSource
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 extension YabrPDFNavigationPageVC: UIPageViewControllerDataSource {
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {

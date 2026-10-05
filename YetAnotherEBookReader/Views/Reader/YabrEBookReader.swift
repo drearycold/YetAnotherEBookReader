@@ -172,7 +172,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         }
 //        #endif
         
-        if readerInfo.format == Format.PDF {
+        // Before iOS 16, ReaderInfo has already resolved PDFs to Readium PDF above.
+        if readerInfo.format == Format.PDF, #available(iOS 16.0, macCatalyst 16.0, *) {
             let dictViewer = container.getCustomDictViewerNew(library: book.library)
             _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
@@ -206,7 +207,13 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             )
             let ret = pdfViewController.open()
             if ret == 0 {
-                // Load and apply initial highlights for PDF
+                // Load and apply initial highlights for PDF, recovering the ones
+                // saved under the shelf identity first.
+                container.annotationRepository.refileHighlights(
+                    fromBookId: book.inShelfId,
+                    toBookId: book.bookPrefId,
+                    readerName: ReaderType.YabrPDF.rawValue
+                )
                 let highlights = container.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
                 pdfViewController.applyHighlights(highlights)
                 

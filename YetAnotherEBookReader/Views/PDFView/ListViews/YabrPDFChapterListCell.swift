@@ -9,48 +9,74 @@
 
 import UIKit
 
+@available(iOS 16.0, macCatalyst 16.0, *)
 class YabrPDFChapterListCell: UITableViewCell {
+    static let baseIndent: CGFloat = 15
+    static let indentPerLevel: CGFloat = 16
+
     let indexLabel = UILabel()
     let pageLabel = UILabel()
-    
+    /// Indents the title by outline level (FolioReader prefixes spaces, which
+    /// misaligns wrapped lines).
+    private(set) var indexLeadingConstraint: NSLayoutConstraint!
+
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
 
-        self.indexLabel.lineBreakMode = .byWordWrapping
-        self.indexLabel.numberOfLines = 0
-        self.indexLabel.translatesAutoresizingMaskIntoConstraints = false
-        
-        self.contentView.addSubview(indexLabel)
+        backgroundColor = .clear
+        layoutMargins = .zero
+        preservesSuperviewLayoutMargins = false
 
-        self.pageLabel.lineBreakMode = .byWordWrapping
-        self.pageLabel.numberOfLines = 1
-        self.pageLabel.textAlignment = .right
-        self.pageLabel.translatesAutoresizingMaskIntoConstraints = false
-        
-        self.contentView.addSubview(pageLabel)
+        indexLabel.lineBreakMode = .byWordWrapping
+        indexLabel.numberOfLines = 0
+        indexLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(indexLabel)
 
-        
-        // Configure cell contraints
-        var constraints = [NSLayoutConstraint]()
-        let views = ["label": indexLabel, "page": pageLabel]
+        pageLabel.numberOfLines = 1
+        pageLabel.textAlignment = .right
+        pageLabel.translatesAutoresizingMaskIntoConstraints = false
+        pageLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        pageLabel.setContentHuggingPriority(.required, for: .horizontal)
+        contentView.addSubview(pageLabel)
 
-        NSLayoutConstraint.constraints(withVisualFormat: "H:|-15-[label]-[page(>=48)]-15-|", options: [], metrics: nil, views: views).forEach {
-            constraints.append($0 as NSLayoutConstraint)
-        }
-
-        NSLayoutConstraint.constraints(withVisualFormat: "V:|-16-[label]-16-|", options: [], metrics: nil, views: views).forEach {
-            constraints.append($0 as NSLayoutConstraint)
-        }
-        
-        NSLayoutConstraint.constraints(withVisualFormat: "V:|-16-[page]-16-|", options: [], metrics: nil, views: views).forEach {
-            constraints.append($0 as NSLayoutConstraint)
-        }
-
-        self.contentView.addConstraints(constraints)
+        indexLeadingConstraint = indexLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Self.baseIndent)
+        NSLayoutConstraint.activate([
+            indexLeadingConstraint,
+            indexLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
+            indexLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
+            pageLabel.leadingAnchor.constraint(greaterThanOrEqualTo: indexLabel.trailingAnchor, constant: 8),
+            pageLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -15),
+            pageLabel.firstBaselineAnchor.constraint(equalTo: indexLabel.firstBaselineAnchor),
+            pageLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
+        ])
     }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("storyboards are incompatible with truth and beauty")
     }
-    
+
+    /// FolioReader's chapter row: the title shrinks with depth; the current
+    /// chapter is in the accent colour, with no background.
+    func configure(title: String, page: Int?, level: Int, isCurrent: Bool, style: PDFThemePalette.ListStyle) {
+        indexLabel.text = title
+        indexLabel.font = style.titleFont(level: level)
+        indexLabel.textColor = isCurrent ? style.accent : style.text
+        indexLeadingConstraint.constant = Self.baseIndent + Self.indentPerLevel * CGFloat(level)
+
+        pageLabel.text = page.map { "p. \($0)" } ?? ""
+        pageLabel.font = style.captionFont.withMonospacedDigits()
+        pageLabel.textColor = isCurrent ? style.accent : style.secondaryText
+    }
+}
+
+private extension UIFont {
+    func withMonospacedDigits() -> UIFont {
+        let descriptor = fontDescriptor.addingAttributes([
+            .featureSettings: [[
+                UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+                UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
+            ]],
+        ])
+        return UIFont(descriptor: descriptor, size: pointSize)
+    }
 }
