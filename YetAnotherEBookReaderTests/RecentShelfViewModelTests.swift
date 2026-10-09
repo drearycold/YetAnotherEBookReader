@@ -16,6 +16,7 @@ import Combine
     
     override func setUpWithError() throws {
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "RecentShelfViewModelTests")
+        XCTAssertTrue(TestFixtures.cacheMockBookEPUB(in: mockAppContainer), "the mock book's EPUB")
         mockAppContainer.bookManager.isShelfLoaded = false
         viewModel = RecentShelfViewModel(container: mockAppContainer)
     }

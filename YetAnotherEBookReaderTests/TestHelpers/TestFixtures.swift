@@ -191,4 +191,18 @@ enum TestFixtures {
         container.bookManager.readingBook = book
         container.bookManager.booksInShelf[book.inShelfId] = book
     }
+
+    /// `AppContainer(mock:)` lists its mock book's EPUB as cached but installs the file only for
+    /// UI tests. Tests that open that book need the file, which a fresh simulator (CI) lacks.
+    static func cacheMockBookEPUB(in container: AppContainer) -> Bool {
+        guard let book = container.bookManager.readingBook,
+              let url = getSavedUrl(book: book, format: .EPUB) else { return false }
+        if FileManager.default.fileExists(atPath: url.path) { return true }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        return FileManager.default.createFile(atPath: url.path, contents: Data("EPUB".utf8))
+    }
 }

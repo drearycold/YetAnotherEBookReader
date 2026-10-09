@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Xcode the project is developed with, so CI and local runs agree.
+  XCODE_VERSION: "26.6"
+  PROJECT: YetAnotherEBookReader.xcodeproj
+
+jobs:
+  test:
+    name: iOS unit tests
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      SPM_DIR: ${{ github.workspace }}/.build/spm
+      DERIVED_DATA: ${{ github.workspace }}/.build/DerivedData
+      LOGS: ${{ github.workspace }}/.build/logs
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
+          xcodebuild -version
+          mkdir -p "$LOGS"
+
+      # FolioReaderKit, Readium and SwiftUICharts are linked from the developer's
+      # checkouts by absolute path; clone their pinned commits into the same paths.
+      - name: Check out local packages
+        run: .github/scripts/local-packages.sh checkout
+
+      # Use the newest iOS runtime the SDK supports, and on it prefer "iPhone 17" (the name used in
+      # AGENTS.md), else its first iPhone. Picking by UDID keeps the name and the runtime together.
+      - name: Pick simulator
+        run: |
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          PICK=$(xcrun simctl list devices available -j | jq -r --arg sdk "$SDK" '
+            def ver: split(".") | map(tonumber);
+            [.devices | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | (.key | capture("iOS-(?<v>[0-9-]+)$").v | gsub("-"; ".")) as $os
+              | select(($os | ver) <= ($sdk | ver))
+              | .value[] | select(.name | startswith("iPhone"))
+              | {udid, os: $os, name}]
+            | (map(.os | ver) | max) as $newest
+            | map(select((.os | ver) == $newest))
+            | ((map(select(.name == "iPhone 17")) + .)[0] // empty)
+            | "\(.udid) \(.os) \(.name)"')
+          if [ -z "$PICK" ]; then echo "No iPhone simulator available for the iOS $SDK SDK" >&2; exit 1; fi
+          read -r UDID OS NAME <<< "$PICK"
+          echo "Using simulator: $NAME (iOS $OS, $UDID)"
+          echo "DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
+          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+
+      # Boot now, so the simulator settles while the app builds.
+      - name: Boot simulator
+        run: xcrun simctl boot "$SIMULATOR_UDID" || true
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: .build/spm
+          key: spm-${{ runner.os }}-${{ hashFiles('YetAnotherEBookReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # -onlyUsePackageVersionsFromResolvedFile: build what Package.resolved records, or fail.
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader \
+            -destination "$DESTINATION" \
+            -only-testing:YetAnotherEBookReaderTests \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$LOGS/build-for-testing.log" | xcbeautify --renderer github-actions
+
+      # bootstatus -b waits until the boot, data migration included, has finished.
+      - name: Wait for the simulator
+        run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      # The UI journeys (YetAnotherEBookReaderUITests) aren't run here.
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader \
+            -destination "$DESTINATION" \
+            -only-testing:YetAnotherEBookReaderTests \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$LOGS/TestResults.xcresult" \
+            -test-timeouts-enabled YES \
+            2>&1 | tee "$LOGS/test.log" | xcbeautify --renderer github-actions
+
+      - name: Upload logs and test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-unit-tests
+          path: .build/logs
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  catalyst:
+    name: Mac Catalyst build
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      SPM_DIR: ${{ github.workspace }}/.build/spm
+      DERIVED_DATA: ${{ github.workspace }}/.build/DerivedData
+      LOGS: ${{ github.workspace }}/.build/logs
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
+          xcodebuild -version
+          mkdir -p "$LOGS"
+
+      - name: Check out local packages
+        run: .github/scripts/local-packages.sh checkout
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: .build/spm
+          key: spm-${{ runner.os }}-${{ hashFiles('YetAnotherEBookReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader-Catalyst \
+            -destination "platform=macOS,variant=Mac Catalyst" \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$LOGS/build.log" | xcbeautify --renderer github-actions
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: catalyst-build
+          path: .build/logs
+          if-no-files-found: ignore
+          include-hidden-files: true

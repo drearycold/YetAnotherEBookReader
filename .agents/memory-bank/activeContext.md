@@ -631,3 +631,27 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 - Stable two-clone scheduling remains unresolved on Xcode 26.5/CoreSimulator.
   Use the dedicated performance scheme/plan for experiments and do not treat
   the accepted 180-second deviation as a guaranteed performance baseline.
+
+## CI (2026-10-09)
+
+- `.github/workflows/ci.yml`: iOS unit tests (`YetAnotherEBookReaderTests`
+  only) and a Mac Catalyst build on `macos-26`, Xcode pinned by
+  `XCODE_VERSION`. See AGENTS.md "CI".
+- The three local packages (FolioReaderKit, `swift-toolkit`, SwiftUICharts)
+  are pinned in `.github/local-packages.txt`. Re-pin with
+  `.github/scripts/local-packages.sh pin` whenever the app starts depending on
+  a newer commit of one of them, or CI builds the old one.
+- Locally with CI's commands from clean derived data (2026-10-09): the build
+  for testing took 181 s and 835 unit tests passed in 200 s (1 skipped, the
+  benchmark). The Catalyst build works again; the old "blocked by SPM product
+  resolution" note is gone from AGENTS.md.
+- CI's simulator is fresh. The first run failed 12 tests that passed locally:
+  - 5 relied on a leftover `Local Library/Mock Book Title.epub` on the
+    developer's simulator. `AppContainer(mock:)` installs that EPUB only for UI
+    tests; unit tests that open the mock book call
+    `TestFixtures.cacheMockBookEPUB(in:)`. Reproduce such failures locally by
+    moving the test host's `Documents/<dir>` aside (and back afterwards).
+  - 7 hit 1–3 s waits on the slower runner (`YabrPDFMarginCropTests` buffers;
+    `ActivityListViewModelTests`, the first class, while the host starts).
+    Use deadline waits with a generous bound (10 s) that end on the condition.
+- Not in CI yet: the UI journeys, iOS 18 / iPad runs, DerivedData caching.
