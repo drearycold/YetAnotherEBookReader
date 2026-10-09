@@ -562,8 +562,12 @@ placement (content right of center, top offset / drift after page turns).
 - Persisted `pageOffsetX/Y` keep the visible upper-left semantics
   (`getPagePoint` now measures `convert(bounds, to: page)`).
   `rememberInPagePosition` is still never read by navigation code.
-- On `main`, `ReadingPositionViewModelTests.testDetailViewModelReadSelectedFormatOpensReaderPresentation`
-  already fails; commit `8437dcaf` on `codex/dsreader-advanced-qa-integration` fixes it.
+- `ReadingPositionViewModelTests.testDetailViewModelReadSelectedFormatOpensReaderPresentation`
+  failed on `main` since it was added: `CalibreBook` is a struct, so the cached
+  EPUB set on `mockBook` never reached `listViewModel.book` and
+  `readSelectedFormat()` raised "Selected Format Not Cached". Fixed with the same
+  setup as `8437dcaf` (`codex/dsreader-advanced-qa-integration`), plus an
+  `alertItem` assertion that names the alert if the guard trips again.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).
