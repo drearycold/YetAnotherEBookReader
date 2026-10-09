@@ -21,8 +21,7 @@ struct YetAnotherEBookReaderApp: App {
             : AppContainer()
         self.container = containerInstance
         // UI tests and the unit-test host accept the terms, as they skip the other consent prompts:
-        // the welcome sheet covered the app under test, and a test window added to the scene while
-        // it was pending started its presentation, which never finished (the suite hung).
+        // the welcome sheet covered the app under test.
         if UITestingConfiguration.skipsConsentPrompts() {
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
         }
