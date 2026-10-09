@@ -25,6 +25,9 @@ import Combine
         viewModel = nil
         mockAppContainer = nil
         cancellables = nil
+        // These tests write the test host's own defaults; leave the terms accepted, as the host
+        // starts with them, so its welcome sheet never comes up.
+        UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
     }
     
     func testInitialization() throws {

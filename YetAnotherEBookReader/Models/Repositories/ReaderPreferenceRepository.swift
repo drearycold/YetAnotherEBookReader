@@ -144,7 +144,9 @@ struct FolioReaderPreferenceValue: Equatable {
             currentAudioRate: 1,
             currentHighlightStyle: FolioReaderHighlightStyle.yellow.rawValue,
             currentMediaOverlayStyle: MediaOverlayStyle.default.rawValue,
-            currentScrollDirection: folioReader.defaultScrollDirection.rawValue,
+            // "No choice", as in FolioReaderDelegatePreferenceProvider: a concrete direction here
+            // would count as the user's choice in every book that uses this profile.
+            currentScrollDirection: FolioReaderScrollDirection.defaultVertical.rawValue,
             currentNavigationMenuIndex: 0,
             currentAnnotationMenuIndex: 0,
             currentNavigationMenuBookListStyle: NavigationMenuBookListStyle.List.rawValue,

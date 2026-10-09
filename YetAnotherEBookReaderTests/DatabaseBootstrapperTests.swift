@@ -174,4 +174,43 @@ final class DatabaseBootstrapperTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(searchSchema["search"]).isIndexed)
         XCTAssertTrue(try XCTUnwrap(searchSchema["sortAsc"]).isIndexed)
     }
+
+    /// The "Default" Folio profile stored horizontal scrolling (2), which FolioReaderKit counts as the
+    /// user's choice, so right-to-left books never paged. Schema 144 makes it "no choice"
+    /// (.defaultVertical, 3) and leaves other profiles and other directions alone.
+    func testMigrationTo144ResetsTheDefaultProfileScrollDirection() throws {
+        let previousDefaultConfiguration = Realm.Configuration.defaultConfiguration
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DatabaseMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            Realm.Configuration.defaultConfiguration = previousDefaultConfiguration
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        func migrated(_ rows: [String: Int]) throws -> [String: Int] {
+            let realmURL = directory.appendingPathComponent("\(UUID().uuidString).realm")
+            var oldConfiguration = Realm.Configuration()
+            oldConfiguration.fileURL = realmURL
+            oldConfiguration.schemaVersion = 143
+            try autoreleasepool {
+                let realm = try Realm(configuration: oldConfiguration)
+                try realm.write {
+                    for (id, direction) in rows {
+                        let profile = FolioReaderPreferenceRealm()
+                        profile.id = id
+                        profile.currentScrollDirection = direction
+                        realm.add(profile)
+                    }
+                }
+            }
+            let config = try DatabaseMigrator().makeConfiguration(schemaVersion: 144, fileURL: realmURL) { _ in }
+            let realm = try Realm(configuration: config)
+            return Dictionary(uniqueKeysWithValues: realm.objects(FolioReaderPreferenceRealm.self).map { ($0.id, $0.currentScrollDirection) })
+        }
+
+        XCTAssertEqual(try migrated(["Default": 2, "Night": 2]), ["Default": 3, "Night": 2])
+        XCTAssertEqual(try migrated(["Default": 1]), ["Default": 1], "A paged default is a choice")
+        XCTAssertEqual(try migrated(["Default": 0]), ["Default": 0], "So is vertical")
+    }
 }

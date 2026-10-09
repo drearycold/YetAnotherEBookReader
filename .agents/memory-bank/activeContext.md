@@ -457,6 +457,20 @@ placement (content right of center, top offset / drift after page turns).
     - `buildTocList` runs on the main thread (it also raced on `tocList`).
 
     In the app only one document is open, and analysis is serial per document.
+    - **Root fix (2026-10-09).** `YabrPDFMarginCropTests` turns the analysis
+      off for the class: `PDFKitDocumentAnalysis` swaps the IMP of PDFView's
+      private `isDocumentAnalysisEnabled` getter (checked first by
+      `-[PDFView visiblePagesChanged:]`) and restores it in class `tearDown`.
+      No Vision or `formFillingQueue` threads remain, and the full unit target
+      (833 tests) runs in about 200 s instead of hanging.
+    - **What the hang looked like.** Each waiting Vision request parks a GCD
+      constrained-pool worker (`kern.wq_max_constrained_threads` = 64). Once
+      64 are parked, Vision deadlocks for good. UIKit then hangs the main
+      thread in `_UIBoundingPathBitmap` (`dispatch_group_wait`) the first time
+      it computes a bounding path for a new window size. The
+      `UISheetPresentationController` frames in that stack are not a leaked
+      sheet: on iOS 26, `_UIRootPresentationController` (each window's root VC)
+      subclasses `UISheetPresentationController`.
   - **Step 3 done: takeover.** `turnPage(forward:)` (the prev/next buttons and
     tap zones) first calls `surface.takeOver(showing:viewport:)`.
     - **What it does.** A buffer holding the target page, laid out like the
@@ -532,8 +546,9 @@ placement (content right of center, top offset / drift after page turns).
       wider than the view still starts at the right margin.
     - **Test-deadlock recurrence.** Four extra window harnesses (3 pages each)
       tipped the PDFKit Vision / GCD-pool deadlock (main thread stuck in a
-      `dispatch_group_wait` inside UIKit bounding-path layout). New layout
-      tests should reuse one harness across configurations.
+      `dispatch_group_wait` inside UIKit bounding-path layout). The analysis
+      is now off in the tests (see the root fix above), so harness count no
+      longer matters.
   - **Consent prompts in tests.** Tests skip the ATT and ad-consent (UMP)
     prompts (`UITestingConfiguration.skipsConsentPrompts`: the UI-test launch
     argument or the unit-test host). Otherwise the UMP form covered the UI
@@ -547,8 +562,12 @@ placement (content right of center, top offset / drift after page turns).
 - Persisted `pageOffsetX/Y` keep the visible upper-left semantics
   (`getPagePoint` now measures `convert(bounds, to: page)`).
   `rememberInPagePosition` is still never read by navigation code.
-- On `main`, `ReadingPositionViewModelTests.testDetailViewModelReadSelectedFormatOpensReaderPresentation`
-  already fails; commit `8437dcaf` on `codex/dsreader-advanced-qa-integration` fixes it.
+- `ReadingPositionViewModelTests.testDetailViewModelReadSelectedFormatOpensReaderPresentation`
+  failed on `main` since it was added: `CalibreBook` is a struct, so the cached
+  EPUB set on `mockBook` never reached `listViewModel.book` and
+  `readSelectedFormat()` raised "Selected Format Not Cached". Fixed with the same
+  setup as `8437dcaf` (`codex/dsreader-advanced-qa-integration`), plus an
+  `alertItem` assertion that names the alert if the guard trips again.
 - PR #88 (`codex/folio-reader-integration`) has been merged. Reader workspace,
   FolioReader integration, reader tab hot-mounting, and persistent active reader
   restore are archived in [Reader Modernization](history/reader-modernization.md).

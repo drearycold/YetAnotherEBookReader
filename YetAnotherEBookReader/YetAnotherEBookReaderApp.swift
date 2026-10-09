@@ -20,7 +20,9 @@ struct YetAnotherEBookReaderApp: App {
             )
             : AppContainer()
         self.container = containerInstance
-        if isUITestingMockLibrary {
+        // UI tests and the unit-test host accept the terms, as they skip the other consent prompts:
+        // the welcome sheet covered the app under test.
+        if UITestingConfiguration.skipsConsentPrompts() {
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
         }
 

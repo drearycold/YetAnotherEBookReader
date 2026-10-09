@@ -177,7 +177,10 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         values["currentAudioRate"] = 1
         values["currentHighlightStyle"] = FolioReaderHighlightStyle.yellow.rawValue
         values["currentMediaOverlayStyle"] = MediaOverlayStyle.default.rawValue
-        values["currentScrollDirection"] = folioReader.defaultScrollDirection.rawValue
+        // "No choice": FolioReaderKit then uses the configured direction, else paged for right-to-left
+        // books. A concrete default counts as the user's choice, and before parsing it was always
+        // horizontal scrolling, so right-to-left books never paged.
+        values["currentScrollDirection"] = FolioReaderScrollDirection.defaultVertical.rawValue
         values["currentNavigationMenuIndex"] = 0
         values["currentAnnotationMenuIndex"] = 0
         values["currentNavigationMenuBookListStyle"] = NavigationMenuBookListStyle.List.rawValue
