@@ -655,3 +655,29 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
     `ActivityListViewModelTests`, the first class, while the host starts).
     Use deadline waits with a generous bound (10 s) that end on the condition.
 - Not in CI yet: the UI journeys, iOS 18 / iPad runs, DerivedData caching.
+
+## FolioReader vertical writing stuck on "Finalizing" (2026-10-10)
+
+- Symptom: 陈寅恪文集(全9册)(竖排) (`vertical-rl`, `page-progression-direction="rtl"`),
+  paged mode, iPad Pro 10.5" iOS 17.5 in landscape: the page never left
+  "Finalizing…" (the overlay now says "Loading…").
+- Cause: the reader workspace toolbar measures 54.5 pt there, so
+  `readerToolbarInset` gave the reader 751.5 pt. FolioReaderKit's vertical
+  viewport is `height=device-height`; WebKit rounds the height to 752 px and
+  scales the width (780 × 752/751.5 → 781 px), so it paginates 781 px pages on a
+  780 pt web view. `updateStyleBackgroundPadding` sizes the body in screens until
+  the page count matches and went round forever (34 → 35 → 34 …). Any web view
+  at least as wide as it is tall with a fractional height does this (also on
+  iOS 26.5 WebKit); portrait rounds back to the width.
+- Fix: FolioReaderKit floors the web view frame to whole points and stops the
+  padding search when it would repeat a step (drearycold/FolioReaderKit#10,
+  into `styling-optimization`); YAEBR rounds `readerToolbarInset` up to whole
+  points (`MainView.swift`), which alone avoids the 751.5 pt reader here.
+- Follow-up: once FolioReaderKit#10 is merged, move the local checkout to it and
+  re-pin `.github/local-packages.txt` (AGENTS.md "CI"). A 3x screen or another
+  Dynamic Type size gives other fractions, which only the library fix covers.
+- Debugging recipe used: lldb on the running simulator app; with a stale build
+  the Swift debug info doesn't match, so read state through ObjC expressions
+  from `UIApplication.windows` (WKWebView frames, `evaluateJavaScript` writing
+  results to `document.title`). `simctl launch --stdout=<path>` writes under the
+  device's `data/` root (`/private/tmp/x` → `data/tmp/x`).
