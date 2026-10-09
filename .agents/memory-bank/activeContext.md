@@ -645,4 +645,13 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   for testing took 181 s and 835 unit tests passed in 200 s (1 skipped, the
   benchmark). The Catalyst build works again; the old "blocked by SPM product
   resolution" note is gone from AGENTS.md.
+- CI's simulator is fresh. The first run failed 12 tests that passed locally:
+  - 5 relied on a leftover `Local Library/Mock Book Title.epub` on the
+    developer's simulator. `AppContainer(mock:)` installs that EPUB only for UI
+    tests; unit tests that open the mock book call
+    `TestFixtures.cacheMockBookEPUB(in:)`. Reproduce such failures locally by
+    moving the test host's `Documents/<dir>` aside (and back afterwards).
+  - 7 hit 1–3 s waits on the slower runner (`YabrPDFMarginCropTests` buffers;
+    `ActivityListViewModelTests`, the first class, while the host starts).
+    Use deadline waits with a generous bound (10 s) that end on the condition.
 - Not in CI yet: the UI journeys, iOS 18 / iPad runs, DerivedData caching.
