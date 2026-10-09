@@ -1,5 +1,7 @@
 # YetAnotherEBookReader (D.S.Reader)
 
+[![CI](https://github.com/drearycold/YetAnotherEBookReader/actions/workflows/ci.yml/badge.svg)](https://github.com/drearycold/YetAnotherEBookReader/actions/workflows/ci.yml)
+
 **D.S.Reader** is a versatile and modern e-book reader for iOS and macOS (via Catalyst). It supports a wide range of formats including EPUB, PDF, and CBZ, with a strong focus on high-performance rendering and seamless integration with Calibre content servers.
 
 ## Key Features
@@ -28,6 +30,9 @@
 ### Requirements
 - Xcode 15.0+
 - iOS 15.0+ / macOS 12.0+ (Catalyst)
+
+### Local Packages
+FolioReaderKit, Readium (`swift-toolkit`) and SwiftUICharts are local Swift packages the project expects at fixed paths. `.github/local-packages.txt` lists each path with the repository and commit to check out there, and `.github/scripts/local-packages.sh checkout` clones them (CI does the same).
 
 ### Build Commands
 To build the project from the terminal:

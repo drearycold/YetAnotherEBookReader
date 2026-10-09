@@ -631,3 +631,18 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 - Stable two-clone scheduling remains unresolved on Xcode 26.5/CoreSimulator.
   Use the dedicated performance scheme/plan for experiments and do not treat
   the accepted 180-second deviation as a guaranteed performance baseline.
+
+## CI (2026-10-09)
+
+- `.github/workflows/ci.yml`: iOS unit tests (`YetAnotherEBookReaderTests`
+  only) and a Mac Catalyst build on `macos-26`, Xcode pinned by
+  `XCODE_VERSION`. See AGENTS.md "CI".
+- The three local packages (FolioReaderKit, `swift-toolkit`, SwiftUICharts)
+  are pinned in `.github/local-packages.txt`. Re-pin with
+  `.github/scripts/local-packages.sh pin` whenever the app starts depending on
+  a newer commit of one of them, or CI builds the old one.
+- Locally with CI's commands from clean derived data (2026-10-09): the build
+  for testing took 181 s and 835 unit tests passed in 200 s (1 skipped, the
+  benchmark). The Catalyst build works again; the old "blocked by SPM product
+  resolution" note is gone from AGENTS.md.
+- Not in CI yet: the UI journeys, iOS 18 / iPad runs, DerivedData caching.

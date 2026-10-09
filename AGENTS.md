@@ -66,6 +66,35 @@ Mac Catalyst build command:
 xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages build
 ```
 
+### CI
+
+`.github/workflows/ci.yml` runs on pushes to `main`, pull requests, and by
+hand, on `macos-26` with the Xcode the project is developed with
+(`XCODE_VERSION`):
+
+- **iOS unit tests:** `build-for-testing` then `test-without-building` of
+  `YetAnotherEBookReaderTests` on the newest iPhone 17 simulator. The UI
+  journeys (`YetAnotherEBookReaderUITests`) aren't run.
+- **Mac Catalyst build** of `YetAnotherEBookReader-Catalyst`.
+- Both build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
+  `Package.resolved` fails CI instead of resolving anew, and with
+  `CODE_SIGNING_ALLOWED=NO`.
+- On failure the raw logs and the `.xcresult` are uploaded as an artifact.
+
+FolioReaderKit, Readium (`swift-toolkit`) and SwiftUICharts are local packages
+referenced by absolute path (`/Users/peterlee/git/...`), which
+`Package.resolved` doesn't record. `.github/local-packages.txt` pins each one to
+a commit, and CI clones the pins into the same paths
+(`.github/scripts/local-packages.sh checkout`). After moving one of those
+checkouts to a commit the app needs:
+
+1. Push that commit to the package's `origin`.
+2. Run `.github/scripts/local-packages.sh pin`. It warns about uncommitted
+   changes and commits that aren't on `origin`.
+3. Commit `.github/local-packages.txt` with the app change that needs it.
+
+A new local package reference without a pin fails CI's checkout step.
+
 ### Simulator Set
 
 Keep one iPhone and one iPad per major iOS version; do not create extra device
@@ -398,10 +427,10 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 174 unit tests passed. The Mac Catalyst build is
-currently blocked by a pre-existing SPM package product resolution issue
-(`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
-the P1/P2 work.
+Recorded result (2026-10-09, with CI's flags from clean derived data): 835
+unit tests passed, 1 skipped (the opt-in margin-detection benchmark). The Mac
+Catalyst build succeeds; the old SPM product resolution failure (`R2Navigator`,
+`GCDWebServer`, `R2Shared`, `R2Streamer`) no longer reproduces.
 
 ## Known Risks
 
