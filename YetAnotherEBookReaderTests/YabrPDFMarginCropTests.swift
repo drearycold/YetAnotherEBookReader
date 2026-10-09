@@ -10,6 +10,10 @@ import PDFKit
 @available(iOS 16.0, macCatalyst 16.0, *)
 @MainActor
 final class YabrPDFMarginCropTests: XCTestCase {
+    /// How long a wait for detection, buffers, masks or presentation may take. Waits end as soon
+    /// as their condition holds. A CI runner is 3-5x slower than a desktop Mac, and 3 s was too
+    /// short for its buffers.
+    private static let waitTimeout: TimeInterval = 10
     private static let pageSize = CGSize(width: 612, height: 792)
     /// Portrait phone: a width-fitted page is shorter than the view, so PDFKit
     /// centers it vertically and only horizontal placement is under our control.
@@ -797,7 +801,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     /// Waits for the masks of the steps beside the one on screen.
     private func waitForPreparedMasks(_ harness: Harness, count: Int = 1, file: StaticString = #filePath, line: UInt = #line) {
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while harness.surface.preparedJumpMasks.count < count, Date() < deadline {
             settle(0.05)
         }
@@ -1659,7 +1663,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         }
         document.outlineRoot = root
         harness.controller.buildTocList()
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while (harness.controller.titleInfoButton.menu?.children.count ?? 0) < 2 && Date() < deadline {
             settle(0.05)
         }
@@ -2482,7 +2486,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func waitForDismissal(_ harness: Harness) {
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while harness.controller.presentedViewController != nil && Date() < deadline {
             settle(0.1)
         }
@@ -3140,7 +3144,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
         detector.preAnalyzeAdjacentPages(currentPageNumber: 3, document: harness.pdfView.document, key: key) {
             controller.refreshPageBuffers()
         }
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while [2, 4].contains(where: { detector.cachedValue(for: key($0)) == nil }) && Date() < deadline {
             settle(0.05)
         }
@@ -3197,7 +3201,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func waitForBuffers(_ harness: Harness, pages: Set<Int>, file: StaticString = #filePath, line: UInt = #line) throws {
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         func buffered() -> Set<Int> { Set(harness.surface.bufferedPages.compactMap { $0.pageRef?.pageNumber }) }
         while buffered() != pages && Date() < deadline {
             settle(0.05)
@@ -3207,7 +3211,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
 
     private func waitForRenderedBuffers(_ harness: Harness, pages: Set<Int>, file: StaticString = #filePath, line: UInt = #line) throws {
         try waitForBuffers(harness, pages: pages, file: file, line: line)
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         func rendered() -> Bool {
             harness.surface.bufferedPages.allSatisfy { harness.surface.hasRenderedBuffer(showing: $0) }
         }
@@ -3218,7 +3222,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func waitForCoverToEnd(_ harness: Harness) {
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while harness.surface.coveringView != nil && Date() < deadline {
             settle(0.05)
         }
@@ -3247,7 +3251,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
     }
 
     private func waitForJumpMaskToClear(_ harness: Harness) {
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while harness.surface.isJumpMaskVisible && Date() < deadline {
             settle(0.05)
         }
@@ -3730,7 +3734,7 @@ final class YabrPDFMarginCropTests: XCTestCase {
             installWindow(root: controller, size: viewSize)
         }
         // viewDidAppear performs the initial fit via handlePageChange.
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
         while !controller.didAppear && Date() < deadline {
             settle(0.05)
         }

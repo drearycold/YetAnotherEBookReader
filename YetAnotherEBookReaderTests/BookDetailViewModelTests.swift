@@ -752,7 +752,10 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
         XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
         XCTAssertEqual(viewModel.activities, [initialEntry])
-        for _ in 0..<50 where repository.observeEntriesSubscriberCount == 0 {
+        // The updates reach the view model on the main actor. As the suite's first class, this
+        // runs while a freshly installed test host is still starting on a CI runner.
+        let deadline = Date().addingTimeInterval(10)
+        while repository.observeEntriesSubscriberCount == 0 && Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTAssertTrue(repository.observeEntriesCalled)
@@ -775,7 +778,7 @@ class ActivityListViewModelTests: XCTestCase {
             httpBodyString: "{}"
         )
         repository.sendObservedEntries([updatedEntry])
-        for _ in 0..<50 where viewModel.activities != [updatedEntry] {
+        while viewModel.activities != [updatedEntry] && Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
