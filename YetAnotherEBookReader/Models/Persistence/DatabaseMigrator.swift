@@ -49,6 +49,20 @@ final class DatabaseMigrator {
                     // Added optional PDFOptions.spreadMode and columnsMode. Existing rows
                     // read nil, which PDFOptions.toValue() maps to Off.
                 }
+                if oldSchemaVersion < 144 {
+                    // The "Default" Folio profile stored horizontal scrolling (2), FolioReaderKit's
+                    // default before a book is parsed, which FolioReaderKit counts as the user's
+                    // choice: right-to-left books never got their paged default. Profiles now seed
+                    // "no choice" (.defaultVertical, 3), and left-to-right books fall back to
+                    // horizontal scrolling anyway. Per-book rows (server-scoped realms) and other
+                    // profiles keep theirs, as they may be a real choice.
+                    migration.enumerateObjects(ofType: FolioReaderPreferenceRealm.className()) { _, newObject in
+                        guard let newObject,
+                              newObject["id"] as? String == "Default",
+                              newObject["currentScrollDirection"] as? Int == 2 else { return }
+                        newObject["currentScrollDirection"] = 3
+                    }
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

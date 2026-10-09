@@ -607,6 +607,31 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(provider.preference(boolFor: "doWrapPara", default: true), false)
     }
 
+    /// The provider and the default profile seed "no choice" (`.defaultVertical`), so FolioReaderKit
+    /// uses the configured direction, else paged for right-to-left books. They seeded
+    /// `folioReader.defaultScrollDirection`, horizontal scrolling before the book is parsed, which
+    /// counted as the user's choice: right-to-left books never paged.
+    func testSeededScrollDirectionIsNoChoice() {
+        let folioReader = FolioReader()
+        XCTAssertEqual(
+            FolioReaderProfileValue(defaultsFrom: folioReader).currentScrollDirection,
+            FolioReaderScrollDirection.defaultVertical.rawValue
+        )
+
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: makeProfileRepository(id: "FolioReaderSeededScrollDirectionTests")
+        )
+        XCTAssertEqual(provider.preference(intFor: "currentScrollDirection", default: -1), FolioReaderScrollDirection.defaultVertical.rawValue)
+
+        let delegate = PreferenceProviderDelegate(provider: provider)
+        folioReader.delegate = delegate
+        XCTAssertNil(folioReader.preferences.savedScrollDirection)
+        withExtendedLifetime(delegate) {}
+    }
+
     func testCustomProfileSaveLoadListAndRemove() {
         let folioReader = FolioReader()
         let mockDelegate = MockReaderEngineDelegate()
@@ -1011,5 +1036,17 @@ class MockReaderEngineDelegate: ReaderEngineDelegate {
     func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {}
     func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {
         lastUpdatedPreferences = prefs
+    }
+}
+
+private final class PreferenceProviderDelegate: NSObject, FolioReaderDelegate {
+    let provider: FolioReaderPreferenceProvider
+
+    init(provider: FolioReaderPreferenceProvider) {
+        self.provider = provider
+    }
+
+    func folioReaderPreferenceProvider(_ folioReader: FolioReader) -> FolioReaderPreferenceProvider {
+        provider
     }
 }

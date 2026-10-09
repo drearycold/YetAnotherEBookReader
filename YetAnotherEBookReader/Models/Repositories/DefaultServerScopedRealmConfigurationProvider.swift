@@ -136,6 +136,11 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
                     // Added optional PDFOptions.spreadMode and columnsMode. Existing rows
                     // read nil, which PDFOptions.toValue() maps to Off.
                 }
+
+                if oldSchemaVersion < 144 {
+                    // The "Default" Folio profile's scroll direction is reset in the main realm
+                    // (DatabaseMigrator). Per-book FolioReaderPreferenceRealm rows here keep theirs.
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,
