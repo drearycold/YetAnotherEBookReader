@@ -27,6 +27,16 @@ final class YabrPDFMarginCropTests: XCTestCase {
     private var tempURLs: [URL] = []
     private var window: UIWindow?
 
+    override class func setUp() {
+        super.setUp()
+        PDFKitDocumentAnalysis.suspend()
+    }
+
+    override class func tearDown() {
+        PDFKitDocumentAnalysis.resume()
+        super.tearDown()
+    }
+
     override func tearDownWithError() throws {
         tearDownWindow()
         for url in tempURLs {
@@ -2591,8 +2601,6 @@ final class YabrPDFMarginCropTests: XCTestCase {
     /// the view (along an axis it fits) or keeps covering it (along an axis it
     /// overflows), plus where the fit put it. PDFKit applies the padded page break
     /// margins twice per side, which let a Height-fitted page leave the screen.
-    /// One harness for all configurations: more window-hosted documents tip the
-    /// test process's PDFKit Vision / GCD deadlock.
     func testPageCannotBeDraggedOutOfView() throws {
         let content = CGRect(x: 40, y: 50, width: 530, height: 690)
         let harness = try makeHarness(pages: [PageSpec(content: content)], viewSize: Self.tabletLandscape)
@@ -3996,6 +4004,32 @@ private enum BookPageGenerator {
             z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
             return z ^ (z >> 31)
         }
+    }
+}
+
+/// PDFKit runs Vision text recognition (`PDFPageAnalyzerV2`) on every page a
+/// window-hosted PDFView shows, one page at a time across the process. Each
+/// waiting request parks a worker of GCD's constrained pool (64 threads), so a
+/// long run's documents starve the pool for good, Vision included. The main
+/// thread then hangs the next time UIKit computes a bounding path for a new
+/// window size: on iOS 26 a window shows its root view controller through a
+/// sheet presentation controller, whose layout waits on that pool. The tests
+/// read no recognized text, so they turn the analysis off through PDFView's
+/// private `isDocumentAnalysisEnabled`. The app keeps it.
+private enum PDFKitDocumentAnalysis {
+    private static let getter = NSSelectorFromString("isDocumentAnalysisEnabled")
+    private static var original: IMP?
+
+    static func suspend() {
+        guard original == nil, let method = class_getInstanceMethod(PDFView.self, getter) else { return }
+        let disabled: @convention(block) (PDFView) -> Bool = { _ in false }
+        original = method_setImplementation(method, imp_implementationWithBlock(disabled))
+    }
+
+    static func resume() {
+        guard let original, let method = class_getInstanceMethod(PDFView.self, getter) else { return }
+        method_setImplementation(method, original)
+        self.original = nil
     }
 }
 
