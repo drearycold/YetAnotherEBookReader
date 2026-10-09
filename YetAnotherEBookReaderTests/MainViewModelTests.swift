@@ -17,6 +17,7 @@ import Combine
     
     override func setUpWithError() throws {
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "MainViewModelTests")
+        XCTAssertTrue(TestFixtures.cacheMockBookEPUB(in: mockAppContainer), "the mock book's EPUB")
         viewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
         cancellables = []
     }
