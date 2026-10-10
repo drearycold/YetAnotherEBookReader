@@ -1660,7 +1660,7 @@
 			);
 			mainGroup = 2AC3EC0F25BDBC10004A6633;
 			packageReferences = (
-				E7C602082F7134DC0060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/SwiftUICharts" */,
+				E7C602082F7134DC0060265A /* XCRemoteSwiftPackageReference "SwiftUICharts" */,
 				E7C6020D2F7137A80060265A /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				E7C602142F713C320060265A /* XCRemoteSwiftPackageReference "realm-swift" */,
 				E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */,
@@ -2866,10 +2866,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = /Users/peterlee/git/FolioReaderKit;
 		};
-		E7C602082F7134DC0060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/SwiftUICharts" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = /Users/peterlee/git/SwiftUICharts;
-		};
 		E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = /Users/peterlee/git/FolioReaderKit;
@@ -2899,6 +2895,14 @@
 			requirement = {
 				kind = upToNextMinorVersion;
 				minimumVersion = 4.0.0;
+			};
+		};
+		E7C602082F7134DC0060265A /* XCRemoteSwiftPackageReference "SwiftUICharts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/willdale/SwiftUICharts.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.4;
 			};
 		};
 		E7C6020D2F7137A80060265A /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
@@ -3000,7 +3004,7 @@
 		};
 		E769B4322F72736A00EABE1E /* SwiftUICharts */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7C602082F7134DC0060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/SwiftUICharts" */;
+			package = E7C602082F7134DC0060265A /* XCRemoteSwiftPackageReference "SwiftUICharts" */;
 			productName = SwiftUICharts;
 		};
 		E769B4342F72736A00EABE1E /* KingfisherSwiftUI */ = {
@@ -3024,6 +3028,7 @@
 		};
 		E7C602092F7134DC0060265A /* SwiftUICharts */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = E7C602082F7134DC0060265A /* XCRemoteSwiftPackageReference "SwiftUICharts" */;
 			productName = SwiftUICharts;
 		};
 		E7C602122F7139180060265A /* KingfisherSwiftUI */ = {

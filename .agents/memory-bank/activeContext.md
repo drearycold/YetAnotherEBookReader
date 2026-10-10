@@ -637,8 +637,9 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 - `.github/workflows/ci.yml`: iOS unit tests (`YetAnotherEBookReaderTests`
   only) and a Mac Catalyst build on `macos-26`, Xcode pinned by
   `XCODE_VERSION`. See AGENTS.md "CI".
-- The three local packages (FolioReaderKit, `swift-toolkit`, SwiftUICharts)
-  are pinned in `.github/local-packages.txt`. Re-pin with
+- The two local packages (FolioReaderKit, `swift-toolkit`) are pinned in
+  `.github/local-packages.txt`. SwiftUICharts became a remote package at its
+  2.10.4 release (2026-10-10), the first step away from these pins. Re-pin with
   `.github/scripts/local-packages.sh pin` whenever the app starts depending on
   a newer commit of one of them, or CI builds the old one.
 - Locally with CI's commands from clean derived data (2026-10-09): the build

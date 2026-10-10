@@ -81,9 +81,10 @@ hand, on `macos-26` with the Xcode the project is developed with
   `CODE_SIGNING_ALLOWED=NO`.
 - On failure the raw logs and the `.xcresult` are uploaded as an artifact.
 
-FolioReaderKit, Readium (`swift-toolkit`) and SwiftUICharts are local packages
-referenced by absolute path (`/Users/peterlee/git/...`), which
-`Package.resolved` doesn't record. `.github/local-packages.txt` pins each one to
+FolioReaderKit and Readium (`swift-toolkit`) are local packages referenced by
+absolute path (`/Users/peterlee/git/...`), which `Package.resolved` doesn't
+record. (SwiftUICharts is a remote package at its 2.10.4 release, recorded in
+`Package.resolved` like the others.) `.github/local-packages.txt` pins each one to
 a commit, and CI clones the pins into the same paths
 (`.github/scripts/local-packages.sh checkout`). After moving one of those
 checkouts to a commit the app needs:
