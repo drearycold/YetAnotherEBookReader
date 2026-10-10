@@ -93,8 +93,10 @@ is all CI builds. Three of them are ours or forks:
 | Readium | `dsreader/readium-swift-toolkit` | branch `feature/additional-safe-area-insets` |
 | SwiftUICharts | `willdale/SwiftUICharts` | 2.10.4, up to next major |
 
-- FolioReaderKit stays an independent library: changes go through its own
-  repository and pull requests, into `master`.
+- FolioReaderKit stays an independent library. `master` is its stable branch:
+  changes reach it only through pull requests whose CI passed (its ROADMAP.md,
+  "Branches and working rules"), so following `master` is safe, and the app
+  takes a new commit only when `Package.resolved` is updated here.
 - The Readium fork is 3.8.0 plus a margin-swipe fix that upstream has only in
   4.0.0-alpha (readium/swift-toolkit#872). Move to upstream 4.0 once it is
   released and drop the fork.
