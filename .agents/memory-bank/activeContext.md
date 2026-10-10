@@ -673,9 +673,9 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   padding search when it would repeat a step (drearycold/FolioReaderKit#10,
   into `styling-optimization`); YAEBR rounds `readerToolbarInset` up to whole
   points (`MainView.swift`), which alone avoids the 751.5 pt reader here.
-- Follow-up: once FolioReaderKit#10 is merged, move the local checkout to it and
-  re-pin `.github/local-packages.txt` (AGENTS.md "CI"). A 3x screen or another
-  Dynamic Type size gives other fractions, which only the library fix covers.
+- FolioReaderKit#10 is merged (`13358e8`) and pinned in
+  `.github/local-packages.txt`. A 3x screen or another Dynamic Type size gives
+  other fractions, which only the library fix covers.
 - Debugging recipe used: lldb on the running simulator app; with a stale build
   the Swift debug info doesn't match, so read state through ObjC expressions
   from `UIApplication.windows` (WKWebView frames, `evaluateJavaScript` writing
