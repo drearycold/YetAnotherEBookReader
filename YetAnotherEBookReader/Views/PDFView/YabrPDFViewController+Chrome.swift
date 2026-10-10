@@ -72,8 +72,8 @@ extension YabrPDFViewController {
         pageSlider.minimumValue = 1
         pageSlider.maximumValue = Float(pdfView.document?.pageCount ?? 1)
         pageSlider.isContinuous = true
-        pageSlider.addAction(UIAction(handler: { _ in
-            guard let currentPageNumber = self.pdfView.currentPage?.pageRef?.pageNumber else { return }
+        pageSlider.addAction(UIAction(handler: { [weak self] _ in
+            guard let self, let currentPageNumber = self.pdfView.currentPage?.pageRef?.pageNumber else { return }
             let destPageNumber = Int(self.pageSlider.value.rounded())
             print("\(#function) current=\(currentPageNumber) target=\(destPageNumber)")
 
@@ -85,12 +85,14 @@ extension YabrPDFViewController {
         }), for: .valueChanged)
 
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
-        pagePrevButton.addAction(UIAction(handler: { _ in
+        pagePrevButton.addAction(UIAction(handler: { [weak self] _ in
+            guard let self else { return }
             self.turnPage(forward: self.pdfView.displaysRTL)
         }), for: .primaryActionTriggered)
 
         pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
-        pageNextButton.addAction(UIAction(handler: { _ in
+        pageNextButton.addAction(UIAction(handler: { [weak self] _ in
+            guard let self else { return }
             self.turnPage(forward: !self.pdfView.displaysRTL)
         }), for: .primaryActionTriggered)
 
@@ -105,8 +107,9 @@ extension YabrPDFViewController {
         pageBackButton.isHidden = true
         stackView.addArrangedSubview(pageBackButton)
 
-        let pageBackAction = UIAction(handler: { _ in
-            guard let historyItem = self.historyMenu.children.last as? UIAction
+        let pageBackAction = UIAction(handler: { [weak self] _ in
+            guard let self,
+                  let historyItem = self.historyMenu.children.last as? UIAction
             else {
                 return
             }
@@ -116,7 +119,8 @@ extension YabrPDFViewController {
         pageBackButton.addAction(pageBackAction, for: .primaryActionTriggered)
 
         pageAuxButton.setImage(UIImage(systemName: "square.split.bottomrightquarter"), for: .normal)
-        pageAuxButton.addAction(.init(handler: { [self] _ in
+        pageAuxButton.addAction(.init(handler: { [weak self] _ in
+            guard let self else { return }
             if auxSurface.superview == nil {
                 pdfViewAux.backgroundColor = pdfView.backgroundColor
 
@@ -352,7 +356,8 @@ extension YabrPDFViewController {
             UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction { [weak self] _ in
                 self?.presentNavigation()
             }),
-            UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { _ in
+            UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { [weak self] _ in
+                guard let self else { return }
                 let annotationController = YabrPDFAnnotationPageVC()
                 annotationController.pdfViewController = self
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
@@ -367,12 +372,14 @@ extension YabrPDFViewController {
             })
         ], animated: true)
 
-        let shareOriginalPDF = UIAction(title: "Original PDF") { [self] action in
+        let shareOriginalPDF = UIAction(title: "Original PDF") { [weak self] action in
+            guard let self else { return }
             print("\(#function) \(action)")
             sharePDF(annotated: false)
         }
 
-        let shareAnnotatedPDF = UIAction(title: "Annotated PDF") { [self] _ in
+        let shareAnnotatedPDF = UIAction(title: "Annotated PDF") { [weak self] _ in
+            guard let self else { return }
             sharePDF(annotated: true)
         }
 

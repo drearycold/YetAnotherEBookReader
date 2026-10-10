@@ -681,3 +681,20 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   from `UIApplication.windows` (WKWebView frames, `evaluateJavaScript` writing
   results to `document.title`). `simctl launch --stdout=<path>` writes under the
   device's `data/` root (`/private/tmp/x` → `data/tmp/x`).
+
+## YabrPDF reader leak (2026-10-10)
+
+- Every closed YabrPDF reader leaked: the chrome's `UIAction`s (slider,
+  prev/next, back, aux, Annotations, Share, history items) captured the
+  controller strongly and live in its own view, so the controller, its
+  `PDFReaderSurface`, buffers and `PDFDocument` were never released. Now
+  `[weak self]` (`YabrPDFViewController+Chrome.swift`, `+Navigation.swift`).
+- Found through CI: in the suite the leaked readers piled up and later
+  `YabrPDFMarginCropTests` slowed until 10 s waits ran out (`waitForBuffers`
+  saw no buffers). Running the class 3 times locally reproduced it (36 failures
+  in the third pass); with the fix 516 tests passed and per-test times stay flat.
+- `testClosedReaderIsReleased` checks the controller and document go away
+  (the tap-zone preview's 3 s `asyncAfter` holds the surface that long).
+- To check a release in a test, tear the window down inside an
+  `autoreleasepool`: `rootViewController = nil` autoreleases the old root,
+  and the test's own pool only drains after the test.

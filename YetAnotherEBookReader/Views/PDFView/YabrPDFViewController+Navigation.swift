@@ -55,7 +55,8 @@ extension YabrPDFViewController {
         }
 
         var historyItems = self.historyMenu.children
-        historyItems.append(UIAction(title: lastHistoryLabel) { action in
+        historyItems.append(UIAction(title: lastHistoryLabel) { [weak self] action in
+            guard let self else { return }
             var children = self.historyMenu.children
             if let index = children.firstIndex(of: action) {
                 children.removeLast(children.count - index)
