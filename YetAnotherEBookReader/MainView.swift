@@ -473,8 +473,11 @@ private struct ReaderWorkspaceView: View {
         #endif
     }
 
+    /// Whole points, so the reader isn't given a fractional height: the toolbar measured 54.5 pt on
+    /// an iPad Pro 10.5" (iOS 17.5), and at the 751.5 pt that left in landscape a FolioReader page in
+    /// vertical writing laid out its pages a pixel wider than the screen and never finished loading.
     private var readerToolbarInset: CGFloat {
-        toolbarHeight > 0 ? toolbarHeight + 8 : 76
+        toolbarHeight > 0 ? ceil(toolbarHeight) + 8 : 76
     }
 
     var body: some View {

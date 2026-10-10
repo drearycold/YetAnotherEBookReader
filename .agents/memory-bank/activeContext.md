@@ -655,3 +655,46 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
     `ActivityListViewModelTests`, the first class, while the host starts).
     Use deadline waits with a generous bound (10 s) that end on the condition.
 - Not in CI yet: the UI journeys, iOS 18 / iPad runs, DerivedData caching.
+
+## FolioReader vertical writing stuck on "Finalizing" (2026-10-10)
+
+- Symptom: 陈寅恪文集(全9册)(竖排) (`vertical-rl`, `page-progression-direction="rtl"`),
+  paged mode, iPad Pro 10.5" iOS 17.5 in landscape: the page never left
+  "Finalizing…" (the overlay now says "Loading…").
+- Cause: the reader workspace toolbar measures 54.5 pt there, so
+  `readerToolbarInset` gave the reader 751.5 pt. FolioReaderKit's vertical
+  viewport is `height=device-height`; WebKit rounds the height to 752 px and
+  scales the width (780 × 752/751.5 → 781 px), so it paginates 781 px pages on a
+  780 pt web view. `updateStyleBackgroundPadding` sizes the body in screens until
+  the page count matches and went round forever (34 → 35 → 34 …). Any web view
+  at least as wide as it is tall with a fractional height does this (also on
+  iOS 26.5 WebKit); portrait rounds back to the width.
+- Fix: FolioReaderKit floors the web view frame to whole points and stops the
+  padding search when it would repeat a step (drearycold/FolioReaderKit#10,
+  into `styling-optimization`); YAEBR rounds `readerToolbarInset` up to whole
+  points (`MainView.swift`), which alone avoids the 751.5 pt reader here.
+- FolioReaderKit#10 is merged (`13358e8`) and pinned in
+  `.github/local-packages.txt`. A 3x screen or another Dynamic Type size gives
+  other fractions, which only the library fix covers.
+- Debugging recipe used: lldb on the running simulator app; with a stale build
+  the Swift debug info doesn't match, so read state through ObjC expressions
+  from `UIApplication.windows` (WKWebView frames, `evaluateJavaScript` writing
+  results to `document.title`). `simctl launch --stdout=<path>` writes under the
+  device's `data/` root (`/private/tmp/x` → `data/tmp/x`).
+
+## YabrPDF reader leak (2026-10-10)
+
+- Every closed YabrPDF reader leaked: the chrome's `UIAction`s (slider,
+  prev/next, back, aux, Annotations, Share, history items) captured the
+  controller strongly and live in its own view, so the controller, its
+  `PDFReaderSurface`, buffers and `PDFDocument` were never released. Now
+  `[weak self]` (`YabrPDFViewController+Chrome.swift`, `+Navigation.swift`).
+- Found through CI: in the suite the leaked readers piled up and later
+  `YabrPDFMarginCropTests` slowed until 10 s waits ran out (`waitForBuffers`
+  saw no buffers). Running the class 3 times locally reproduced it (36 failures
+  in the third pass); with the fix 516 tests passed and per-test times stay flat.
+- `testClosedReaderIsReleased` checks the controller and document go away
+  (the tap-zone preview's 3 s `asyncAfter` holds the surface that long).
+- To check a release in a test, tear the window down inside an
+  `autoreleasepool`: `rootViewController = nil` autoreleases the old root,
+  and the test's own pool only drains after the test.

@@ -2966,6 +2966,30 @@ final class YabrPDFMarginCropTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(after.firstIndex { $0 === cover }), try XCTUnwrap(after.firstIndex { $0 === harness.pdfView }), "back behind")
     }
 
+    /// The reader's controls kept their actions, which captured the controller
+    /// strongly, in its own view: a closed PDF reader was never released, nor
+    /// its document, page views and buffers. In the suite the leaked readers
+    /// slowed later tests until their waits ran out.
+    func testClosedReaderIsReleased() throws {
+        weak var weakController: YabrPDFViewController?
+        weak var weakDocument: PDFDocument?
+        try autoreleasepool {
+            let harness = try makeJumpHarness(initialPage: 3)
+            try waitForBuffers(harness, pages: [4, 2])
+            harness.controller.pageNextButton.sendActions(for: .primaryActionTriggered)
+            weakController = harness.controller
+            weakDocument = harness.pdfView.document
+            tearDownWindow()
+        }
+        // The tap-zone preview holds the surface, and its buffers the document, for 3 s.
+        let deadline = Date().addingTimeInterval(Self.waitTimeout)
+        while (weakController != nil || weakDocument != nil) && Date() < deadline {
+            settle(0.1)
+        }
+        XCTAssertNil(weakController, "controller released")
+        XCTAssertNil(weakDocument, "document released")
+    }
+
     func testJumpToAnUnbufferedPageIsNotCovered() throws {
         let harness = try makeJumpHarness(initialPage: 2)
         try waitForBuffers(harness, pages: [3, 1])
