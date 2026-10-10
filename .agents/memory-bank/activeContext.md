@@ -637,11 +637,17 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 - `.github/workflows/ci.yml`: iOS unit tests (`YetAnotherEBookReaderTests`
   only) and a Mac Catalyst build on `macos-26`, Xcode pinned by
   `XCODE_VERSION`. See AGENTS.md "CI".
-- Only FolioReaderKit is still a local package, pinned in
-  `.github/local-packages.txt`. Re-pin with `.github/scripts/local-packages.sh
-  pin` whenever the app starts depending on a newer commit, or CI builds the
-  old one.
-- 2026-10-10: SwiftUICharts became a remote package at its 2.10.4 release, and
+- 2026-10-10: no local packages any more; `.github/local-packages.txt`, its
+  script and CI's checkout step are gone. Every package is remote and recorded
+  in `Package.resolved` (AGENTS.md "Swift Packages").
+  - FolioReaderKit stays an independent library, followed on its `master`
+    branch (its default; there is no `main`). Its `styling-optimization` was
+    merged into `master` in FolioReaderKit#9; #10 went to
+    `styling-optimization` by mistake and was brought over in #11.
+  - Building against an unpushed FolioReaderKit: a workspace outside the repo
+    with the project and the local checkout; the local package overrides the
+    remote one (checked: 69 FolioReaderKit sources compiled from the checkout).
+- SwiftUICharts became a remote package at its 2.10.4 release, and
   `swift-toolkit` a remote package on the fork
   (`dsreader/readium-swift-toolkit`, branch
   `feature/additional-safe-area-insets`, 003be49 = 3.8.0 + one commit).
@@ -685,8 +691,7 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
   padding search when it would repeat a step (drearycold/FolioReaderKit#10,
   into `styling-optimization`); YAEBR rounds `readerToolbarInset` up to whole
   points (`MainView.swift`), which alone avoids the 751.5 pt reader here.
-- FolioReaderKit#10 is merged (`13358e8`) and pinned in
-  `.github/local-packages.txt`. A 3x screen or another Dynamic Type size gives
+- FolioReaderKit#10 is merged (`13358e8`), and on `master` through #11. A 3x screen or another Dynamic Type size gives
   other fractions, which only the library fix covers.
 - Debugging recipe used: lldb on the running simulator app; with a stale build
   the Swift debug info doesn't match, so read state through ObjC expressions

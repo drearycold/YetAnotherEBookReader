@@ -1,5 +1,5 @@
 {
-  "originHash" : "2b3ee5fd94d1c2f4fe344e19d1b1adee6dcbe75f813b0b85af82e3ac0f1693fe",
+  "originHash" : "de255e7213557750efef6711821ffb4cb344b44a5d696f1e807f887406053460",
   "pins" : [
     {
       "identity" : "aexml",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "073b9671ce2b9b5b96398611427a1f929927e428",
         "version" : "1.3.0"
+      }
+    },
+    {
+      "identity" : "folioreaderkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/drearycold/FolioReaderKit.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "196fcd51e94b82f6201c791e3917219f732624e6"
       }
     },
     {

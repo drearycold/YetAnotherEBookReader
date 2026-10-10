@@ -35,8 +35,9 @@ This file is the working guide for agents contributing to YetAnotherEBookReader
 - Networking: Calibre content server APIs through `CalibreServerService`,
   Kingfisher for authenticated images, GCDWebServer/Readium web server pieces for
   local reader assets.
-- Dependencies: Swift Package Manager only. Do not add CocoaPods, Carthage, or a
-  separate workspace.
+- Dependencies: Swift Package Manager only, all remote packages (see "Swift
+  Packages"). Do not add CocoaPods, Carthage, or a separate workspace to the
+  repository; a local one for overriding a package stays outside it.
 
 ## Build And Test
 
@@ -81,27 +82,46 @@ hand, on `macos-26` with the Xcode the project is developed with
   `CODE_SIGNING_ALLOWED=NO`.
 - On failure the raw logs and the `.xcresult` are uploaded as an artifact.
 
-Remote packages are recorded in `Package.resolved`, including SwiftUICharts
-(its 2.10.4 release) and Readium: `dsreader/readium-swift-toolkit`, branch
-`feature/additional-safe-area-insets`, which adds a margin-swipe fix to 3.8.0.
-Upstream has the same fix (readium/swift-toolkit#872) only in 4.0.0-alpha;
-switch to upstream 4.0 once it is released. To move the fork, push to its
-branch and update the package in Xcode (or delete its pin from
-`Package.resolved` and run `xcodebuild -resolvePackageDependencies`), then
-commit `Package.resolved`.
+### Swift Packages
 
-FolioReaderKit is still a local package referenced by absolute path
-(`/Users/peterlee/git/FolioReaderKit`), which `Package.resolved` doesn't
-record. `.github/local-packages.txt` pins it to a commit, and CI clones the pin
-into the same path (`.github/scripts/local-packages.sh checkout`). After moving
-the checkout to a commit the app needs:
+Every dependency is a remote Swift package recorded in `Package.resolved`, which
+is all CI builds. Three of them are ours or forks:
 
-1. Push that commit to the package's `origin`.
-2. Run `.github/scripts/local-packages.sh pin`. It warns about uncommitted
-   changes and commits that aren't on `origin`.
-3. Commit `.github/local-packages.txt` with the app change that needs it.
+| Package | Repository | Follows |
+|---|---|---|
+| FolioReaderKit | `drearycold/FolioReaderKit` | branch `master` |
+| Readium | `dsreader/readium-swift-toolkit` | branch `feature/additional-safe-area-insets` |
+| SwiftUICharts | `willdale/SwiftUICharts` | 2.10.4, up to next major |
 
-A new local package reference without a pin fails CI's checkout step.
+- FolioReaderKit stays an independent library: changes go through its own
+  repository and pull requests, into `master`.
+- The Readium fork is 3.8.0 plus a margin-swipe fix that upstream has only in
+  4.0.0-alpha (readium/swift-toolkit#872). Move to upstream 4.0 once it is
+  released and drop the fork.
+- To take a newer commit of a package that follows a branch, merge it into that
+  branch, then update the package in Xcode (File > Packages > Update to Latest
+  Package Versions), or delete its entry from `Package.resolved` and run
+  `xcodebuild -resolvePackageDependencies -scmProvider system`. Check that no
+  other entry in `Package.resolved` moved (a changed package can re-resolve its
+  dependencies to newer versions), and commit it with the app change that needs
+  it.
+
+To build the app against a local FolioReaderKit checkout (or worktree) before
+its changes are pushed, open both in a workspace kept outside the repository. A
+local package overrides the remote one with the same name:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace version = "1.0">
+   <FileRef location = "absolute:/path/to/YetAnotherEBookReader/YetAnotherEBookReader.xcodeproj"></FileRef>
+   <FileRef location = "absolute:/path/to/FolioReaderKit"></FileRef>
+</Workspace>
+```
+
+Save it as `YabrDev.xcworkspace/contents.xcworkspacedata`, copy
+`Package.resolved` into `YabrDev.xcworkspace/xcshareddata/swiftpm/` so the other
+packages keep their versions, and build with `xcodebuild -workspace
+YabrDev.xcworkspace -scheme YetAnotherEBookReader …`.
 
 ### Simulator Set
 

@@ -530,7 +530,6 @@
 		E7B100072FF1000600000007 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
 		E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
 		E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */; };
-		E7C602042F7134560060265A /* FolioReaderKit in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602032F7134560060265A /* FolioReaderKit */; };
 		E7C6020A2F7134DC0060265A /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602092F7134DC0060265A /* SwiftUICharts */; };
 		E7C602132F7139180060265A /* KingfisherSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602122F7139180060265A /* KingfisherSwiftUI */; };
 		E7C602162F713C320060265A /* Realm in Frameworks */ = {isa = PBXBuildFile; productRef = E7C602152F713C320060265A /* Realm */; };
@@ -896,7 +895,6 @@
 				4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */,
 				E70A25BD2F73E053004F006E /* ReadiumGCDWebServer in Frameworks */,
 				E7C602132F7139180060265A /* KingfisherSwiftUI in Frameworks */,
-				E7C602042F7134560060265A /* FolioReaderKit in Frameworks */,
 				4C8D6A8BE24380426C1F893E /* (null) in Frameworks */,
 				E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */,
 				E7C6021B2F7141C00060265A /* MBProgressHUD in Frameworks */,
@@ -1666,7 +1664,7 @@
 				E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */,
 				E76EF6D12F72473A0037219B /* XCRemoteSwiftPackageReference "GCDWebServer" */,
 				E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */,
-				E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */,
+				E7CF01172F73C867008597D4 /* XCRemoteSwiftPackageReference "FolioReaderKit" */,
 				E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */,
 				E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
@@ -2857,17 +2855,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		E7C602022F7134560060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = /Users/peterlee/git/FolioReaderKit;
-		};
-		E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = /Users/peterlee/git/FolioReaderKit;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -2931,6 +2918,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.2.0;
+			};
+		};
+		E7CF01172F73C867008597D4 /* XCRemoteSwiftPackageReference "FolioReaderKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/drearycold/FolioReaderKit.git";
+			requirement = {
+				branch = master;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -3003,7 +2998,7 @@
 		};
 		E769B42E2F72736A00EABE1E /* FolioReaderKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7C602022F7134560060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */;
+			package = E7CF01172F73C867008597D4 /* XCRemoteSwiftPackageReference "FolioReaderKit" */;
 			productName = FolioReaderKit;
 		};
 		E769B4322F72736A00EABE1E /* SwiftUICharts */ = {
@@ -3025,10 +3020,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */;
 			productName = MBProgressHUD;
-		};
-		E7C602032F7134560060265A /* FolioReaderKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = FolioReaderKit;
 		};
 		E7C602092F7134DC0060265A /* SwiftUICharts */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -3057,6 +3048,7 @@
 		};
 		E7CF01182F73C867008597D4 /* FolioReaderKit */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = E7CF01172F73C867008597D4 /* XCRemoteSwiftPackageReference "FolioReaderKit" */;
 			productName = FolioReaderKit;
 		};
 /* End XCSwiftPackageProductDependency section */
