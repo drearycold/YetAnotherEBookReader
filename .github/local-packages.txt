@@ -8,4 +8,3 @@
 #
 # path repository commit branch
 /Users/peterlee/git/FolioReaderKit https://github.com/drearycold/FolioReaderKit.git 13358e865d96e2adf40226ad9a882c5bf7f6277e styling-optimization
-/Users/peterlee/git/swift-toolkit https://github.com/dsreader/readium-swift-toolkit.git 003be496443d6fe2c6b88bb495b66ad6a165597f feature/additional-safe-area-insets

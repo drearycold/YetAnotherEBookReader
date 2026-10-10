@@ -81,13 +81,20 @@ hand, on `macos-26` with the Xcode the project is developed with
   `CODE_SIGNING_ALLOWED=NO`.
 - On failure the raw logs and the `.xcresult` are uploaded as an artifact.
 
-FolioReaderKit and Readium (`swift-toolkit`) are local packages referenced by
-absolute path (`/Users/peterlee/git/...`), which `Package.resolved` doesn't
-record. (SwiftUICharts is a remote package at its 2.10.4 release, recorded in
-`Package.resolved` like the others.) `.github/local-packages.txt` pins each one to
-a commit, and CI clones the pins into the same paths
-(`.github/scripts/local-packages.sh checkout`). After moving one of those
-checkouts to a commit the app needs:
+Remote packages are recorded in `Package.resolved`, including SwiftUICharts
+(its 2.10.4 release) and Readium: `dsreader/readium-swift-toolkit`, branch
+`feature/additional-safe-area-insets`, which adds a margin-swipe fix to 3.8.0.
+Upstream has the same fix (readium/swift-toolkit#872) only in 4.0.0-alpha;
+switch to upstream 4.0 once it is released. To move the fork, push to its
+branch and update the package in Xcode (or delete its pin from
+`Package.resolved` and run `xcodebuild -resolvePackageDependencies`), then
+commit `Package.resolved`.
+
+FolioReaderKit is still a local package referenced by absolute path
+(`/Users/peterlee/git/FolioReaderKit`), which `Package.resolved` doesn't
+record. `.github/local-packages.txt` pins it to a commit, and CI clones the pin
+into the same path (`.github/scripts/local-packages.sh checkout`). After moving
+the checkout to a commit the app needs:
 
 1. Push that commit to the package's `origin`.
 2. Run `.github/scripts/local-packages.sh pin`. It warns about uncommitted

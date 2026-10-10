@@ -637,11 +637,22 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 - `.github/workflows/ci.yml`: iOS unit tests (`YetAnotherEBookReaderTests`
   only) and a Mac Catalyst build on `macos-26`, Xcode pinned by
   `XCODE_VERSION`. See AGENTS.md "CI".
-- The two local packages (FolioReaderKit, `swift-toolkit`) are pinned in
-  `.github/local-packages.txt`. SwiftUICharts became a remote package at its
-  2.10.4 release (2026-10-10), the first step away from these pins. Re-pin with
-  `.github/scripts/local-packages.sh pin` whenever the app starts depending on
-  a newer commit of one of them, or CI builds the old one.
+- Only FolioReaderKit is still a local package, pinned in
+  `.github/local-packages.txt`. Re-pin with `.github/scripts/local-packages.sh
+  pin` whenever the app starts depending on a newer commit, or CI builds the
+  old one.
+- 2026-10-10: SwiftUICharts became a remote package at its 2.10.4 release, and
+  `swift-toolkit` a remote package on the fork
+  (`dsreader/readium-swift-toolkit`, branch
+  `feature/additional-safe-area-insets`, 003be49 = 3.8.0 + one commit).
+  - That commit's content-inset change is dead code for YAEBR: the EPUB
+    controller's `navigatorContentInset` returns the insets in paged mode, and
+    scroll mode sets `additionalSafeAreaInsets` to zero.
+  - Its margin-swipe `hitTest` is upstream as readium/swift-toolkit#872
+    (issue #112), in `develop` and 4.0.0-alpha.2 but not 3.11.0. Move to
+    upstream 4.0 when it is released and drop the fork.
+  - Changing the package reference re-resolved Readium's dependencies to newer
+    versions; the old pins were restored in `Package.resolved` by hand.
 - Locally with CI's commands from clean derived data (2026-10-09): the build
   for testing took 181 s and 835 unit tests passed in 200 s (1 skipped, the
   benchmark). The Catalyst build works again; the old "blocked by SPM product

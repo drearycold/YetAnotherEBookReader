@@ -1665,7 +1665,7 @@
 				E7C602142F713C320060265A /* XCRemoteSwiftPackageReference "realm-swift" */,
 				E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */,
 				E76EF6D12F72473A0037219B /* XCRemoteSwiftPackageReference "GCDWebServer" */,
-				E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */,
+				E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */,
 				E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */,
 				E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */,
 				E704F6502FFF7F2F00C60B08 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
@@ -2858,10 +2858,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "/Users/peterlee/git/swift-toolkit";
-		};
 		E7C602022F7134560060265A /* XCLocalSwiftPackageReference "/Users/peterlee/git/FolioReaderKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = /Users/peterlee/git/FolioReaderKit;
@@ -2895,6 +2891,14 @@
 			requirement = {
 				kind = upToNextMinorVersion;
 				minimumVersion = 4.0.0;
+			};
+		};
+		E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dsreader/readium-swift-toolkit.git";
+			requirement = {
+				branch = "feature/additional-safe-area-insets";
+				kind = branch;
 			};
 		};
 		E7C602082F7134DC0060265A /* XCRemoteSwiftPackageReference "SwiftUICharts" */ = {
@@ -2939,17 +2943,17 @@
 		};
 		E70A25B62F73DEAD004F006E /* ReadiumNavigator */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumNavigator;
 		};
 		E70A25B82F73DEAD004F006E /* ReadiumShared */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumShared;
 		};
 		E70A25BA2F73DEAD004F006E /* ReadiumStreamer */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumStreamer;
 		};
 		E70A25BC2F73E053004F006E /* ReadiumGCDWebServer */ = {
@@ -2959,7 +2963,7 @@
 		};
 		E70A25BE2F73E05C004F006E /* ReadiumAdapterGCDWebServer */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumAdapterGCDWebServer;
 		};
 		E71F34A42FD902E4007AB0B1 /* Collections */ = {
@@ -2969,17 +2973,17 @@
 		};
 		E71F35AF2FEA701B007AB0B1 /* ReadiumNavigator */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumNavigator;
 		};
 		E71F35B12FEA7021007AB0B1 /* ReadiumShared */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumShared;
 		};
 		E71F35B32FEA7035007AB0B1 /* ReadiumAdapterGCDWebServer */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumAdapterGCDWebServer;
 		};
 		E71F35B52FEA7051007AB0B1 /* ReadiumGCDWebServer */ = {
@@ -2989,7 +2993,7 @@
 		};
 		E71F35B72FEA7930007AB0B1 /* ReadiumStreamer */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "/Users/peterlee/git/swift-toolkit" */;
+			package = E7A20DF02F725BDE006D940C /* XCRemoteSwiftPackageReference "readium-swift-toolkit" */;
 			productName = ReadiumStreamer;
 		};
 		E71F35B92FEA7939007AB0B1 /* Collections */ = {

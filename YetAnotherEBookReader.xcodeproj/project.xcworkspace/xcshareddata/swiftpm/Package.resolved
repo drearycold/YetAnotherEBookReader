@@ -1,5 +1,5 @@
 {
-  "originHash" : "00675d014b5e787e921d616f33b527fea0fa19d3db562fb9e7e3a12cdd34875e",
+  "originHash" : "2b3ee5fd94d1c2f4fe344e19d1b1adee6dcbe75f813b0b85af82e3ac0f1693fe",
   "pins" : [
     {
       "identity" : "aexml",
@@ -80,6 +80,15 @@
       "state" : {
         "revision" : "3f832b3d2a6075e1e6b7db06c498dd710c773e6f",
         "version" : "3.2.2"
+      }
+    },
+    {
+      "identity" : "readium-swift-toolkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/dsreader/readium-swift-toolkit.git",
+      "state" : {
+        "branch" : "feature/additional-safe-area-insets",
+        "revision" : "003be496443d6fe2c6b88bb495b66ad6a165597f"
       }
     },
     {
