@@ -1,5 +1,5 @@
 {
-  "originHash" : "55b23616ac183b5087766e935afc04089fd75f37c280b5d8056159f1f29ab6b2",
+  "originHash" : "de255e7213557750efef6711821ffb4cb344b44a5d696f1e807f887406053460",
   "pins" : [
     {
       "identity" : "aexml",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "073b9671ce2b9b5b96398611427a1f929927e428",
         "version" : "1.3.0"
+      }
+    },
+    {
+      "identity" : "folioreaderkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/drearycold/FolioReaderKit.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "196fcd51e94b82f6201c791e3917219f732624e6"
       }
     },
     {
@@ -80,6 +89,15 @@
       "state" : {
         "revision" : "3f832b3d2a6075e1e6b7db06c498dd710c773e6f",
         "version" : "3.2.2"
+      }
+    },
+    {
+      "identity" : "readium-swift-toolkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/dsreader/readium-swift-toolkit.git",
+      "state" : {
+        "branch" : "feature/additional-safe-area-insets",
+        "revision" : "003be496443d6fe2c6b88bb495b66ad6a165597f"
       }
     },
     {
@@ -143,6 +161,15 @@
       "state" : {
         "revision" : "e40910293caa6d94802e1a69b80517c88e77eaff",
         "version" : "2.13.3"
+      }
+    },
+    {
+      "identity" : "swiftuicharts",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/willdale/SwiftUICharts.git",
+      "state" : {
+        "revision" : "c16f47217d1e32900f6b37c322d419945fadae9c",
+        "version" : "2.10.4"
       }
     },
     {

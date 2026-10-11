@@ -33,11 +33,6 @@ jobs:
           xcodebuild -version
           mkdir -p "$LOGS"
 
-      # FolioReaderKit, Readium and SwiftUICharts are linked from the developer's
-      # checkouts by absolute path; clone their pinned commits into the same paths.
-      - name: Check out local packages
-        run: .github/scripts/local-packages.sh checkout
-
       # Use the newest iOS runtime the SDK supports, and on it prefer "iPhone 17" (the name used in
       # AGENTS.md), else its first iPhone. Picking by UDID keeps the name and the runtime together.
       - name: Pick simulator
@@ -131,9 +126,6 @@ jobs:
           sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
           xcodebuild -version
           mkdir -p "$LOGS"
-
-      - name: Check out local packages
-        run: .github/scripts/local-packages.sh checkout
 
       - name: Cache Swift packages
         uses: actions/cache@v6
