@@ -8,11 +8,6 @@
 import SwiftUI
 import KingfisherSwiftUI
 
-struct IdentifiableString: Identifiable {
-    let value: String
-    var id: String { value }
-}
-
 @available(macCatalyst 14.0, *)
 struct RecentShelfView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -213,8 +208,12 @@ struct RecentShelfView: View {
                     }
                 }
             }
+            .background(routeLink)
             .onDisappear {
-                adStore.clear()
+                // Pushing a route also makes the shelf disappear; keep its ads for the way back.
+                if !viewModel.isRouteActive {
+                    adStore.clear()
+                }
             }
             .navigationTitle("Recent")
             .navigationBarTitleDisplayMode(.inline)
@@ -272,55 +271,47 @@ struct RecentShelfView: View {
                     )
                 }
             }
-            .sheet(item: Binding<IdentifiableString?>(
-                get: { viewModel.presentingBookDetailId.map { IdentifiableString(value: $0) } },
-                set: { viewModel.presentingBookDetailId = $0?.value }
-            )) { detailId in
-                NavigationView {
-                    BookDetailView(bookId: detailId.value, viewMode: .SHELF)
-                        .environment(\.appContainer, viewModel.container)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    viewModel.presentingBookDetailId = nil
-                                }
-                                .accessibilityIdentifier("book-detail.close")
-                            }
-                        }
-                }
-            }
-            .sheet(item: Binding<IdentifiableString?>(
-                get: { viewModel.presentingHistoryBookId.map { IdentifiableString(value: $0) } },
-                set: { viewModel.presentingHistoryBookId = $0?.value }
-            )) { historyId in
-                if let book = viewModel.container.bookManager.booksInShelf[historyId.value] {
-                    NavigationView {
-                        ReadingPositionHistoryView(
-                            presenting: Binding<Bool>(
-                                get: { viewModel.presentingHistoryBookId == historyId.value },
-                                set: { isPresenting in
-                                    if !isPresenting {
-                                        viewModel.presentingHistoryBookId = nil
-                                    }
-                                }
-                            ),
-                            library: book.library,
-                            bookId: book.id
-                        )
-                        .environment(\.appContainer, viewModel.container)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    viewModel.presentingHistoryBookId = nil
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+
+    /// The single hidden link for the shelf's pushed screen. It sits on the root, outside the lazy
+    /// shelf rows, and one link per NavigationView avoids iOS 15's push-then-pop bug.
+    private var routeLink: some View {
+        NavigationLink(
+            isActive: Binding(
+                get: { viewModel.isRouteActive },
+                set: { isActive in
+                    if !isActive {
+                        viewModel.dismissRoute()
+                    }
+                }
+            )
+        ) {
+            routeDestination
+        } label: {
+            EmptyView()
+        }
+        .hidden()
+    }
+
+    @ViewBuilder
+    private var routeDestination: some View {
+        switch viewModel.displayedRoute {
+        case .bookDetail(let bookId):
+            BookDetailView(bookId: bookId, viewMode: .SHELF)
+                .navigationBarTitleDisplayMode(.inline)
+                .id(bookId)
+        case .readingHistory(let bookId):
+            if let book = viewModel.readingHistoryBook(bookId: bookId) {
+                ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                    .id(bookId)
+            } else {
+                Text("This book is no longer on the shelf")
+                    .foregroundColor(.secondary)
+            }
+        case nil:
+            EmptyView()
+        }
     }
 }

@@ -21,10 +21,13 @@ class BookDetailViewModel: ObservableObject {
     
     @Published var activityListViewPresenting = false
 
-    @Published var readingPositionHistoryViewPresenting = false
+    /// Drives the push of Reading History. It is pushed, not a sheet, so a reader opened from it
+    /// shows above it in the workspace overlay.
+    @Published var isReadingPositionHistoryActive = false
     
     private weak var container: AppContainer?
     var targetWorkspaceID: UUID?
+    private var loadedBookId: String?
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
@@ -52,10 +55,21 @@ class BookDetailViewModel: ObservableObject {
         bookObserverTask?.cancel()
     }
     
-    func setup(bookId: String) {
+    /// Loads the book once. A pushed detail appears again each time a screen pushed from it pops,
+    /// and refetching metadata then would hit the server on every return.
+    func onAppear(bookId: String, targetWorkspaceID: UUID?) {
+        self.targetWorkspaceID = targetWorkspaceID
+        guard loadedBookId != bookId else { return }
+        guard setup(bookId: bookId), let calibreBook else { return }
+        loadedBookId = bookId
+        fetchMetadata(book: calibreBook)
+    }
+    
+    @discardableResult
+    func setup(bookId: String) -> Bool {
         guard let container = self.container else {
             print("Warning: BookDetailViewModel setup called before container was set")
-            return
+            return false
         }
         
         activeDownloadsTask?.cancel()
@@ -70,7 +84,7 @@ class BookDetailViewModel: ObservableObject {
         
         guard let calibreBook = container.bookRepository.getBook(id: bookId) else {
             print("Error: CalibreBook not found for primary key \(bookId)")
-            return
+            return false
         }
         self.calibreBook = calibreBook
         
@@ -95,6 +109,7 @@ class BookDetailViewModel: ObservableObject {
                 }
             }
         }
+        return true
     }
     
     func fetchMetadata(book: CalibreBook) {
@@ -190,6 +205,11 @@ class BookDetailViewModel: ObservableObject {
         calibreBook = book
         listVM?.book = book
         listVM?.positions = container.readingPositionRepository.getPositions(for: book)
+    }
+    
+    func showReadingPositionHistory(book: CalibreBook) {
+        prepareReadingPositionHistory(book: book)
+        isReadingPositionHistoryActive = true
     }
     
     func prepareReadingPositionHistory(book: CalibreBook) {

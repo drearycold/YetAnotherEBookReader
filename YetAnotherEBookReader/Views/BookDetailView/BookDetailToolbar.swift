@@ -23,7 +23,9 @@ struct BookDetailToolbar: ToolbarContent {
             }
         }
         
-        ToolbarItem(placement: .confirmationAction) {
+        // One group: iOS 15 shows only the first of several items sharing a placement, which hid
+        // the history button.
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
             Button(action: {
                 viewModel.downloadOrClearCache(book: book)
             }) {
@@ -36,17 +38,17 @@ struct BookDetailToolbar: ToolbarContent {
                     Image(systemName: "star")
                 }
             }
-        }
-        
-        ToolbarItem(placement: .confirmationAction) {
+
             Button(action: {
-                viewModel.readingPositionHistoryViewPresenting = true
+                viewModel.showReadingPositionHistory(book: book)
             }) {
                 Image(systemName: "clock")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 20, height: 20)
             }
+            .accessibilityLabel("Reading History")
+            .accessibilityIdentifier("book-detail.history")
         }
     }
 }

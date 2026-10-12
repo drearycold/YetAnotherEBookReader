@@ -367,6 +367,29 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertNil(summary)
     }
     
+    func testShowReadingPositionHistoryPushesHistory() throws {
+        XCTAssertFalse(viewModel.isReadingPositionHistoryActive)
+
+        viewModel.showReadingPositionHistory(book: mockCalibreBook)
+
+        XCTAssertTrue(viewModel.isReadingPositionHistoryActive)
+        XCTAssertEqual(viewModel.listVM?.book.inShelfId, mockCalibreBook.inShelfId)
+    }
+
+    func testOnAppearLoadsBookOnlyOnce() throws {
+        let workspaceID = UUID()
+        let detailViewModel = BookDetailViewModel(container: mockAppContainer)
+
+        detailViewModel.onAppear(bookId: mockBookRealm.primaryKey!, targetWorkspaceID: workspaceID)
+        XCTAssertEqual(detailViewModel.calibreBook?.title, "Test Book")
+        XCTAssertEqual(detailViewModel.targetWorkspaceID, workspaceID)
+
+        // Coming back from a pushed screen must not reload over a newer value.
+        detailViewModel.calibreBook?.title = "Edited In Place"
+        detailViewModel.onAppear(bookId: mockBookRealm.primaryKey!, targetWorkspaceID: workspaceID)
+        XCTAssertEqual(detailViewModel.calibreBook?.title, "Edited In Place")
+    }
+    
     func testHasReadingHistory() throws {
         XCTAssertFalse(viewModel.hasReadingHistory(for: mockCalibreBook))
         
@@ -641,8 +664,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertEqual(detailVM.selectedFormat, .EPUB)
     }
     
-    func testDetailViewModelReadSelectedFormatOpensReaderPresentation() throws {
-        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+    /// Marks the mock book's EPUB as cached and writes its file.
+    private func makeCachedEPUB() throws {
         mockBook.formats[Format.EPUB.rawValue] = FormatInfo(
             selected: true,
             filename: "position-test.epub",
@@ -654,7 +677,6 @@ class ReadingPositionViewModelTests: XCTestCase {
             manifest: nil
         )
         listViewModel.book = mockBook
-        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
 
         let savedURL = try XCTUnwrap(getSavedUrl(book: mockBook, format: .EPUB))
         try FileManager.default.createDirectory(
@@ -663,6 +685,180 @@ class ReadingPositionViewModelTests: XCTestCase {
             attributes: nil
         )
         XCTAssertTrue(FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8)))
+    }
+
+    /// A history view model for the mock book, with these saved positions and sessions.
+    private func makeHistoryViewModel(
+        positions: [BookDeviceReadingPosition],
+        sessions: [BookDeviceReadingPositionHistory] = []
+    ) -> ReadingPositionHistoryViewModel {
+        let bookRepository = MockBookRepository()
+        bookRepository.getBookReturn = mockBook
+        mockAppContainer.bookRepository = bookRepository
+
+        let readingPositionRepository = MockReadingPositionRepository()
+        readingPositionRepository.getPositionsReturn = positions
+        readingPositionRepository.positionHistoryReturn = sessions
+        mockAppContainer.readingPositionRepository = readingPositionRepository
+        // The history list keeps only sessions of books on the shelf.
+        mockAppContainer.booksInShelf[mockBook.inShelfId] = mockBook
+
+        return ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
+    }
+
+    func testListViewModelContinueReadingOpensReadingPositionPresentation() throws {
+        try makeCachedEPUB()
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+
+        let alert = listViewModel.continueReading(at: position, targetWorkspaceID: nil)
+
+        XCTAssertNil(alert, "continueReading raised alert: \(alert?.id ?? "")")
+        let presentation = mockAppContainer.sessionManager.activeReaderPresentation
+        XCTAssertEqual(presentation?.book.inShelfId, mockBook.inShelfId)
+        XCTAssertEqual(presentation?.source, .readingPosition)
+        XCTAssertEqual(presentation?.readerInfo.position.id, "device-1")
+        XCTAssertEqual(presentation?.readerInfo.readerType, .YabrEPUB)
+    }
+
+    func testListViewModelContinueReadingAlertsWhenFormatNotCached() throws {
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+
+        XCTAssertFalse(listViewModel.canContinueReading(at: position))
+        let alert = listViewModel.continueReading(at: position, targetWorkspaceID: nil)
+
+        XCTAssertEqual(alert?.id, "Selected Format Not Cached")
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testListViewModelContinueReadingAlertsForUnsupportedReader() throws {
+        try makeCachedEPUB()
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: "NoSuchReader")
+
+        XCTAssertFalse(listViewModel.canContinueReading(at: position))
+        let alert = listViewModel.continueReading(at: position, targetWorkspaceID: nil)
+
+        XCTAssertEqual(alert?.id, "Unsupported Reader")
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testDetailViewModelReadSelectedFormatHonorsReaderOverride() throws {
+        try makeCachedEPUB()
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
+        detailVM.selectedFormatReader = .ReadiumEPUB
+
+        detailVM.readSelectedFormat()
+
+        XCTAssertNil(detailVM.alertItem, "readSelectedFormat raised alert: \(detailVM.alertItem?.id ?? "")")
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.readerInfo.readerType, .ReadiumEPUB)
+    }
+
+    func testHistoryViewModelBuildsDeviceSectionsNewestFirst() throws {
+        try makeCachedEPUB()
+        let now = Date().timeIntervalSince1970
+        let historyVM = makeHistoryViewModel(positions: [
+            TestFixtures.makeReadingPosition(id: "other-device", lastReadChapter: "Chapter 2", lastProgress: 20, epoch: now - 3600),
+            TestFixtures.makeReadingPosition(id: mockAppContainer.deviceName, lastReadChapter: " Chapter 3\n", lastProgress: 30, epoch: now)
+        ])
+
+        historyVM.loadData()
+
+        XCTAssertTrue(historyVM.isBookMode)
+        XCTAssertEqual(historyVM.navigationTitle, "Reading History")
+        XCTAssertEqual(historyVM.deviceSections.map(\.deviceName), [mockAppContainer.deviceName, "other-device"])
+        XCTAssertEqual(historyVM.deviceSections.map(\.isThisDevice), [true, false])
+
+        let latestRow = try XCTUnwrap(historyVM.deviceSections.first?.rows.first)
+        XCTAssertEqual(latestRow.title, "Chapter 3")
+        XCTAssertNil(latestRow.detail)
+        XCTAssertFalse(latestRow.percentText.isEmpty)
+        XCTAssertTrue(latestRow.canContinue)
+    }
+
+    func testHistoryViewModelBuildsLocalSessionRows() throws {
+        let now = Date()
+        let start = max(Calendar.current.startOfDay(for: now), now.addingTimeInterval(-1800))
+        let endPosition = TestFixtures.makeReadingPosition(
+            id: mockAppContainer.deviceName,
+            lastReadChapter: "Chapter 4",
+            epoch: now.timeIntervalSince1970
+        )
+        let session = BookDeviceReadingPositionHistory(
+            bookId: "\(mockBook.library.key) - \(mockBook.id)",
+            startDatetime: start,
+            startPosition: nil,
+            endPosition: endPosition
+        )
+        let historyVM = makeHistoryViewModel(positions: [endPosition], sessions: [session])
+
+        historyVM.loadData()
+
+        XCTAssertEqual(historyVM.sessionRows.count, 1)
+        XCTAssertEqual(historyVM.sessionRows.first?.chapter, "Chapter 4")
+        XCTAssertFalse(historyVM.sessionRows.first?.durationText.isEmpty ?? true)
+        XCTAssertEqual(historyVM.readingStatistics.count, ReadingPositionHistoryViewModel.limitDays + 1)
+        XCTAssertEqual(historyVM.chartDayLabels().last, "Today")
+    }
+
+    func testHistoryViewModelContinueReadingRowOpensReader() throws {
+        try makeCachedEPUB()
+        let historyVM = makeHistoryViewModel(positions: [
+            TestFixtures.makeReadingPosition(id: "device-1", lastReadChapter: "Chapter 5")
+        ])
+        historyVM.loadData()
+        let row = try XCTUnwrap(historyVM.deviceSections.first?.rows.first)
+        let workspaceID = UUID()
+
+        historyVM.continueReading(row, targetWorkspaceID: workspaceID)
+
+        XCTAssertNil(historyVM.alertItem, "continueReading raised alert: \(historyVM.alertItem?.id ?? "")")
+        let presentation = mockAppContainer.sessionManager.activeReaderPresentation
+        XCTAssertEqual(presentation?.source, .readingPosition)
+        XCTAssertEqual(presentation?.readerInfo.position.lastReadChapter, "Chapter 5")
+    }
+
+    func testHistoryViewModelContinueReadingWithoutCachedFormatAlerts() throws {
+        let historyVM = makeHistoryViewModel(positions: [
+            TestFixtures.makeReadingPosition(id: "device-1")
+        ])
+        historyVM.loadData()
+        let row = try XCTUnwrap(historyVM.deviceSections.first?.rows.first)
+        XCTAssertFalse(row.canContinue)
+
+        historyVM.continueReading(row, targetWorkspaceID: nil)
+
+        XCTAssertEqual(historyVM.alertItem?.id, "Selected Format Not Cached")
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testHistoryViewModelDismissDetailKeepsDisplayedPositionForThePopAnimation() throws {
+        let historyVM = makeHistoryViewModel(positions: [])
+        let position = TestFixtures.makeReadingPosition(id: "device-1")
+
+        historyVM.showDetail(for: position)
+        XCTAssertEqual(historyVM.detailPosition, position)
+        XCTAssertEqual(historyVM.displayedDetailPosition, position)
+
+        historyVM.dismissDetail()
+        XCTAssertNil(historyVM.detailPosition)
+        XCTAssertEqual(historyVM.displayedDetailPosition, position)
+    }
+
+    func testHistoryViewModelStatisticsModeHasNoDeviceSections() throws {
+        let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: nil, bookId: nil)
+
+        historyVM.loadData()
+
+        XCTAssertFalse(historyVM.isBookMode)
+        XCTAssertEqual(historyVM.navigationTitle, "Reading Statistics")
+        XCTAssertTrue(historyVM.deviceSections.isEmpty)
+        XCTAssertTrue(historyVM.sessionRows.isEmpty)
+    }
+
+    func testDetailViewModelReadSelectedFormatOpensReaderPresentation() throws {
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+        try makeCachedEPUB()
+        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
 
         detailVM.readSelectedFormat()
 

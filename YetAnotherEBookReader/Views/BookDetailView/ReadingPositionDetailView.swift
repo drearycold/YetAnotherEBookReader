@@ -9,106 +9,100 @@ import SwiftUI
 
 struct ReadingPositionDetailView: View {
     @Environment(\.readerWorkspaceID) var readerWorkspaceID
-    @ObservedObject private var _VM: ReadingPositionDetailViewModel
-    
-    @State private var overrideToggle = false
-    
-    init(viewModel: ReadingPositionDetailViewModel) {
-        self._VM = viewModel
+    @StateObject private var viewModel: ReadingPositionDetailViewModel
+
+    init(viewModel: @autoclosure @escaping () -> ReadingPositionDetailViewModel) {
+        self._viewModel = StateObject(wrappedValue: viewModel())
     }
-    
+
     var body: some View {
         List {
-            Section(header: Text("Last Position") ) {
-                if _VM.position.structuralStyle == 1, _VM.position.lastReadBook.isEmpty == false {
-                    HStack {
-                        Text("Book")
-                        Spacer()
-                        Text(_VM.position.lastReadBook)
-                    }
+            Section {
+                Button(action: {
+                    viewModel.readSelectedFormat()
+                }) {
+                    Label("Continue Reading", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
                 }
-                HStack {
-                    Text("Section")
-                    Spacer()
-                    Text("\(_VM.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))")
-                }
-                HStack {
-                    Text("Progress")
-                    Spacer()
-                    Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastChapterProgress / 100)) ?? "")
-                    Text("/")
-                    Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastProgress / 100)) ?? "")
-                }
-                HStack {
-                    Text("Time")
-                    Spacer()
-                    Text(_VM.dateFormatter.string(from: Date(timeIntervalSince1970: _VM.position.epoch)))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!viewModel.isSelectedFormatCached)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .accessibilityIdentifier("reading-position.continue")
+            } footer: {
+                if !viewModel.isSelectedFormatCached {
+                    Text("Download \(viewModel.selectedFormat.rawValue) first to continue from here.")
                 }
             }
 
-#if DEBUG
-            Section(header: Text("Debug")) {
-                HStack {
-                    Text("Entry")
-                    Spacer()
-                    Text("\(_VM.position.lastReadPage) / \(_VM.position.maxPage)")
-                }
-                HStack {
-                    Text("Position")
-                    Spacer()
-                    Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
-                }
-                HStack {
-                    Text("CFI")
-                    Spacer()
-                    Text(_VM.position.cfi.replacingOccurrences(of: ";", with: ";\n")).lineLimit(10)
-                }
-                HStack {
-                    Text("Epoch")
-                    Spacer()
-                    Text(_VM.position.epoch.description)
-                }
-                if _VM.position.structuralStyle == 1, _VM.position.lastReadBook.isEmpty == false {
-                    HStack {
-                        Text("Bundle Progress")
-                        Spacer()
-                        Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastBundleProgress / 100)) ?? "")
-                    }
-                }
-            }
-#endif
-            
-            Section(header: Text("Override Reader")) {
-                HStack {
-                    Picker("Reader", selection: $_VM.selectedFormatReader) {
+            Section(header: Text("Reader")) {
+                if viewModel.availableReaders.count > 1 {
+                    Picker("Reader", selection: $viewModel.selectedFormatReader) {
                         ForEach(ReaderType.allCases) { type in
-                            if _VM.availableReaders.contains(type) {
+                            if viewModel.availableReaders.contains(type) {
                                 Text(type.rawValue).tag(type)
                             }
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
+                } else {
+                    row("Reader", viewModel.selectedFormatReader.rawValue)
                 }
             }
-            
-            Button(action: {
-                _VM.readSelectedFormat()
-            }) {
-                HStack {
-                    Spacer()
-                    Text("Continue Reading")
-                    Spacer()
+
+            Section(header: Text("Last Position")) {
+                if viewModel.position.structuralStyle == 1, viewModel.position.lastReadBook.isEmpty == false {
+                    row("Book", viewModel.position.lastReadBook)
                 }
-            }.disabled(!_VM.isSelectedFormatCached)
+                row("Section", viewModel.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))
+                HStack {
+                    Text("Progress")
+                    Spacer()
+                    Text(viewModel.percentFormatter.string(from: NSNumber(value: viewModel.position.lastChapterProgress / 100)) ?? "")
+                    Text("/")
+                    Text(viewModel.percentFormatter.string(from: NSNumber(value: viewModel.position.lastProgress / 100)) ?? "")
+                }
+                row("Time", viewModel.dateFormatter.string(from: Date(timeIntervalSince1970: viewModel.position.epoch)))
+            }
+
+#if DEBUG
+            Section {
+                DisclosureGroup("Debug") {
+                    row("Entry", "\(viewModel.position.lastReadPage) / \(viewModel.position.maxPage)")
+                    row("Position", "(\(viewModel.position.lastPosition.map(String.init).joined(separator: ":")))")
+                    HStack {
+                        Text("CFI")
+                        Spacer()
+                        Text(viewModel.position.cfi.replacingOccurrences(of: ";", with: ";\n")).lineLimit(10)
+                    }
+                    row("Epoch", viewModel.position.epoch.description)
+                    if viewModel.position.structuralStyle == 1, viewModel.position.lastReadBook.isEmpty == false {
+                        row("Bundle Progress", viewModel.percentFormatter.string(from: NSNumber(value: viewModel.position.lastBundleProgress / 100)) ?? "")
+                    }
+                }
+            }
+#endif
         }
-        .navigationTitle(
-            Text("\(_VM.position.id) with \(_VM.position.readerName)")
-        )
-        .alert(item: $_VM.alertItem) { item in
+        .listStyle(.insetGrouped)
+        .navigationTitle(Text(viewModel.position.id))
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(item: $viewModel.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
         .onAppear {
-            _VM.targetWorkspaceID = readerWorkspaceID
+            viewModel.targetWorkspaceID = readerWorkspaceID
+        }
+        .accessibilityIdentifier("screen.reading-position")
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 }
@@ -117,18 +111,22 @@ struct ReadingPositionDetailView_Previews: PreviewProvider {
     static let container = AppContainer(mock: true)
 
     static var previews: some View {
-        let book = container.bookManager.booksInShelf.values.first!
-        let listModel = ReadingPositionListViewModel(
-            container: container,
-            book: book,
-            positions: container.readingPositionRepository.getPositions(for: book)
-        )
-        ReadingPositionDetailView(
-            viewModel: ReadingPositionDetailViewModel(
+        if let book = container.bookManager.booksInShelf.values.first,
+           let position = container.readingPositionRepository.getPositions(for: book).first {
+            let listModel = ReadingPositionListViewModel(
                 container: container,
-                listModel: listModel,
-                position: container.readingPositionRepository.getPositions(for: book).first!
+                book: book,
+                positions: container.readingPositionRepository.getPositions(for: book)
             )
-        )
+            NavigationView {
+                ReadingPositionDetailView(
+                    viewModel: ReadingPositionDetailViewModel(
+                        container: container,
+                        listModel: listModel,
+                        position: position
+                    )
+                )
+            }
+        }
     }
 }

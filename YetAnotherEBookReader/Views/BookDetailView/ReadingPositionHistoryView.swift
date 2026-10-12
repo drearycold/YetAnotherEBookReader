@@ -11,211 +11,267 @@ import SwiftUI
 import SwiftUICharts
 #endif
 
+/// A book's reading history (`library` and `bookId` given), or reading statistics for every book on
+/// the shelf. Pushed, never presented in a sheet: Continue Reading opens the reader workspace, an
+/// overlay in `MainView` that a sheet would cover.
 struct ReadingPositionHistoryView: View {
+    @Environment(\.readerWorkspaceID) var readerWorkspaceID
     @StateObject private var viewModel: ReadingPositionHistoryViewModel
-    
-    @Binding var presenting: Bool
-    
-    init(presenting: Binding<Bool>, library: CalibreLibrary?, bookId: Int32?) {
-        self._presenting = presenting
+
+    init(library: CalibreLibrary?, bookId: Int32?) {
         self._viewModel = StateObject(wrappedValue: ReadingPositionHistoryViewModel(library: library, bookId: bookId))
     }
-    
+
     var body: some View {
-        VStack {
-            Group {
-                if viewModel.readingStatistics.isEmpty {
-                    Text("New Book")
-                } else {
-                    #if DEBUG
-                    List {
-                        ForEach(viewModel.readingStatistics, id: \.self) { minutes in
-                            Text("\(minutes)")
-                        }
-                    }
-                    #endif
-                    #if canImport(SwiftUICharts)
-                    if let data = viewModel.barChartData {
-                        BarChart(
-                            chartData: data
-                        )
-                        .touchOverlay(chartData: data, specifier: "%.1f")
-                        .averageLine(chartData: data,
-                                     strokeStyle: StrokeStyle(lineWidth: 3,dash: [5,10]))
-                        .yAxisPOI(chartData: data,
-                                  markerName: "50",
-                                  markerValue: 50,
-                                  lineColour: Color.blue,
-                                  strokeStyle: StrokeStyle(lineWidth: 3, dash: [5,10]))
-                        .xAxisGrid(chartData: data)
-                        .yAxisGrid(chartData: data)
+        List {
+            statisticsSection
+
+            if viewModel.isBookMode {
+                positionSections
+                sessionsSection
+            } else {
+                booksSection
+            }
+
+            #if DEBUG
+            debugSection
+            #endif
+        }
+        .listStyle(.insetGrouped)
+        .background(detailLink)
+        .navigationTitle(viewModel.navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(item: $viewModel.alertItem) { item in
+            Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
+        }
+        .onAppear {
+            viewModel.loadData()
+        }
+        .accessibilityIdentifier("screen.reading-history")
+    }
+
+    private var statisticsSection: some View {
+        Section {
+            if viewModel.hasRecentReading {
+                #if canImport(SwiftUICharts)
+                if let data = viewModel.barChartData {
+                    BarChart(chartData: data)
                         .xAxisLabels(chartData: data)
                         .yAxisLabels(chartData: data)
-                        .infoBox(chartData: data)
-                        .floatingInfoBox(chartData: data)
-                        .headerBox(chartData: data)
-                        .legends(chartData: data)
-                        .padding()
+                        .yAxisGrid(chartData: data)
+                        .frame(height: 140)
+                        .padding(.vertical, 8)
+                }
+                #endif
+            } else {
+                Text("No reading in the last \(ReadingPositionHistoryViewModel.limitDays) days")
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Last \(ReadingPositionHistoryViewModel.limitDays) Days")
+        } footer: {
+            if viewModel.hasRecentReading {
+                Text(viewModel.summaryText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var positionSections: some View {
+        if viewModel.deviceSections.isEmpty {
+            Section(header: Text("Positions")) {
+                Text("No saved positions yet")
+                    .foregroundColor(.secondary)
+            }
+        } else {
+            ForEach(viewModel.deviceSections) { section in
+                Section {
+                    ForEach(section.rows) { row in
+                        positionRow(row)
                     }
-                    #endif
+                } header: {
+                    HStack(spacing: 6) {
+                        Text("On \(section.deviceName)")
+                        if section.isThisDevice {
+                            Text("This Device")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .foregroundColor(.white)
+                                .background(Capsule().fill(Color.accentColor))
+                        }
+                    }
                 }
             }
-            List {
-//                Section(
-//                    header: Text("Stats"),
-//                    footer: HStack {
-//                        Spacer()
-//                        Text("Of Last 7 Days: Max \(maxMinutes), Mean \(avgMinutes) (Min./Day)")
-//                    }
-//                ) {
-//                    BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
-//                }
-                
-                #if DEBUG
+        }
+    }
+
+    private var sessionsSection: some View {
+        Section(header: Text("Local Sessions")) {
+            if viewModel.sessionRows.isEmpty {
+                Text("No sessions on this device")
+                    .foregroundColor(.secondary)
+            }
+            ForEach(viewModel.sessionRows) { row in
+                Button(action: {
+                    viewModel.showDetail(for: row.endPosition)
+                }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.chapter)
+                            .lineLimit(2)
+                        Text("\(row.durationText) · \(row.dateText)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var booksSection: some View {
+        Section(header: Text("Books")) {
+            if viewModel.booksHistoryItems.isEmpty {
+                Text("No books read in the last \(ReadingPositionHistoryViewModel.limitDays) days")
+                    .foregroundColor(.secondary)
+            }
+            ForEach(viewModel.booksHistoryItems) { item in
+                NavigationLink(
+                    destination: LazyView(ReadingPositionHistoryView(library: item.book.library, bookId: item.book.id))
+                ) {
+                    HStack {
+                        Text(item.book.title)
+                            .lineLimit(2)
+                        Spacer()
+                        Text("\(item.minutesText) min")
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    private var debugSection: some View {
+        Section {
+            DisclosureGroup("Debug") {
                 Text("BookId: \(viewModel.bookId ?? -1)")
                 Text("Library: \(viewModel.library?.id ?? "NO LIB")")
-                ForEach(viewModel.debugReadingPositions, id: \.id) { readingPosition in
+                Text("Minutes: \(viewModel.readingStatistics.map { String(format: "%.1f", $0) }.joined(separator: ", "))")
+                ForEach(Array(viewModel.debugReadingPositions.enumerated()), id: \.offset) { _, readingPosition in
                     HStack {
                         Text(readingPosition.id)
                         Text(readingPosition.lastReadChapter)
                         Text("\(readingPosition.lastProgress)")
                     }
-                }
-                #endif
-                
-                if let listVM = viewModel.listViewModel {
-                    if listVM.positions.isEmpty == false {
-                        ForEach(listVM.positionsDeviceKeys(), id: \.self) { deviceId in
-                            Section(
-                                header: HStack {
-                                    Text("On \(deviceId)")
-                                    Spacer()
-                                    if deviceId == viewModel.container.deviceName {
-                                        Text("This Device").foregroundColor(.red)
-                                    }
-                                }
-                            ) {
-                                ForEach(listVM.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
-                                    NavigationLink(
-                                        destination: ReadingPositionDetailView(
-                                            viewModel: ReadingPositionDetailViewModel(
-                                                container: viewModel.container,
-                                                listModel: listVM,
-                                                position: position)
-                                        )
-                                    ) {
-                                        row(position: position)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        #if debug
-                        Button(action: {
-                            
-                        } ) {
-                            Text("Start Reading Now")
-                            
-                        }
-                        Text(getSavedUrl(book: listVM.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
-                        Text(getBookBaseUrl(id: listVM.book.id, library: listVM.book.library, localFilename: listVM.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
-                        #endif
-                    }
-                } else {
-                    #if debug
-                    Text("Missing View Model")
-                    #else
-                    EmptyView()
-                    #endif
-                }
-                
-                Section(header: Text("Local Activities")) {
-                    if viewModel.library != nil, viewModel.bookId != nil {
-                        if let listVM = viewModel.listViewModel {
-                            ForEach(viewModel.localActivities, id: \.self) { obj in
-                                if let endPos = obj.endPosition {
-                                    NavigationLink(
-                                        destination: ReadingPositionDetailView(
-                                            viewModel: ReadingPositionDetailViewModel(
-                                                container: viewModel.container,
-                                                listModel: listVM,
-                                                position: endPos)
-                                        )
-                                    ) {
-                                        row(position: endPos)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        ForEach(viewModel.booksHistoryItems) { item in
-                            NavigationLink(
-                                destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: item.book.library, bookId: item.book.id)
-                            ) {
-                                HStack {
-                                    Text(item.book.title)
-                                    Spacer()
-                                    Text(item.minutesText)
-                                }
-                            }
-                        }
-                    }
+                    .font(.caption)
                 }
             }
         }
-        .onAppear {
-            viewModel.loadData()
+    }
+    #endif
+
+    /// The row's info opens its detail and the play button continues reading from it. They are
+    /// sibling buttons, plain and borderless, so a List row gives each its own taps; a button inside
+    /// a NavigationLink row would push the detail instead.
+    private func positionRow(_ row: ReadingHistoryPositionRow) -> some View {
+        HStack(spacing: 12) {
+            Button(action: {
+                viewModel.showDetail(for: row.position)
+            }) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.title)
+                            .lineLimit(2)
+                        if let detail = row.detail {
+                            Text(detail)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        Text("\(row.relativeTimeText) · \(row.readerName)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer(minLength: 8)
+                    
+                    Text(row.percentText)
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows this position's details")
+            
+            Button(action: {
+                viewModel.continueReading(row, targetWorkspaceID: readerWorkspaceID)
+            }) {
+                Image(systemName: "play.circle.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!row.canContinue)
+            .accessibilityLabel("Continue Reading")
+            .accessibilityIdentifier("reading-history.continue")
         }
-        .navigationTitle("Reading History")
-        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    /// The single hidden link for a position's detail, in book mode only. Settings mode has a
+    /// NavigationLink per book, and iOS 15 pops a programmatic link that shares its view with
+    /// another one.
+    @ViewBuilder
+    private var detailLink: some View {
+        if viewModel.isBookMode {
+            NavigationLink(
+                isActive: Binding(
+                    get: { viewModel.detailPosition != nil },
+                    set: { isActive in
+                        if !isActive {
+                            viewModel.dismissDetail()
+                        }
+                    }
+                )
+            ) {
+                if let position = viewModel.displayedDetailPosition {
+                    positionDetail(position)
+                        .id(position)
+                }
+            } label: {
+                EmptyView()
+            }
+            .hidden()
+        }
     }
     
     @ViewBuilder
-    private func row(position: BookDeviceReadingPosition) -> some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text(position.readerName)
-                Spacer()
-            }.font(.caption)
-            HStack {
-                if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
-                    Text(position.lastReadBook)
-                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastProgress / 100)) {
-                        Text("(\(percent))")
-                    }
-                } else {
-                    Text(position.lastReadChapter)
-                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
-                        Text("(\(percent))")
-                    }
-                }
-                Spacer()
-                Text(position.epochByLocaleRelative).font(.caption)
-            }
-            
-            HStack {
-                Spacer()
-                if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
-                    Text(position.lastReadChapter)
-                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
-                        Text("(\(percent))")
-                    }
-                }
-            }.font(.caption)
+    private func positionDetail(_ position: BookDeviceReadingPosition) -> some View {
+        if let listViewModel = viewModel.listViewModel {
+            ReadingPositionDetailView(
+                viewModel: viewModel.detailViewModel(
+                    for: position,
+                    listViewModel: listViewModel,
+                    targetWorkspaceID: readerWorkspaceID
+                )
+            )
+        } else {
+            Text("This book is no longer in the library")
+                .foregroundColor(.secondary)
         }
     }
-
 }
 
 struct ReadingPositionHistoryView_Previews: PreviewProvider {
     static private var container = AppContainer(mock: true)
 
-    @State static private var presenting = true
-    
     static var previews: some View {
         if let book = container.bookManager.booksInShelf.values.first {
             NavigationView {
-                ReadingPositionHistoryView(presenting: $presenting, library: book.library, bookId: book.id)
+                ReadingPositionHistoryView(library: book.library, bookId: book.id)
             }
             .navigationViewStyle(.stack)
             .environment(\.appContainer, container)

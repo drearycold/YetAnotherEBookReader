@@ -230,8 +230,12 @@ struct SectionShelfView: View {
                     }
                 }
             }
+            .background(bookDetailLink)
             .onDisappear {
-                adStore.clear()
+                // Pushing the detail also makes the shelf disappear; keep its ads for the way back.
+                if viewModel.presentingBookDetailId == nil {
+                    adStore.clear()
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -306,27 +310,34 @@ struct SectionShelfView: View {
                     )
                 }
             }
-            .sheet(item: Binding<IdentifiableString?>(
-                get: { viewModel.presentingBookDetailId.map { IdentifiableString(value: $0) } },
-                set: { viewModel.presentingBookDetailId = $0?.value }
-            )) { detailId in
-                NavigationView {
-                    BookDetailView(bookId: detailId.value, viewMode: .SHELF)
-                        .environment(\.appContainer, viewModel.container)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    viewModel.presentingBookDetailId = nil
-                                }
-                            }
-                        }
-                }
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
             viewModel.bootstrapIfDatabaseReady()
         }
+    }
+
+    /// The single hidden link for the pushed book detail. It sits on the root, outside the lazy
+    /// shelf rows, and one link per NavigationView avoids iOS 15's push-then-pop bug.
+    private var bookDetailLink: some View {
+        NavigationLink(
+            isActive: Binding(
+                get: { viewModel.presentingBookDetailId != nil },
+                set: { isActive in
+                    if !isActive {
+                        viewModel.dismissBookDetail()
+                    }
+                }
+            )
+        ) {
+            if let bookId = viewModel.displayedBookDetailId {
+                BookDetailView(bookId: bookId, viewMode: .SHELF)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .id(bookId)
+            }
+        } label: {
+            EmptyView()
+        }
+        .hidden()
     }
 }

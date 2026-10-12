@@ -53,8 +53,11 @@ class UIJourneyTestCase: XCTestCase {
         static let browseFilterClear = "browse.filter.clear"
         static let browseFilterRemoveTagsAlpha = "browse.filter.remove.tags.alpha-tag"
         static let settingsServer = "settings.server.ui-test"
-        static let closeBookDetail = "book-detail.close"
         static let bookDetailTitle = "book-detail.title"
+        static let bookDetailRead = "book-detail.read"
+        static let bookDetailHistory = "book-detail.history"
+        static let readingHistoryScreen = "screen.reading-history"
+        static let readingHistoryContinue = "reading-history.continue"
         static let readerFolioScreen = "reader.folio.screen"
         static let readerFolioContent = "reader.folio.content"
         static let readerFolioPosition = "reader.folio.position"
@@ -111,8 +114,9 @@ class UIJourneyTestCase: XCTestCase {
                 waitForIdentifier(AccessibilityID.bookDetailScreen)
                 waitForIdentifier(AccessibilityID.bookDetailTitle)
 
-                waitForIdentifier(AccessibilityID.closeBookDetail).tap()
-                waitForIdentifier(AccessibilityID.recentScreen)
+                navigateBackFromNavigationStack()
+                waitForNonExistence(AccessibilityID.bookDetailScreen)
+                waitForIdentifier(AccessibilityID.recentBook)
             }
 
             runActivity(named: "Recent mock book opens FolioReader, pages, and closes") {
@@ -133,6 +137,43 @@ class UIJourneyTestCase: XCTestCase {
                 waitForIdentifier(AccessibilityID.readerFolioClose).tap()
                 waitForIdentifier(AccessibilityID.recentScreen)
                 waitForNonExistence(AccessibilityID.readerFolioScreen)
+            }
+
+            // The reader workspace is an overlay over the tabs. Book detail is pushed, so a reader
+            // opened from it must show above it, and closing the reader must return to it.
+            runActivity(named: "Reader opened from book detail shows above it and closes back to it") {
+                waitForIdentifier(AccessibilityID.recentBookOptions).tap()
+                waitForIdentifier(AccessibilityID.recentBookDetails).tap()
+                waitForIdentifier(AccessibilityID.bookDetailScreen)
+                waitForIdentifier(AccessibilityID.bookDetailRead).tap()
+
+                let reader = waitForIdentifier(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.readerFolioContent, timeout: readerLoadTimeout)
+                XCTAssertTrue(reader.isHittable, "The reader should show above the book detail")
+
+                waitForIdentifier(AccessibilityID.readerFolioClose).tap()
+                waitForNonExistence(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.bookDetailScreen)
+            }
+
+            runActivity(named: "Continue Reading from reading history shows the reader above it") {
+                waitForIdentifier(AccessibilityID.bookDetailHistory).tap()
+                waitForIdentifier(AccessibilityID.readingHistoryScreen)
+                waitForIdentifier(AccessibilityID.readingHistoryContinue).tap()
+
+                let reader = waitForIdentifier(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.readerFolioContent, timeout: readerLoadTimeout)
+                XCTAssertTrue(reader.isHittable, "The reader should show above the reading history")
+
+                waitForIdentifier(AccessibilityID.readerFolioClose).tap()
+                waitForNonExistence(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.readingHistoryScreen)
+
+                navigateBackFromNavigationStack()
+                waitForIdentifier(AccessibilityID.bookDetailScreen)
+                navigateBackFromNavigationStack()
+                waitForNonExistence(AccessibilityID.bookDetailScreen)
+                waitForIdentifier(AccessibilityID.recentBook)
             }
         }
     }

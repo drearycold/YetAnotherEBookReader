@@ -19,8 +19,7 @@ struct BookProgressSection: View {
                 .frame(width: 36, height: 24, alignment: .center)
             
             Button(action:{
-                viewModel.prepareReadingPositionHistory(book: book)
-                viewModel.readingPositionHistoryViewPresenting = true
+                viewModel.showReadingPositionHistory(book: book)
             }) {
                 if let summary = viewModel.getReadingProgressSummary(for: book) {
                     switch summary {
@@ -49,21 +48,6 @@ struct BookProgressSection: View {
                     Text("No Reading History")
                 }
             }.disabled(!viewModel.hasReadingHistory(for: book))
-        }.sheet(isPresented: $viewModel.readingPositionHistoryViewPresenting, onDismiss: {
-            viewModel.readingPositionHistoryViewPresenting = false
-        }, content: {
-            NavigationView {
-                ReadingPositionHistoryView(presenting: $viewModel.readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction, content: {
-                            Button(action: {
-                                viewModel.readingPositionHistoryViewPresenting = false
-                            }) {
-                                Image(systemName: "xmark")
-                            }
-                        })
-                    }
-            }
-        })
+        }
     }
 }

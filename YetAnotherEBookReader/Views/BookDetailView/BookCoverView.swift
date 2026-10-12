@@ -44,6 +44,7 @@ struct BookCoverView: View {
                 }
             }
             .opacity(0.8)
+            .accessibilityIdentifier("book-detail.read")
         }
         .frame(width: 300, height: 400)
     }

@@ -90,6 +90,16 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.presentingBookDetailId)
     }
 
+    func testDismissBookDetailKeepsDisplayedIdForThePopAnimation() throws {
+        viewModel.presentingBookDetailId = "book-1"
+        XCTAssertEqual(viewModel.displayedBookDetailId, "book-1")
+
+        viewModel.dismissBookDetail()
+
+        XCTAssertNil(viewModel.presentingBookDetailId)
+        XCTAssertEqual(viewModel.displayedBookDetailId, "book-1")
+    }
+
     func testSelectAllAndClear() throws {
         let item = ShelfBookItem(id: "book-1", title: "Book 1", coverURL: "", progress: 50, status: .ready)
         let section = ShelfSectionItem(id: "section-1", title: "Section 1", books: [item])
