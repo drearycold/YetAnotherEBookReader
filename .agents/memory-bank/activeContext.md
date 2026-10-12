@@ -5,6 +5,42 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Book Detail and Reading History Presentation (2026-10-12)
+
+`claude/bookdetailview-reading-history-refactor-1b8eb1`:
+- **The bug.** Continue Reading from Reading History opened the reader behind it.
+  - The reader workspace is an in-tree overlay in `MainView` (`ZStack`, zIndex 10).
+  - Book Detail (Recent and Discover) and Reading History were `.sheet`s, which
+    are UIKit modals above the overlay.
+- **The rule now:** a screen that can open a reader is pushed, never a sheet.
+  AGENTS.md "Book Detail" lists the hidden `NavigationLink(isActive:)` per
+  screen.
+- **Reading History redesign.** One inset-grouped List:
+  - a compact 7-day chart;
+  - a section per device, whose rows are sibling buttons (details, and ▶ to
+    continue reading);
+  - Local Sessions;
+  - a DEBUG `DisclosureGroup`.
+  - It is built from value rows made by `ReadingPositionHistoryViewModel`.
+- **Shared opener.** `ReadingPositionListViewModel.continueReading(...)` returns
+  an `AlertItem` or opens the reader. An unsupported reader now alerts instead
+  of opening an empty workspace.
+- **Deployment target.** iOS 15.6 → 15.5 (the user's call), so the iOS 15.5
+  iPhone 7 can run tests.
+  - On iOS 15 only the first `.confirmationAction` toolbar item showed, which
+    hid Book Detail's history clock. Star and clock are now one
+    `ToolbarItemGroup(.navigationBarTrailing)`.
+- **Known risks:**
+  - Pushed screens in Recent and Discover get the wood nav bar
+    (`yabrAppChrome`). iOS 15 has no per-screen override.
+  - A History page under an open reader doesn't reload until it reappears.
+  - **UI journey timing on iOS 15.** A FolioReader opened right after an earlier
+    session restores the saved position a few seconds after its content
+    appears, and an early swipe is undone. By hand, paging works.
+    `testJourneyRecentDetailsAndFolioReader` therefore runs its paging check on
+    a freshly opened book, before the new reader-from-detail and history
+    activities.
+
 ## Current Branch Notes
 
 - Reading regions (#97 spreads + columns, #19 column detection). Options
