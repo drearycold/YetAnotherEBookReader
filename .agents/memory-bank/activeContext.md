@@ -16,7 +16,8 @@ placement (content right of center, top offset / drift after page turns).
   - Now `.readingPosition` and `.newerPosition` presentations are "picked":
     - they mount at their position until their reader records one;
     - they replace an open tab of the same book and reader.
-- **Library sync pulls shelf positions (6a865830).**
+- **Library sync pulls shelf positions (6a865830, reverted in 42cc937b:
+  suspected performance problems on device; kept here for when it returns).**
   - calibre doesn't change a book's `last_modified` when a reading position or
     annotation is saved (`Cache.set_last_read_position` and
     `set_annotations_for_book` only write `last_read_positions` and
