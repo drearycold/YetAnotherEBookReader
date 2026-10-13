@@ -5,9 +5,11 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
-## Reading Positions: Picked, Synced, Newer (2026-10-13)
+## Reading Positions: Picked, Synced, Newer (2026-10-13, merged)
 
-`claude/continue-reading-picked-position`, not yet in a PR.
+**Merged to `main`** in drearycold/YetAnotherEBookReader#107 (merge commit
+`96642147`, 2026-10-13). The remote branch
+`claude/continue-reading-picked-position` is deleted.
 
 - **Continue Reading opens the picked position (4bf995bf).**
   - The bug: ▶ in History opened this device's latest position, not the row's.
@@ -16,6 +18,17 @@ placement (content right of center, top offset / drift after page turns).
   - Now `.readingPosition` and `.newerPosition` presentations are "picked":
     - they mount at their position until their reader records one;
     - they replace an open tab of the same book and reader.
+- **FolioReader starts at the position it opened with (9a05a7a7).**
+  - Found on the iPad: ▶ still opened this device's position for EPUBs.
+  - `FolioReaderCenter.reloadData` asks the position provider where to go right
+    after opening. `FolioReaderYabrReadPositionProvider` returned the
+    repository's newest position from any device (`.latest`).
+  - FolioReader saves its opening position on a background queue, so the newest
+    was still this device's earlier position, another device's (Continue Here
+    would jump anyway), or a closing tab's.
+  - The provider now returns its own reader's position: `readerInfo.position`,
+    then each one it saves (lock-guarded).
+  - Readium and PDF read `readerInfo.position` directly and weren't affected.
 - **Library sync pulls shelf positions (6a865830, reverted in 42cc937b:
   suspected performance problems on device; kept here for when it returns).**
   - calibre doesn't change a book's `last_modified` when a reading position or
@@ -51,10 +64,14 @@ placement (content right of center, top offset / drift after page turns).
     going backwards; disabled in 9ebc7283, deleted in bba8362a.
   - MainView still handles their dead `ForwardProgress`/`BackwardProgress`
     alert ids.
-- **Verified:** 868 unit tests passed, 1 skipped; Recent journey on the iPhone
-  17. `testSyncLibraryFetchesShelfBooksWithAnnotations` fails without the sync
-  change.
+- **Verified:**
+  - CI green on `f4f7a73f`.
+  - Locally: 869 unit tests passed, 1 skipped, before the sync revert. The
+    library and session tests pass after it.
+  - Recent journey on the iPhone 17.
+  - A Debug build installed and launched on the iPad Pro 10.5 (iOS 17.7).
 - **Not verified:**
+  - The user's iPad check of ▶ and the prompts was still in progress at merge.
   - The prompts in the running app: the mock library has only this device's
     positions.
   - Book Detail's cover read doesn't prompt.
