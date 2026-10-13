@@ -166,7 +166,7 @@ test target or class first, then state exactly what was and was not verified.
   - `LibraryInfoView`
   - `SettingsView`
 - `YetAnotherEBookReader/Models/App/AppContainer.swift` is the composition root
-  (366 lines, replaces the deleted `ModelData.swift`). It owns every repository,
+  (it replaced the deleted `ModelData.swift`). It owns every repository,
   manager, service, and runtime state, and conforms to `AppContainerProtocol`,
   `LibraryProvider`, and (transitively) `LibraryResolver` / `ServerResolver`.
   `YetAnotherEBookReaderApp` creates a single `AppContainer()` as `@StateObject`
@@ -174,8 +174,8 @@ test target or class first, then state exactly what was and was not verified.
 
 ### Managers
 
-Use managers for app-domain coordination. Avoid moving new business logic back
-into `ModelData` unless the change is a compatibility shim.
+Use managers for app-domain coordination. Keep new business logic out of
+`AppContainer`, the composition root.
 
 - `CalibreServerManager`: server list, credentials, reachability probes,
   DSReader Helper configuration.
@@ -492,7 +492,8 @@ Catalyst build succeeds; the old SPM product resolution failure (`R2Navigator`,
 
 ## Known Risks
 
-- `ModelData` remains a large compatibility facade. Small changes there can have
+- The managers and `CalibreServerService` reach the rest of the app through
+  `AppContainerProtocol`. Small changes to it or to `AppContainer` can have
   large effects.
 - Reader progress saving spans multiple engines. Verify shared reader behavior
   in all relevant reader paths.

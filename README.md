@@ -31,8 +31,8 @@
 - Xcode 15.0+
 - iOS 15.0+ / macOS 12.0+ (Catalyst)
 
-### Local Packages
-FolioReaderKit, Readium (`swift-toolkit`) and SwiftUICharts are local Swift packages the project expects at fixed paths. `.github/local-packages.txt` lists each path with the repository and commit to check out there, and `.github/scripts/local-packages.sh checkout` clones them (CI does the same).
+### Swift Packages
+All dependencies are remote Swift packages pinned in `Package.resolved`; Xcode fetches them on the first build. FolioReaderKit and Readium come from forks (`drearycold/FolioReaderKit`, `dsreader/readium-swift-toolkit`). The "Swift Packages" section of `AGENTS.md` explains how to update them and how to build against a local FolioReaderKit checkout.
 
 ### Build Commands
 To build the project from the terminal:
