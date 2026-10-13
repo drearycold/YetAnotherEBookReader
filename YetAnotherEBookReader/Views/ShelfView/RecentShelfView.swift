@@ -258,6 +258,17 @@ struct RecentShelfView: View {
                         },
                         secondaryButton: .cancel(Text("Dismiss"))
                     )
+                case .newerPosition(let book, let readerInfo, let position):
+                    return Alert(
+                        title: Text("Newer Reading Position"),
+                        message: Text(position.promptSummary),
+                        primaryButton: .default(Text("Go to It")) {
+                            viewModel.openReader(book: book, readerInfo: readerInfo, at: position)
+                        },
+                        secondaryButton: .default(Text("Continue Here")) {
+                            viewModel.openReader(book: book, readerInfo: readerInfo)
+                        }
+                    )
                 case .deleteConfirm(let bookIds):
                     return Alert(
                         title: Text("Delete Books?"),

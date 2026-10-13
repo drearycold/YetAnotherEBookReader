@@ -171,6 +171,13 @@ struct BookDeviceReadingPosition : Hashable, Codable {
         epoch = other.epoch
     }
     
+    /// Where this position is, for prompts: "Chapter 3 · 45.0% · iPad, Yesterday 21:30".
+    var promptSummary: String {
+        let chapter = lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)
+        let place = chapter.isEmpty ? "Page \(lastReadPage)" : chapter
+        return "\(place) · \(String(format: "%.1f%%", lastProgress)) · \(id), \(epochByLocaleRelative)"
+    }
+    
     func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
         if id == other.id,
             readerName == other.readerName,

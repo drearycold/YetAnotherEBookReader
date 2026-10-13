@@ -14,8 +14,16 @@ enum ReaderPresentationSource: String, Equatable, Codable {
     case bookDetail
     case importResult
     case readingPosition
+    /// At another device's newer position, offered when the book was opened from the shelf.
+    case newerPosition
     case preview
     case compatibility
+}
+
+/// A newer position another device saved, found after a reader opened from the shelf.
+struct NewerReadingPosition: Equatable {
+    let presentationID: ReaderPresentation.ID
+    let position: BookDeviceReadingPosition
 }
 
 struct ReaderPresentation: Identifiable, Equatable {
@@ -133,6 +141,13 @@ class ReadingSessionManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
     private var legacyPresentingEBookReaderFromShelf = false
     private var latestPositionsByPresentationID = [ReaderPresentation.ID: BookDeviceReadingPosition]()
+    /// Presentations opened at a position the user picked (Continue Reading, `.readingPosition`).
+    /// They mount at that position rather than this device's latest one in the repository, until
+    /// their reader records a position of its own.
+    private var pickedPositionPresentationIDs = Set<ReaderPresentation.ID>()
+    /// Other devices' positions already offered ("book|device|epoch"), so each is offered once.
+    private var offeredNewerPositionKeys = Set<String>()
+    private let newerPositionBroadcaster = ManagerAsyncBroadcaster<NewerReadingPosition>()
     private let persistenceStore: ReaderPresentationPersistenceStore
     private var suppressPersistence = false
     private var hasAttemptedPersistedRestore = false
@@ -374,7 +389,16 @@ class ReadingSessionManager {
         reuseExisting: Bool = true
     ) -> ReaderPresentation {
         let resolvedReaderInfo = readerInfo ?? prepareBookReading(book: book)
-        if reuseExisting,
+        let opensPickedPosition = source == .readingPosition || source == .newerPosition
+        // Opened from the shelf: look for a newer position from another device in the background.
+        let checksForNewerPosition = source == .shelf || source == .newerPosition
+        if opensPickedPosition {
+            // A tab already showing this book in this reader would be reused at its own position;
+            // the user picked another one, so it is replaced.
+            readerPresentations
+                .filter { $0.matches(book: book, readerInfo: resolvedReaderInfo) }
+                .forEach { closeReader(id: $0.id) }
+        } else if reuseExisting,
            let existingPresentation = readerPresentations.first(where: { $0.matches(book: book, readerInfo: resolvedReaderInfo) }) {
             legacyReadingBook = existingPresentation.book
             legacyReaderInfo = existingPresentation.readerInfo
@@ -383,6 +407,9 @@ class ReadingSessionManager {
             readingBookBroadcaster.send(self.readingBook)
             readerInfoBroadcaster.send(self.readerInfo)
             selectedPosition = existingPresentation.readerInfo.position.id
+            if checksForNewerPosition {
+                checkForNewerPositionAfterOpening(existingPresentation)
+            }
             return existingPresentation
         }
 
@@ -391,6 +418,9 @@ class ReadingSessionManager {
             readerInfo: resolvedReaderInfo,
             source: source
         )
+        if opensPickedPosition {
+            pickedPositionPresentationIDs.insert(presentation.id)
+        }
         legacyReadingBook = book
         legacyReaderInfo = resolvedReaderInfo
         legacyPresentingEBookReaderFromShelf = true
@@ -399,6 +429,9 @@ class ReadingSessionManager {
         readingBookBroadcaster.send(self.readingBook)
         readerInfoBroadcaster.send(self.readerInfo)
         selectedPosition = resolvedReaderInfo.position.id
+        if checksForNewerPosition {
+            checkForNewerPositionAfterOpening(presentation)
+        }
         return presentation
     }
 
@@ -406,6 +439,7 @@ class ReadingSessionManager {
         let wasActive = activeReaderPresentationID == id
         readerPresentations.removeAll { $0.id == id }
         latestPositionsByPresentationID.removeValue(forKey: id)
+        pickedPositionPresentationIDs.remove(id)
         if wasActive {
             activeReaderPresentationID = readerPresentations.last?.id
         }
@@ -443,12 +477,96 @@ class ReadingSessionManager {
             return recordedPosition
         }
 
-        return container?.readingPositionRepository
-            .getPositions(for: presentation.book)
+        // The picked position stands until the reader records one; this device's latest position
+        // in the repository is the one the user chose to leave.
+        if pickedPositionPresentationIDs.contains(presentation.id) {
+            return nil
+        }
+
+        return deviceLatestPosition(for: presentation.book, readerInfo: presentation.readerInfo)
+    }
+
+    /// This device's latest position for the book in the reader `readerInfo` opens.
+    private func deviceLatestPosition(for book: CalibreBook, readerInfo: ReaderInfo) -> BookDeviceReadingPosition? {
+        container?.readingPositionRepository
+            .getPositions(for: book)
             .first { position in
-                position.id == presentation.readerInfo.deviceName &&
-                    position.readerName == presentation.readerInfo.readerType.rawValue
+                position.id == readerInfo.deviceName &&
+                    position.readerName == readerInfo.readerType.rawValue
             }
+    }
+
+    // MARK: - Newer positions from other devices
+
+    func newerPositionEvents() -> AsyncStream<NewerReadingPosition> {
+        newerPositionBroadcaster.stream()
+    }
+
+    /// The position a reader opened with `readerInfo` starts at: this device's latest one in that
+    /// reader, as mounting picks it, or `readerInfo`'s own.
+    func startPosition(for readerInfo: ReaderInfo, book: CalibreBook) -> BookDeviceReadingPosition {
+        deviceLatestPosition(for: book, readerInfo: readerInfo) ?? readerInfo.position
+    }
+
+    /// The newest position another device saved for `book` after `position`, when it is somewhere
+    /// else in the book and hasn't been offered yet. Nil when `position` is the newest known.
+    func newerPositionFromOtherDevice(than position: BookDeviceReadingPosition, for book: CalibreBook) -> BookDeviceReadingPosition? {
+        guard let container else { return nil }
+        return container.readingPositionRepository.getPositions(for: book)
+            .filter { other in
+                other.id != container.deviceName &&
+                    other.epoch > position.epoch &&
+                    Self.isElsewhere(other, than: position) &&
+                    offeredNewerPositionKeys.contains(Self.offerKey(other, book: book)) == false
+            }
+            .max { $0.epoch < $1.epoch }
+    }
+
+    func markNewerPositionOffered(_ position: BookDeviceReadingPosition, for book: CalibreBook) {
+        offeredNewerPositionKeys.insert(Self.offerKey(position, book: book))
+    }
+
+    /// Reader info that opens `book` at `position`: in the reader that saved it when its format is
+    /// cached here, otherwise in `fallback`'s reader and format.
+    func prepareBookReading(book: CalibreBook, at position: BookDeviceReadingPosition, fallback: ReaderInfo) -> ReaderInfo {
+        if let reader = ReaderType(rawValue: position.readerName), reader != .UNSUPPORTED {
+            let format = formatOfReader(readerName: reader.rawValue) ?? reader.format
+            if book.formats[format.rawValue]?.cached == true,
+               let url = getSavedUrl(book: book, format: format),
+               FileManager.default.fileExists(atPath: url.path) {
+                return prepareBookReading(url: url, format: format, readerType: reader, position: position)
+            }
+        }
+        return prepareBookReading(url: fallback.url, format: fallback.format, readerType: fallback.readerType, position: position)
+    }
+
+    /// Fetches the book's positions from its server, then reports another device's position newer
+    /// than the one the reader opened at. Opening never waits for this.
+    private func checkForNewerPositionAfterOpening(_ presentation: ReaderPresentation) {
+        guard let container, presentation.book.library.server.isLocal == false else { return }
+        let book = presentation.book
+        let openedPosition = readerInfoForMounting(presentation: presentation).position
+        Task { @MainActor [weak self] in
+            await container.bookManager.getBooksMetadata(
+                request: .init(library: book.library, books: [book.id], getAnnotations: true)
+            )
+            guard let self,
+                  self.readerPresentations.contains(where: { $0.id == presentation.id }),
+                  let newer = self.newerPositionFromOtherDevice(than: openedPosition, for: book) else {
+                return
+            }
+            self.markNewerPositionOffered(newer, for: book)
+            self.newerPositionBroadcaster.send(NewerReadingPosition(presentationID: presentation.id, position: newer))
+        }
+    }
+
+    /// Another chapter or page, or at least 1% of the book away.
+    private static func isElsewhere(_ position: BookDeviceReadingPosition, than other: BookDeviceReadingPosition) -> Bool {
+        position.lastReadPage != other.lastReadPage || abs(position.lastProgress - other.lastProgress) >= 1
+    }
+
+    private static func offerKey(_ position: BookDeviceReadingPosition, book: CalibreBook) -> String {
+        "\(book.inShelfId)|\(position.id)|\(position.epoch)"
     }
 
     private func restorePresentation(from snapshot: ReaderPresentationSnapshot) -> ReaderPresentation? {

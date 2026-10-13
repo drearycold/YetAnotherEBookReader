@@ -12,6 +12,8 @@ enum RecentShelfAlert: Identifiable {
     case missingFormat(book: CalibreBook, format: Format)
     case downloadingFormat(book: CalibreBook, format: Format)
     case deleteConfirm(bookIds: Set<String>)
+    /// Another device saved a newer position than the one the book would open at.
+    case newerPosition(book: CalibreBook, readerInfo: ReaderInfo, position: BookDeviceReadingPosition)
     
     var id: String {
         switch self {
@@ -21,6 +23,8 @@ enum RecentShelfAlert: Identifiable {
             return "downloading-\(book.id)-\(format.rawValue)"
         case .deleteConfirm:
             return "deleteConfirm"
+        case .newerPosition(let book, _, let position):
+            return "newerPosition-\(book.id)-\(position.id)-\(position.epoch)"
         }
     }
 }
@@ -156,14 +160,35 @@ final class RecentShelfViewModel: ObservableObject {
             } else {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
+        } else if let newer = container.sessionManager.newerPositionFromOtherDevice(
+            than: container.sessionManager.startPosition(for: readerInfo, book: book),
+            for: book
+        ) {
+            // Known locally already, so asking costs no wait. Otherwise the book opens at once and a
+            // newer position found by the background fetch is offered in the reader.
+            container.sessionManager.markNewerPositionOffered(newer, for: book)
+            activeAlert = .newerPosition(book: book, readerInfo: readerInfo, position: newer)
         } else {
-            container.openReader(
-                book: book,
-                readerInfo: readerInfo,
-                source: .shelf,
-                targetWorkspaceID: targetWorkspaceID
-            )
+            openReader(book: book, readerInfo: readerInfo)
         }
+    }
+
+    func openReader(book: CalibreBook, readerInfo: ReaderInfo) {
+        container.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .shelf,
+            targetWorkspaceID: targetWorkspaceID
+        )
+    }
+
+    func openReader(book: CalibreBook, readerInfo: ReaderInfo, at position: BookDeviceReadingPosition) {
+        container.openReader(
+            book: book,
+            readerInfo: container.sessionManager.prepareBookReading(book: book, at: position, fallback: readerInfo),
+            source: .newerPosition,
+            targetWorkspaceID: targetWorkspaceID
+        )
     }
     
     func toggleSelection(bookId: String) {

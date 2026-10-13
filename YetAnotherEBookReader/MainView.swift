@@ -105,6 +105,14 @@ struct MainView: View {
                     secondaryButton: .cancel()
                 )
             }
+            if item.id == MainViewModel.newerPositionAlertID {
+                return Alert(
+                    title: Text("Newer Reading Position"),
+                    message: Text(item.msg ?? ""),
+                    primaryButton: .default(Text("Go to It"), action: item.action),
+                    secondaryButton: .cancel(Text("Stay Here"))
+                )
+            }
             if item.id == "ATTNotice" {
                 return Alert(title: Text("Tracking Request"),
                              message: Text("This free App is ads-Supported. We value our users' privary. Tracking will allow our ads providers to deliver personalized ads to you. Please make a choice in the next notice."),

@@ -90,6 +90,51 @@ import Combine
         }
     }
 
+    /// The mock book's position on this device, saved by `AppContainer(mock:)`.
+    private let mockDevicePositionEpoch: Double = 1_645_495_322
+
+    func testTapBookOffersNewerPositionFromAnotherDeviceBeforeOpening() throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        mockAppContainer.booksInShelf[book.inShelfId] = book
+        let repository = mockAppContainer.readingPositionRepository
+        let ipadPosition = TestFixtures.makeReadingPosition(
+            id: "ipad", lastReadPage: 6, lastProgress: 50, epoch: mockDevicePositionEpoch + 1000
+        )
+        repository.savePosition(ipadPosition, for: book)
+        defer { repository.removePosition(deviceName: "ipad", for: book) }
+
+        viewModel.tapBook(bookId: book.inShelfId)
+
+        guard case let .newerPosition(alertBook, readerInfo, position) = viewModel.activeAlert else {
+            return XCTFail("Expected the newer position to be offered before opening, got \(String(describing: viewModel.activeAlert))")
+        }
+        XCTAssertEqual(alertBook.inShelfId, book.inShelfId)
+        XCTAssertEqual(position.id, "ipad")
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation, "Nothing opens until the user picks")
+
+        viewModel.openReader(book: alertBook, readerInfo: readerInfo, at: position)
+
+        let presentation = try XCTUnwrap(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertEqual(presentation.source, .newerPosition)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentationForMount(id: presentation.id)?.readerInfo.position.id, "ipad")
+    }
+
+    func testTapBookOpensDirectlyWhenNoNewerPositionIsKnown() throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        mockAppContainer.booksInShelf[book.inShelfId] = book
+        let repository = mockAppContainer.readingPositionRepository
+        let olderIpadPosition = TestFixtures.makeReadingPosition(
+            id: "ipad", lastReadPage: 6, lastProgress: 50, epoch: mockDevicePositionEpoch - 1000
+        )
+        repository.savePosition(olderIpadPosition, for: book)
+        defer { repository.removePosition(deviceName: "ipad", for: book) }
+
+        viewModel.tapBook(bookId: book.inShelfId)
+
+        XCTAssertNil(viewModel.activeAlert)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.source, .shelf)
+    }
+
     func testTapBookTreatsPausedDownloadAsActive() throws {
         let library = try XCTUnwrap(mockAppContainer.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 4321, library: library)

@@ -5,6 +5,62 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Reading Positions: Picked, Synced, Newer (2026-10-13)
+
+`claude/continue-reading-picked-position`, not yet in a PR.
+
+- **Continue Reading opens the picked position (4bf995bf).**
+  - The bug: ▶ in History opened this device's latest position, not the row's.
+  - Mounting fell back to this device's latest same-reader position from the
+    repository even on a first mount, and `openReader` reused an open tab.
+  - Now `.readingPosition` and `.newerPosition` presentations are "picked":
+    - they mount at their position until their reader records one;
+    - they replace an open tab of the same book and reader.
+- **Library sync pulls shelf positions (6a865830, reverted in 42cc937b:
+  suspected performance problems on device; kept here for when it returns).**
+  - calibre doesn't change a book's `last_modified` when a reading position or
+    annotation is saved (`Cache.set_last_read_position` and
+    `set_annotations_for_book` only write `last_read_positions` and
+    `annotations`).
+  - So `bookToUpdate` never includes a shelf book read only elsewhere.
+  - At `.complete` of every sync, the library's shelf books are fetched with
+    `getAnnotations: true`, one extra request per library per sync (60 s
+    probe, auto-update libraries).
+  - Before this, positions came only from:
+    - shelf refresh;
+    - opening Book Detail;
+    - after a reader closes;
+    - after a download.
+- **Newer position from another device on shelf open (27561e53).** Restores the
+  lost 2021 prompt without delaying opening. "Newer" means a later epoch,
+  another device, and somewhere else (another `lastReadPage`, or ≥ 1% of
+  progress away). Each position is offered once.
+  - **Known locally:** `RecentShelfViewModel.tapBook` asks Go to It / Continue
+    Here before opening (`RecentShelfAlert.newerPosition`).
+  - **Otherwise:** the book opens at once. `ReadingSessionManager` then fetches
+    the book's positions in the background (`.shelf` and `.newerPosition`
+    opens, non-local servers) and broadcasts `newerPositionEvents()`.
+    `MainViewModel.offerNewerPosition` alerts only while that reader is active
+    and shown.
+  - **Go to It** opens with `.newerPosition`: in the position's own reader if
+    its format is cached, else the current one.
+- **History of the old prompts.**
+  - 2021-05..08: Book Detail's "picked a different reading position" confirm,
+    removed in 17dc1fb6.
+  - 2021-06..2022-04: MainView's confirm on close after jumping ahead > 10% or
+    going backwards; disabled in 9ebc7283, deleted in bba8362a.
+  - MainView still handles their dead `ForwardProgress`/`BackwardProgress`
+    alert ids.
+- **Verified:** 868 unit tests passed, 1 skipped; Recent journey on the iPhone
+  17. `testSyncLibraryFetchesShelfBooksWithAnnotations` fails without the sync
+  change.
+- **Not verified:**
+  - The prompts in the running app: the mock library has only this device's
+    positions.
+  - Book Detail's cover read doesn't prompt.
+  - `CalibreServerService.getLastReadPosition` and the DSReader Helper
+    `readingPositionColumn*` settings are unused.
+
 ## Book Detail and Reading History Presentation (2026-10-12, merged)
 
 **Merged to `main`** in drearycold/YetAnotherEBookReader#105 (merge commit

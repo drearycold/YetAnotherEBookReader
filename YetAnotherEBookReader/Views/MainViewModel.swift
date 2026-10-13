@@ -27,6 +27,7 @@ final class MainViewModel: ObservableObject {
     private var bookImportTask: Task<Void, Never>?
     private var readerPresentationTask: Task<Void, Never>?
     private var readerPresentationListTask: Task<Void, Never>?
+    private var newerPositionTask: Task<Void, Never>?
     private var welcomeBooksInShelfTask: Task<Void, Never>?
     private var welcomeShelfLoadedTask: Task<Void, Never>?
     
@@ -69,6 +70,7 @@ final class MainViewModel: ObservableObject {
         bookImportTask?.cancel()
         readerPresentationTask?.cancel()
         readerPresentationListTask?.cancel()
+        newerPositionTask?.cancel()
         welcomeBooksInShelfTask?.cancel()
         welcomeShelfLoadedTask?.cancel()
     }
@@ -99,6 +101,15 @@ final class MainViewModel: ObservableObject {
             for await presentations in readerPresentationListSnapshots {
                 guard !Task.isCancelled else { return }
                 self?.readerPresentations = presentations
+            }
+        }
+
+        newerPositionTask?.cancel()
+        let newerPositions = sessionManager.newerPositionEvents()
+        newerPositionTask = Task { @MainActor [weak self] in
+            for await found in newerPositions {
+                guard !Task.isCancelled, let self else { return }
+                self.offerNewerPosition(found)
             }
         }
 
@@ -213,6 +224,43 @@ final class MainViewModel: ObservableObject {
 
     func activateReader(_ presentation: ReaderPresentation) {
         sessionManager.activateReader(id: presentation.id)
+    }
+
+    static let newerPositionAlertID = "NewerPosition"
+
+    /// Offers another device's newer position, found after a book opened from the shelf, while its
+    /// reader is the one shown in this window.
+    func offerNewerPosition(_ found: NewerReadingPosition) {
+        guard readerWorkspaceViewModel.isPresented,
+              readerWorkspaceViewModel.activePresentationID == found.presentationID else {
+            return
+        }
+        alertItem = AlertItem(id: Self.newerPositionAlertID, msg: found.position.promptSummary) { [weak self] in
+            self?.goToNewerPosition(found)
+        }
+    }
+
+    /// Reopens the book at the newer position, replacing its tab.
+    func goToNewerPosition(_ found: NewerReadingPosition) {
+        guard let presentation = sessionManager.readerPresentations.first(where: { $0.id == found.presentationID }) else {
+            return
+        }
+        let readerInfo = sessionManager.prepareBookReading(
+            book: presentation.book,
+            at: found.position,
+            fallback: presentation.readerInfo
+        )
+        // Opening at a position replaces a tab of the same book in the same reader; one in another
+        // reader is closed here.
+        if readerInfo.readerType != presentation.readerInfo.readerType {
+            sessionManager.closeReader(id: presentation.id)
+        }
+        container.openReader(
+            book: presentation.book,
+            readerInfo: readerInfo,
+            source: .newerPosition,
+            targetWorkspaceID: readerWorkspaceViewModel.id
+        )
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {

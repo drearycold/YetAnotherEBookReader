@@ -130,10 +130,9 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     func testReadPositionProviderRestoresCanonicalPositionWithFolioReaderRuntimeId() {
-        let savedPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
-        container.readingPositionRepository.savePosition(savedPosition, for: book)
+        let openingPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
 
-        let provider = makeReadPositionProvider()
+        let provider = makeReadPositionProvider(openingAt: openingPosition)
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)
 
         XCTAssertEqual(restored?.pageNumber, 14)
@@ -158,19 +157,40 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(stored.first?.lastReadPage, 17)
     }
 
-    func testReadPositionProviderReturnsPositionAfterReplacementSave() {
+    func testReadPositionProviderReturnsItsLatestSave() {
         let oldPosition = makePosition(page: 6, cfi: "epubcfi(/6/12)", epoch: 1_000)
         let newPosition = makePosition(page: 18, offsetX: 9, offsetY: 10, cfi: "epubcfi(/6/36)", epoch: 2_000)
         let provider = makeReadPositionProvider()
 
-        container.readingPositionRepository.savePosition(oldPosition, for: book)
-        container.readingPositionRepository.savePosition(newPosition, for: book)
+        provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId, set: oldPosition.toFolioReaderReadPosition(), completion: nil)
+        provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId, set: newPosition.toFolioReaderReadPosition(), completion: nil)
 
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId)
         XCTAssertNotNil(restored)
         XCTAssertEqual(restored?.pageNumber, 18)
         XCTAssertEqual(restored?.pageOffset, CGPoint(x: 9, y: 10))
         XCTAssertEqual(restored?.cfi, "epubcfi(/6/36)")
+    }
+
+    /// Continue Reading from a History row: FolioReader reads its start position back right after
+    /// opening, while this device's newer position (and another device's) are in the repository.
+    func testReadPositionProviderStartsAtItsOpeningPositionNotTheNewestSaved() {
+        let deviceLatest = makePosition(page: 30, cfi: "epubcfi(/6/60)", epoch: 3_000)
+        container.readingPositionRepository.savePosition(deviceLatest, for: book)
+        var otherDevicePosition = makePosition(page: 40, cfi: "epubcfi(/6/80)", epoch: 4_000)
+        otherDevicePosition.id = "ipad"
+        container.readingPositionRepository.savePosition(otherDevicePosition, for: book)
+        var pickedPosition = makePosition(page: 7, cfi: "epubcfi(/6/14)", epoch: 1_000)
+        pickedPosition.id = "iphone"
+
+        let provider = makeReadPositionProvider(openingAt: pickedPosition)
+
+        XCTAssertEqual(provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)?.pageNumber, 7)
+        XCTAssertEqual(provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)?.cfi, "epubcfi(/6/14)")
+
+        let readOn = makePosition(page: 9, cfi: "epubcfi(/6/18)")
+        provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId, set: readOn.toFolioReaderReadPosition(), completion: nil)
+        XCTAssertEqual(provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)?.pageNumber, 9)
     }
 
     func testConcurrentSaveDoesNotExposeEmptyPositionForSameIdentity() throws {
@@ -405,8 +425,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         //    the container creates its provider and FolioReaderKit queries by runtime book id
         let container = try makeTestContainer()
 
-        // Position restore
-        let positionProvider = makeReadPositionProvider()
+        // Position restore: the session opens the reader at the saved position
+        let positionProvider = makeReadPositionProvider(openingAt: savedPosition)
         let restoredPosition = positionProvider.folioReaderReadPosition(
             FolioReader(), bookId: folioReaderBookId
         )
@@ -528,10 +548,21 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         }
     }
 
-    private func makeReadPositionProvider() -> FolioReaderYabrReadPositionProvider {
-        FolioReaderYabrReadPositionProvider(
+    private func makeReadPositionProvider(openingAt position: BookDeviceReadingPosition? = nil) -> FolioReaderYabrReadPositionProvider {
+        var openingReaderInfo: ReaderInfo = readerInfo
+        if let position {
+            openingReaderInfo = ReaderInfo(
+                deviceName: readerInfo.deviceName,
+                url: readerInfo.url,
+                missing: readerInfo.missing,
+                format: readerInfo.format,
+                readerType: readerInfo.readerType,
+                position: position
+            )
+        }
+        return FolioReaderYabrReadPositionProvider(
             book: book,
-            readerInfo: readerInfo,
+            readerInfo: openingReaderInfo,
             readingPositionRepository: container.readingPositionRepository
         )
     }
