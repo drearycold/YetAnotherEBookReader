@@ -560,6 +560,11 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     private let readingPositionRepository: ReadingPositionRepositoryProtocol
     weak var readerEngineDelegate: ReaderEngineDelegate?
 
+    /// Where this reader is: the position it opened at, then each one it saves. Saves arrive on
+    /// FolioReader's save queue, reads on the main thread.
+    private let currentPositionLock = NSLock()
+    private var currentPosition: BookDeviceReadingPosition
+
     init(
         book: CalibreBook,
         readerInfo: ReaderInfo,
@@ -571,12 +576,21 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
         self.readingPositionRepository = readingPositionRepository
         self.readerEngineDelegate = readerEngineDelegate
+        self.currentPosition = readerInfo.position
     }
 
+    /// The position FolioReader goes to when it opens or reloads the book: this reader's own.
+    ///
+    /// Not the repository's newest position. Right after opening, FolioReader reads this before its
+    /// own save of the opening position has landed, so the newest one was this device's earlier
+    /// position (a picked History position was lost), another device's (Continue Here jumped
+    /// anyway), or that of a tab of the same book closing at the same time.
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
         guard bookIdentity.accepts(bookId) else { return nil }
 
-        return readingPositionRepository.getPosition(for: book, policy: .latest)?.toFolioReaderReadPosition()
+        currentPositionLock.lock()
+        defer { currentPositionLock.unlock() }
+        return currentPosition.toFolioReaderReadPosition()
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
@@ -600,6 +614,9 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         guard bookIdentity.accepts(bookId) else { return }
 
         let bookDevPos = readPosition.toBookDeviceReadingPosition()
+        currentPositionLock.lock()
+        currentPosition = bookDevPos
+        currentPositionLock.unlock()
         let enginePos = ReaderEnginePosition(
             pageNumber: bookDevPos.lastReadPage,
             maxPage: bookDevPos.maxPage,
