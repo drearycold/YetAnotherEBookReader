@@ -370,6 +370,74 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(syncStatus?.msg, "Success")
     }
 
+    /// Reading positions don't change a book's last_modified in calibre, so a sync fetches the
+    /// shelf's books with their annotations (which carry the positions) even when nothing changed.
+    func testSyncLibraryFetchesShelfBooksWithAnnotations() async throws {
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
+
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
+                container.calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+
+        var shelfBook = CalibreBook(id: 202, library: library)
+        shelfBook.inShelf = true
+        shelfBook.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "shelf.epub",
+            serverSize: 1,
+            serverMTime: Date(),
+            cached: true,
+            cacheSize: 1,
+            cacheMTime: Date(),
+            manifest: nil
+        )
+        container.bookManager.booksInShelf[shelfBook.inShelfId] = shelfBook
+
+        final class RequestedPaths {
+            private let lock = NSLock()
+            private var paths = [String]()
+            func append(_ path: String) { lock.lock(); paths.append(path); lock.unlock() }
+            func contains(_ fragment: String) -> Bool {
+                lock.lock(); defer { lock.unlock() }
+                return paths.contains { $0.contains(fragment) }
+            }
+        }
+        let requestedPaths = RequestedPaths()
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            requestedPaths.append(path)
+            let jsonString: String
+            if path.contains("custom_columns") || path.contains("book-get-annotations") || path.contains("/ajax/books") {
+                jsonString = "{}"
+            } else if path.contains("categories") {
+                jsonString = "[]"
+            } else if path.contains("list") {
+                jsonString = #"{"book_ids": [], "data": {"last_modified": {}}}"#
+            } else {
+                jsonString = "{}"
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(jsonString.utf8))
+        }
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false))
+
+        let annotationsPath = "/book-get-annotations/\(library.key)/202-EPUB"
+        let deadline = Date().addingTimeInterval(10)
+        while requestedPaths.contains(annotationsPath) == false && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(requestedPaths.contains(annotationsPath), "The shelf book's annotations should be fetched on sync")
+    }
+
     func testSyncLibraryRefreshesChangedCategoriesWithUpdatedGenerationAndPrunesDeletedCategories() async throws {
         let oldLastModified = Date(timeIntervalSince1970: 100)
         library.lastModified = oldLastModified
