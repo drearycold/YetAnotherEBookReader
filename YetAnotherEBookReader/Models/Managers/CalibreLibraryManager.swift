@@ -613,22 +613,9 @@ class CalibreLibraryManager {
             }
             self.librarySyncStatus[library.id]?.upd.formUnion(bookToUpdate)
 
-            // Reading positions and annotations don't change a book's last_modified in calibre, so
-            // bookToUpdate misses a shelf book that was only read on another device. Shelf books are
-            // fetched with their annotations, which carry the positions, on every sync instead.
-            let shelfBookIds = container.bookManager.booksInShelf.values
-                .filter { $0.library.id == library.id }
-                .map(\.id)
-            let shelfBookIdSet = Set(shelfBookIds)
-
-            bookToUpdate.filter { shelfBookIdSet.contains($0) == false }.chunks(size: 256).forEach { chunk in
+            bookToUpdate.chunks(size: 256).forEach { chunk in
                 Task {
                     await container.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
-                }
-            }
-            shelfBookIds.chunks(size: 256).forEach { chunk in
-                Task {
-                    await container.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: true))
                 }
             }
         case .updateDeleted:
