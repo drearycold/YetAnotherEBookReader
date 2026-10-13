@@ -1032,7 +1032,12 @@ class ActivityListViewModelTests: XCTestCase {
             httpBodyString: "{}"
         )
         repository.sendObservedEntries([updatedEntry])
-        while viewModel.activities != [updatedEntry] && Date() < deadline {
+        // The update is applied on the main actor, which the starting test host can hold for over
+        // 10 s on a fresh CI runner. Start the deadline once the main actor runs, so the wait
+        // measures delivery rather than the host's startup.
+        await MainActor.run {}
+        let updateDeadline = Date().addingTimeInterval(10)
+        while viewModel.activities != [updatedEntry] && Date() < updateDeadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
