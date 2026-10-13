@@ -36,7 +36,11 @@ struct RecentShelfView: View {
                             }
                         },
                         onDetails: {
-                            viewModel.presentingBookDetailId = book.id
+                            // Pushed after the menu has dismissed: iOS 15 drops a push the menu's
+                            // action starts while it animates out.
+                            DispatchQueue.main.async {
+                                viewModel.presentingBookDetailId = book.id
+                            }
                         },
                         onRefresh: {
                             viewModel.refreshBookFormats(bookId: book.id)
@@ -51,7 +55,9 @@ struct RecentShelfView: View {
                             viewModel.doubanAction(bookId: book.id)
                         },
                         onHistory: {
-                            viewModel.presentingHistoryBookId = book.id
+                            DispatchQueue.main.async {
+                                viewModel.presentingHistoryBookId = book.id
+                            }
                         }
                     )
                 case .filler:
@@ -209,12 +215,6 @@ struct RecentShelfView: View {
                 }
             }
             .background(routeLink)
-            .onDisappear {
-                // Pushing a route also makes the shelf disappear; keep its ads for the way back.
-                if !viewModel.isRouteActive {
-                    adStore.clear()
-                }
-            }
             .navigationTitle("Recent")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -273,6 +273,11 @@ struct RecentShelfView: View {
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        // On the navigation view, not the shelf: leaving the tab clears the ads, pushing a route
+        // (which makes the shelf itself disappear) keeps them for the way back.
+        .onDisappear {
+            adStore.clear()
+        }
     }
 
     /// The single hidden link for the shelf's pushed screen. It sits on the root, outside the lazy

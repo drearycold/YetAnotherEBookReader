@@ -34,7 +34,11 @@ struct SectionShelfView: View {
                     }
                 },
                 onDetails: {
-                    viewModel.presentingBookDetailId = book.id
+                    // Pushed after the menu has dismissed: iOS 15 drops a push the menu's action
+                    // starts while it animates out.
+                    DispatchQueue.main.async {
+                        viewModel.presentingBookDetailId = book.id
+                    }
                 },
                 onRefresh: {
                     viewModel.refreshBookFormats(bookId: book.id)
@@ -231,12 +235,6 @@ struct SectionShelfView: View {
                 }
             }
             .background(bookDetailLink)
-            .onDisappear {
-                // Pushing the detail also makes the shelf disappear; keep its ads for the way back.
-                if viewModel.presentingBookDetailId == nil {
-                    adStore.clear()
-                }
-            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -314,6 +312,11 @@ struct SectionShelfView: View {
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
             viewModel.bootstrapIfDatabaseReady()
+        }
+        // On the navigation view, not the shelf: leaving the tab clears the ads, pushing the detail
+        // (which makes the shelf itself disappear) keeps them for the way back.
+        .onDisappear {
+            adStore.clear()
         }
     }
 

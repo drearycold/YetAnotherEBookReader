@@ -194,7 +194,9 @@ import Combine
         file: StaticString = #filePath,
         line: UInt = #line
     ) async {
-        for _ in 0..<50 {
+        // A deadline, not a fixed number of sleeps: CI's runner is slower than a desktop Mac.
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             if predicate() { return }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }

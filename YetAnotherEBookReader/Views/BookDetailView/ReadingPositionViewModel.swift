@@ -263,6 +263,8 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     #if canImport(SwiftUICharts)
     @Published var barChartData: BarChartData?
     #endif
+    
+    private var refreshTasks = [Task<Void, Never>]()
 
     let minutesFormatter = NumberFormatter()
     private let percentFormatter = NumberFormatter()
@@ -288,6 +290,41 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         sessionDateFormatter.timeStyle = .short
     }
 
+    deinit {
+        refreshTasks.forEach { $0.cancel() }
+    }
+    
+    /// Reloads when a reader above this page records a position (it is hidden or deactivated), a
+    /// reader closes, or books update (shelf refresh after a reader closes, a finished download).
+    /// None of these make the page appear again, so `onAppear` alone leaves it stale.
+    @MainActor
+    func observeChanges() {
+        guard refreshTasks.isEmpty else { return }
+        let readerInfos = container.sessionManager.readerInfoSnapshots()
+        let presentations = container.sessionManager.readerPresentationSnapshots()
+        let updates = container.calibreUpdates()
+        refreshTasks = [
+            Task { @MainActor [weak self] in
+                for await _ in readerInfos.dropFirst() {
+                    guard let self, !Task.isCancelled else { return }
+                    self.loadData()
+                }
+            },
+            Task { @MainActor [weak self] in
+                for await _ in presentations.dropFirst() {
+                    guard let self, !Task.isCancelled else { return }
+                    self.loadData()
+                }
+            },
+            Task { @MainActor [weak self] in
+                for await _ in updates {
+                    guard let self, !Task.isCancelled else { return }
+                    self.loadData()
+                }
+            },
+        ]
+    }
+    
     /// A single book's history; otherwise statistics across every book on the shelf.
     var isBookMode: Bool {
         library != nil && bookId != nil
@@ -305,8 +342,9 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         Int(readingStatistics.last ?? 0)
     }
 
+    /// Avg and Max cover the \(limitDays) days before today, so they're labelled apart from Today.
     var summaryText: String {
-        "Today \(todayMinutes) min · Avg \(avgMinutes) min/day · Max \(maxMinutes) min"
+        "Today \(todayMinutes) min · Previous \(Self.limitDays) days: avg \(avgMinutes), max \(maxMinutes) min/day"
     }
 
     func loadData() {
@@ -330,8 +368,12 @@ class ReadingPositionHistoryViewModel: ObservableObject {
 
             if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
-            } else if let book = container.sessionManager.activeReaderPresentation?.book {
+            } else if let book = container.sessionManager.activeReaderPresentation?.book,
+                      book.library.id == library.id, book.id == bookId {
+                // Only the book this history is about: Continue Reading opens listViewModel's book.
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
+            } else {
+                listViewModel = nil
             }
 
             deviceSections = makeDeviceSections()
@@ -455,11 +497,11 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         }
     }
 
-    /// Short day names for the statistics buckets, oldest first; the last bucket is "Today".
+    /// Day names ("Tue", "Thu") for the statistics buckets, oldest first; the last is "Today".
     func chartDayLabels() -> [String] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let symbols = calendar.veryShortWeekdaySymbols
+        let symbols = calendar.shortWeekdaySymbols
         return readingStatistics.indices.map { index in
             let daysAgo = readingStatistics.count - 1 - index
             guard daysAgo > 0,

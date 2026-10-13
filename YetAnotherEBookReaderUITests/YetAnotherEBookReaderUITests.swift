@@ -58,6 +58,8 @@ class UIJourneyTestCase: XCTestCase {
         static let bookDetailHistory = "book-detail.history"
         static let readingHistoryScreen = "screen.reading-history"
         static let readingHistoryContinue = "reading-history.continue"
+        static let readingHistoryPosition = "reading-history.position"
+        static let readingPositionScreen = "screen.reading-position"
         static let readerFolioScreen = "reader.folio.screen"
         static let readerFolioContent = "reader.folio.content"
         static let readerFolioPosition = "reader.folio.position"
@@ -167,6 +169,13 @@ class UIJourneyTestCase: XCTestCase {
 
                 waitForIdentifier(AccessibilityID.readerFolioClose).tap()
                 waitForNonExistence(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.readingHistoryScreen)
+
+                // A row's info pushes its position detail through History's hidden link.
+                waitForIdentifier(AccessibilityID.readingHistoryPosition).tap()
+                waitForIdentifier(AccessibilityID.readingPositionScreen)
+                navigateBackFromNavigationStack()
+                waitForNonExistence(AccessibilityID.readingPositionScreen)
                 waitForIdentifier(AccessibilityID.readingHistoryScreen)
 
                 navigateBackFromNavigationStack()

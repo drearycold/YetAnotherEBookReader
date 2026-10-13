@@ -376,18 +376,25 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.listVM?.book.inShelfId, mockCalibreBook.inShelfId)
     }
 
-    func testOnAppearLoadsBookOnlyOnce() throws {
+    func testOnAppearSkipsReloadOnlyWhenReturningFromHistory() throws {
         let workspaceID = UUID()
+        let bookId = try XCTUnwrap(mockBookRealm.primaryKey)
         let detailViewModel = BookDetailViewModel(container: mockAppContainer)
 
-        detailViewModel.onAppear(bookId: mockBookRealm.primaryKey!, targetWorkspaceID: workspaceID)
+        detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
         XCTAssertEqual(detailViewModel.calibreBook?.title, "Test Book")
         XCTAssertEqual(detailViewModel.targetWorkspaceID, workspaceID)
 
-        // Coming back from a pushed screen must not reload over a newer value.
+        // Coming back from Reading History must not reload over a newer value.
+        let book = try XCTUnwrap(detailViewModel.calibreBook)
+        detailViewModel.showReadingPositionHistory(book: book)
         detailViewModel.calibreBook?.title = "Edited In Place"
-        detailViewModel.onAppear(bookId: mockBookRealm.primaryKey!, targetWorkspaceID: workspaceID)
+        detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
         XCTAssertEqual(detailViewModel.calibreBook?.title, "Edited In Place")
+
+        // Any other appearance (a tab switch back) reloads the book.
+        detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
+        XCTAssertEqual(detailViewModel.calibreBook?.title, "Test Book")
     }
     
     func testHasReadingHistory() throws {
@@ -666,9 +673,14 @@ class ReadingPositionViewModelTests: XCTestCase {
     
     /// Marks the mock book's EPUB as cached and writes its file.
     private func makeCachedEPUB() throws {
-        mockBook.formats[Format.EPUB.rawValue] = FormatInfo(
+        try makeCachedFormat(.EPUB)
+    }
+
+    /// Marks one of the mock book's formats as cached and writes its file.
+    private func makeCachedFormat(_ format: Format) throws {
+        mockBook.formats[format.rawValue] = FormatInfo(
             selected: true,
-            filename: "position-test.epub",
+            filename: "position-test.\(format.ext)",
             serverSize: 1024,
             serverMTime: Date(),
             cached: true,
@@ -678,7 +690,7 @@ class ReadingPositionViewModelTests: XCTestCase {
         )
         listViewModel.book = mockBook
 
-        let savedURL = try XCTUnwrap(getSavedUrl(book: mockBook, format: .EPUB))
+        let savedURL = try XCTUnwrap(getSavedUrl(book: mockBook, format: format))
         try FileManager.default.createDirectory(
             at: savedURL.deletingLastPathComponent(),
             withIntermediateDirectories: true,
@@ -718,6 +730,33 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertEqual(presentation?.source, .readingPosition)
         XCTAssertEqual(presentation?.readerInfo.position.id, "device-1")
         XCTAssertEqual(presentation?.readerInfo.readerType, .YabrEPUB)
+    }
+
+    /// Opening at a saved position is shared by every engine: each reopens with its own format,
+    /// and YabrPDF resolves to Readium PDF where it isn't available.
+    func testListViewModelContinueReadingOpensEveryEngineWithItsFormat() throws {
+        let engines: [(ReaderType, Format)] = [
+            (.YabrEPUB, .EPUB), (.ReadiumEPUB, .EPUB),
+            (.YabrPDF, .PDF), (.ReadiumPDF, .PDF),
+            (.ReadiumCBZ, .CBZ)
+        ]
+        for format in [Format.EPUB, .PDF, .CBZ] {
+            try makeCachedFormat(format)
+        }
+
+        for (reader, format) in engines {
+            let position = BookDeviceReadingPosition(id: "device-1", readerName: reader.rawValue)
+            XCTAssertTrue(listViewModel.canContinueReading(at: position), "\(reader)")
+
+            let alert = listViewModel.continueReading(at: position, targetWorkspaceID: nil)
+
+            XCTAssertNil(alert, "\(reader) raised alert: \(alert?.id ?? "")")
+            let presentation = try XCTUnwrap(mockAppContainer.sessionManager.activeReaderPresentation, "\(reader)")
+            XCTAssertEqual(presentation.readerInfo.format, format, "\(reader)")
+            XCTAssertEqual(presentation.readerInfo.readerType, reader.resolved(), "\(reader)")
+            XCTAssertEqual(presentation.readerInfo.position.readerName, reader.rawValue, "\(reader)")
+            mockAppContainer.sessionManager.closeReader(id: presentation.id)
+        }
     }
 
     func testListViewModelContinueReadingAlertsWhenFormatNotCached() throws {
@@ -842,6 +881,25 @@ class ReadingPositionViewModelTests: XCTestCase {
         historyVM.dismissDetail()
         XCTAssertNil(historyVM.detailPosition)
         XCTAssertEqual(historyVM.displayedDetailPosition, position)
+    }
+
+    /// A reader above History or a finished download doesn't make the page appear again, so it
+    /// reloads on book updates while shown.
+    func testHistoryViewModelReloadsWhenBooksUpdate() async throws {
+        let historyVM = makeHistoryViewModel(positions: [])
+        historyVM.loadData()
+        XCTAssertTrue(historyVM.deviceSections.isEmpty)
+        await historyVM.observeChanges()
+
+        let repository = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
+        repository.getPositionsReturn = [TestFixtures.makeReadingPosition(id: "device-1", lastReadChapter: "Chapter 6")]
+        await mockAppContainer.publishCalibreUpdate(.shelf)
+
+        let deadline = Date().addingTimeInterval(10)
+        while historyVM.deviceSections.isEmpty && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(historyVM.deviceSections.first?.rows.first?.title, "Chapter 6")
     }
 
     func testHistoryViewModelStatisticsModeHasNoDeviceSections() throws {

@@ -28,6 +28,9 @@ class BookDetailViewModel: ObservableObject {
     private weak var container: AppContainer?
     var targetWorkspaceID: UUID?
     private var loadedBookId: String?
+    /// Set when Reading History is pushed, so the detail's next appearance (the pop back) doesn't
+    /// reload; any other appearance, such as a tab switch back, refreshes as before.
+    private var isReturningFromHistory = false
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
@@ -55,11 +58,13 @@ class BookDetailViewModel: ObservableObject {
         bookObserverTask?.cancel()
     }
     
-    /// Loads the book once. A pushed detail appears again each time a screen pushed from it pops,
-    /// and refetching metadata then would hit the server on every return.
+    /// Loads the book and refreshes its metadata, except when coming back from Reading History,
+    /// which would otherwise hit the server on every pop.
     func onAppear(bookId: String, targetWorkspaceID: UUID?) {
         self.targetWorkspaceID = targetWorkspaceID
-        guard loadedBookId != bookId else { return }
+        let isReturningFromHistory = self.isReturningFromHistory
+        self.isReturningFromHistory = false
+        guard !(isReturningFromHistory && loadedBookId == bookId) else { return }
         guard setup(bookId: bookId), let calibreBook else { return }
         loadedBookId = bookId
         fetchMetadata(book: calibreBook)
@@ -209,6 +214,7 @@ class BookDetailViewModel: ObservableObject {
     
     func showReadingPositionHistory(book: CalibreBook) {
         prepareReadingPositionHistory(book: book)
+        isReturningFromHistory = true
         isReadingPositionHistoryActive = true
     }
     
@@ -285,8 +291,10 @@ class BookDetailViewModel: ObservableObject {
         previewViewModel.toc = parseTOCNode(node: tocNode, level: 0)
     }
     
+    /// The preview prepared a session at the book's start; restore the book's own reading position
+    /// without opening a reader (closing a preview isn't a request to read).
     func handlePreviewDismiss(book: CalibreBook) {
-        prepareReadingSession(for: book)
+        _ = container?.sessionManager.prepareBookReading(book: book)
     }
 
     private func prepareReadingSession(for book: CalibreBook) {

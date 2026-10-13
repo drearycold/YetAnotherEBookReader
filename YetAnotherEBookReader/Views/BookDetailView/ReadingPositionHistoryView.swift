@@ -46,6 +46,7 @@ struct ReadingPositionHistoryView: View {
         }
         .onAppear {
             viewModel.loadData()
+            viewModel.observeChanges()
         }
         .accessibilityIdentifier("screen.reading-history")
     }
@@ -207,6 +208,7 @@ struct ReadingPositionHistoryView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Shows this position's details")
+            .accessibilityIdentifier("reading-history.position")
             
             Button(action: {
                 viewModel.continueReading(row, targetWorkspaceID: readerWorkspaceID)
