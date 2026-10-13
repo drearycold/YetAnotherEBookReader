@@ -5,9 +5,30 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
-## Book Detail and Reading History Presentation (2026-10-12)
+## Book Detail and Reading History Presentation (2026-10-12, merged)
 
-`claude/bookdetailview-reading-history-refactor-1b8eb1`:
+**Merged to `main`** in drearycold/YetAnotherEBookReader#105 (merge commit
+`3668f1b1`, 2026-10-13). The branch
+`claude/bookdetailview-reading-history-refactor-1b8eb1` is deleted, remote and
+local.
+- **Verification at merge:**
+  - CI green on `a22ed825` (iOS unit tests, Mac Catalyst build).
+  - Locally: 856 unit tests passed, 1 skipped (the opt-in benchmark).
+  - The Recent, Browse and main-tabs UI journeys pass on the iPhone 17 (iOS
+    26.5) and the iPhone 7 (iOS 15.5).
+- **Not covered:**
+  - Discover's pushed Book Detail has no UI test: the mock library's Discover is
+    empty.
+  - Only YabrEPUB was opened end to end from a saved position. The other
+    engines are covered by
+    `testListViewModelContinueReadingOpensEveryEngineWithItsFormat`.
+- **CI flake fixed on the way:**
+  `ActivityListViewModelTests.testInitializationUsesRepositoryAndReceivesUpdates`
+  runs first, while the fresh test host's startup can hold the main actor for
+  more than 10 s. It now awaits `MainActor.run {}` before starting its 10 s
+  deadline.
+
+What changed:
 - **The bug.** Continue Reading from Reading History opened the reader behind it.
   - The reader workspace is an in-tree overlay in `MainView` (`ZStack`, zIndex 10).
   - Book Detail (Recent and Discover) and Reading History were `.sheet`s, which
