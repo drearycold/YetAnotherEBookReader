@@ -87,6 +87,56 @@ final class DefaultServerScopedRealmConfigurationProviderTests: XCTestCase {
         XCTAssertEqual(value.lastScale, 1.5)
     }
 
+    /// Schema 144 had no `currentLandscapeSpread`. A book's Folio preferences saved then open at
+    /// 145 with no landscape spread choice and their other preferences kept.
+    func testFolioPreferencesSavedAtSchema144HaveNoLandscapeSpreadChoice() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FolioPreferenceMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let realmURL = directory.appendingPathComponent("server.realm")
+
+        let oldConfiguration = Realm.Configuration(
+            fileURL: realmURL,
+            schemaVersion: 144,
+            objectTypes: [FolioReaderPreferenceRealmAtSchema144.self]
+        )
+        try autoreleasepool {
+            let realm = try Realm(configuration: oldConfiguration)
+            try realm.write {
+                let row = FolioReaderPreferenceRealmAtSchema144()
+                row.id = "book-7"
+                row.currentFont = "Avenir"
+                row.currentScrollDirection = 1
+                row.currentMarginLeft = 23
+                realm.add(row)
+            }
+        }
+
+        let server = CalibreServer(
+            uuid: UUID(),
+            name: "Migration",
+            baseUrl: "http://localhost:8080",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        var configuration = provider.configuration(for: server)
+        configuration.fileURL = realmURL
+        configuration.schemaVersion = 145
+
+        let realm = try Realm(configuration: configuration)
+        let row = try XCTUnwrap(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "book-7"))
+        XCTAssertNil(row.currentLandscapeSpread.value)
+        let value = row.toValue(defaults: .fallbackDefaults)
+        XCTAssertNil(value.currentLandscapeSpread)
+        XCTAssertEqual(value.currentFont, "Avenir")
+        XCTAssertEqual(value.currentScrollDirection, 1)
+        XCTAssertEqual(value.currentMarginLeft, 23)
+    }
+
     func testDifferentServersHaveDifferentConfigurations() {
         let serverA = CalibreServer(
             uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
@@ -176,4 +226,39 @@ final class PDFOptionsAtSchema142: Object {
     @Persisted var marginOffset = 0.0
     @Persisted var lastScale = 1.0
     @Persisted var rememberInPagePosition = true
+}
+
+/// `FolioReaderPreferenceRealm` as stored at schema 144, before `currentLandscapeSpread`.
+/// Kept out of the default schema; only the migration test opens it.
+final class FolioReaderPreferenceRealmAtSchema144: Object {
+    override class func _realmIgnoreClass() -> Bool { true }
+    override class func _realmObjectName() -> String { "FolioReaderPreferenceRealm" }
+
+    @Persisted(primaryKey: true) var id = ""
+    @Persisted var nightMode = false
+    @Persisted var themeMode: Int = .min
+    @Persisted var currentFont: String?
+    @Persisted var currentFontSize: String?
+    @Persisted var currentFontWeight: String?
+    @Persisted var currentAudioRate: Int = .min
+    @Persisted var currentHighlightStyle: Int = .min
+    @Persisted var currentMediaOverlayStyle: Int = .min
+    @Persisted var currentScrollDirection: Int = .min
+    @Persisted var currentNavigationMenuIndex: Int = .min
+    @Persisted var currentAnnotationMenuIndex: Int = .min
+    @Persisted var currentNavigationMenuBookListStyle: Int = .min
+    @Persisted var currentVMarginLinked = true
+    @Persisted var currentMarginTop: Int = .min
+    @Persisted var currentMarginBottom: Int = .min
+    @Persisted var currentHMarginLinked = true
+    @Persisted var currentMarginLeft: Int = .min
+    @Persisted var currentMarginRight: Int = .min
+    @Persisted var currentLetterSpacing: Int = .min
+    @Persisted var currentLineHeight: Int = .min
+    @Persisted var currentTextIndent: Int = .min
+    @Persisted var doWrapPara = false
+    @Persisted var doClearClass = true
+    @Persisted var styleOverride: Int = .min
+    @Persisted var structuralStyle = 0
+    @Persisted var structuralTrackingTocLevel = 0
 }

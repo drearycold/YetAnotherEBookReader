@@ -24,6 +24,9 @@ class FolioReaderPreferenceRealm: Object {
     @objc dynamic var currentMediaOverlayStyle: Int = .min
     
     @objc dynamic var currentScrollDirection: Int = .min
+    /// Optional (schema 145): rows saved before, and books never switched, have no value, which
+    /// FolioReaderKit reads as no choice and falls back to `FolioReaderConfig.landscapeSpread`.
+    let currentLandscapeSpread = RealmProperty<Bool?>()
     
     @objc dynamic var currentNavigationMenuIndex: Int = .min
     @objc dynamic var currentAnnotationMenuIndex: Int = .min
@@ -61,6 +64,7 @@ class FolioReaderPreferenceRealm: Object {
         currentMediaOverlayStyle = src.currentMediaOverlayStyle
         
         currentScrollDirection = src.currentScrollDirection
+        currentLandscapeSpread.value = src.currentLandscapeSpread.value
         
         currentNavigationMenuIndex = src.currentNavigationMenuIndex
         currentAnnotationMenuIndex = src.currentAnnotationMenuIndex
@@ -97,6 +101,7 @@ class FolioReaderPreferenceRealm: Object {
             currentHighlightStyle: currentHighlightStyle != .min ? currentHighlightStyle : defaults.currentHighlightStyle,
             currentMediaOverlayStyle: currentMediaOverlayStyle != .min ? currentMediaOverlayStyle : defaults.currentMediaOverlayStyle,
             currentScrollDirection: currentScrollDirection != .min ? currentScrollDirection : defaults.currentScrollDirection,
+            currentLandscapeSpread: currentLandscapeSpread.value ?? defaults.currentLandscapeSpread,
             currentNavigationMenuIndex: currentNavigationMenuIndex != .min ? currentNavigationMenuIndex : defaults.currentNavigationMenuIndex,
             currentAnnotationMenuIndex: currentAnnotationMenuIndex != .min ? currentAnnotationMenuIndex : defaults.currentAnnotationMenuIndex,
             currentNavigationMenuBookListStyle: currentNavigationMenuBookListStyle != .min ? currentNavigationMenuBookListStyle : defaults.currentNavigationMenuBookListStyle,
@@ -127,6 +132,7 @@ class FolioReaderPreferenceRealm: Object {
         currentHighlightStyle = value.currentHighlightStyle
         currentMediaOverlayStyle = value.currentMediaOverlayStyle
         currentScrollDirection = value.currentScrollDirection
+        currentLandscapeSpread.value = value.currentLandscapeSpread
         currentNavigationMenuIndex = value.currentNavigationMenuIndex
         currentAnnotationMenuIndex = value.currentAnnotationMenuIndex
         currentNavigationMenuBookListStyle = value.currentNavigationMenuBookListStyle

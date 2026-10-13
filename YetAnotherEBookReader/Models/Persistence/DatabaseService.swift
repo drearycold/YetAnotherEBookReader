@@ -10,7 +10,7 @@ import RealmSwift
 import os.log
 
 enum DatabaseSchema {
-    static let defaultVersion: UInt64 = 144
+    static let defaultVersion: UInt64 = 145
     static var version: UInt64 = defaultVersion
 }
 

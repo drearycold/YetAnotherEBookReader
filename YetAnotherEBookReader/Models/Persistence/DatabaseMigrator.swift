@@ -63,6 +63,10 @@ final class DatabaseMigrator {
                         newObject["currentScrollDirection"] = 3
                     }
                 }
+                if oldSchemaVersion < 145 {
+                    // Added optional FolioReaderPreferenceRealm.currentLandscapeSpread. Existing
+                    // profiles read nil, no choice: FolioReaderKit's configured layout.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

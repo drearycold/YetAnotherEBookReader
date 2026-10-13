@@ -141,6 +141,11 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
                     // The "Default" Folio profile's scroll direction is reset in the main realm
                     // (DatabaseMigrator). Per-book FolioReaderPreferenceRealm rows here keep theirs.
                 }
+
+                if oldSchemaVersion < 145 {
+                    // Added optional FolioReaderPreferenceRealm.currentLandscapeSpread. Existing
+                    // rows read nil, no choice: FolioReaderKit's configured layout.
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,
