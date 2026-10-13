@@ -282,6 +282,80 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 7)
     }
 
+    func testNewerPositionFromOtherDeviceFindsOnlyNewerPositionsElsewhere() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 121, library: library)
+        let start = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 3, lastProgress: 10, epoch: 100)
+        let others = [
+            TestFixtures.makeReadingPosition(id: "ipad", lastReadPage: 5, lastProgress: 40, epoch: 200),
+            TestFixtures.makeReadingPosition(id: "older-phone", lastReadPage: 9, lastProgress: 90, epoch: 50),
+            TestFixtures.makeReadingPosition(id: "same-place", lastReadPage: 3, lastProgress: 10.5, epoch: 300)
+        ]
+        others.forEach { container.readingPositionRepository.savePosition($0, for: book) }
+        defer { others.forEach { container.readingPositionRepository.removePosition(deviceName: $0.id, for: book) } }
+
+        let newer = try XCTUnwrap(manager.newerPositionFromOtherDevice(than: start, for: book))
+        XCTAssertEqual(newer.id, "ipad")
+
+        manager.markNewerPositionOffered(newer, for: book)
+        XCTAssertNil(manager.newerPositionFromOtherDevice(than: start, for: book), "A position is offered once")
+    }
+
+    func testPrepareBookReadingAtPositionFallsBackToOpenReaderWhenItsFormatIsMissing() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 122, library: library)
+        var readiumPosition = TestFixtures.makeReadingPosition(id: "ipad", lastReadPage: 5, epoch: 200)
+        readiumPosition.readerName = ReaderType.ReadiumPDF.rawValue
+        let fallback = makeMountTestReaderInfo(position: TestFixtures.makeReadingPosition(id: container.deviceName))
+
+        let readerInfo = manager.prepareBookReading(book: book, at: readiumPosition, fallback: fallback)
+
+        XCTAssertEqual(readerInfo.readerType, .YabrEPUB)
+        XCTAssertEqual(readerInfo.format, .EPUB)
+        XCTAssertEqual(readerInfo.position.id, "ipad")
+        XCTAssertEqual(readerInfo.position.lastReadPage, 5)
+    }
+
+    /// Opening from the shelf doesn't wait: the newer position is reported after the book's
+    /// positions were fetched (here the fetch fails and the local one is found).
+    func testOpeningFromShelfReportsNewerPositionInBackground() async throws {
+        let server = CalibreServer(
+            uuid: UUID(),
+            name: "Remote Server",
+            baseUrl: "http://localhost:9",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let book = CalibreBook(id: 123, library: CalibreLibrary(server: server, key: "remote", name: "Remote Library"))
+        let opened = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 2, lastProgress: 5, epoch: 100)
+        let ipadPosition = TestFixtures.makeReadingPosition(id: "ipad", lastReadPage: 6, lastProgress: 50, epoch: 200)
+        container.readingPositionRepository.savePosition(ipadPosition, for: book)
+        defer { container.readingPositionRepository.removePosition(deviceName: "ipad", for: book) }
+
+        final class Received { var event: NewerReadingPosition? }
+        let received = Received()
+        let events = manager.newerPositionEvents()
+        let listener = Task { @MainActor in
+            for await event in events {
+                received.event = event
+                break
+            }
+        }
+        defer { listener.cancel() }
+
+        let presentation = manager.openReader(book: book, readerInfo: makeMountTestReaderInfo(position: opened), source: .shelf)
+
+        let deadline = Date().addingTimeInterval(10)
+        while received.event == nil && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(received.event?.presentationID, presentation.id)
+        XCTAssertEqual(received.event?.position.id, "ipad")
+    }
+
     private func makeMountTestReaderInfo(position: BookDeviceReadingPosition) -> ReaderInfo {
         ReaderInfo(
             deviceName: container.deviceName,

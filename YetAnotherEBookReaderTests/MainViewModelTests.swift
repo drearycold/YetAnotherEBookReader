@@ -421,6 +421,56 @@ import Combine
         XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
     }
 
+    func testNewerPositionFoundAfterOpeningIsOfferedAndReplacesTheTab() async throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        let presentation = mockAppContainer.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .shelf,
+            targetWorkspaceID: viewModel.readerWorkspaceViewModel.id
+        )
+        let attached = await waitUntil(timeout: 10) {
+            self.viewModel.readerWorkspaceViewModel.activePresentationID == presentation.id
+        }
+        XCTAssertTrue(attached)
+        let ipadPosition = TestFixtures.makeReadingPosition(id: "ipad", lastReadPage: 6, lastProgress: 50, epoch: 200)
+
+        viewModel.offerNewerPosition(NewerReadingPosition(presentationID: presentation.id, position: ipadPosition))
+
+        let alert = try XCTUnwrap(viewModel.alertItem)
+        XCTAssertEqual(alert.id, MainViewModel.newerPositionAlertID)
+        alert.action?()
+
+        let replaced = try XCTUnwrap(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertNotEqual(replaced.id, presentation.id)
+        XCTAssertEqual(replaced.source, .newerPosition)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.filter { $0.book.inShelfId == book.inShelfId }.count, 1)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentationForMount(id: replaced.id)?.readerInfo.position.id, "ipad")
+    }
+
+    func testNewerPositionIsNotOfferedForAHiddenReader() async throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let presentation = mockAppContainer.openReader(
+            book: book,
+            readerInfo: mockAppContainer.sessionManager.prepareBookReading(book: book),
+            source: .shelf,
+            targetWorkspaceID: viewModel.readerWorkspaceViewModel.id
+        )
+        let attached = await waitUntil(timeout: 10) {
+            self.viewModel.readerWorkspaceViewModel.activePresentationID == presentation.id
+        }
+        XCTAssertTrue(attached)
+        viewModel.readerWorkspaceViewModel.hideReader()
+
+        viewModel.offerNewerPosition(NewerReadingPosition(
+            presentationID: presentation.id,
+            position: TestFixtures.makeReadingPosition(id: "ipad", lastReadPage: 6, lastProgress: 50, epoch: 200)
+        ))
+
+        XCTAssertNil(viewModel.alertItem)
+    }
+
     func testOpenEmptyReaderWindowDoesNotChangeReaderTabs() async throws {
         mockAppContainer.readerWindowSupportOverride = true
         var requestedActivities: [NSUserActivity?] = []
