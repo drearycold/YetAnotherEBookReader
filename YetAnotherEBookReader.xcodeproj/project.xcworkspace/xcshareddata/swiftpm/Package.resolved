@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
       "state" : {
-        "revision" : "e45a26384239e028ec87fbcc788f513b67e10d8f",
-        "version" : "1.9.0"
+        "revision" : "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
+        "version" : "1.10.0"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/drearycold/FolioReaderKit.git",
       "state" : {
         "branch" : "master",
-        "revision" : "196fcd51e94b82f6201c791e3917219f732624e6"
+        "revision" : "1c1a23ac6da135180676878b2321b483f31ae5f2"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/readium/Fuzi.git",
       "state" : {
-        "revision" : "347aab158ff8894966ff80469b384bb5337928cd",
-        "version" : "4.0.0"
+        "revision" : "173ec944ca6f2e8024ceb7324bcb8a3cc95a0661",
+        "version" : "4.0.1"
       }
     },
     {
@@ -123,8 +123,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stephencelis/SQLite.swift.git",
       "state" : {
-        "revision" : "0c08856385fe24f7b76d8c51842d78a196e8e817",
-        "version" : "0.15.5"
+        "revision" : "964c300fb0736699ce945c9edb56ecd62eba27a3",
+        "version" : "0.16.0"
       }
     },
     {
@@ -159,8 +159,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/scinfu/SwiftSoup.git",
       "state" : {
-        "revision" : "e40910293caa6d94802e1a69b80517c88e77eaff",
-        "version" : "2.13.3"
+        "revision" : "9598b4f4e5a0a18f8d96e664f209e9022cddd30a",
+        "version" : "2.14.1"
       }
     },
     {
