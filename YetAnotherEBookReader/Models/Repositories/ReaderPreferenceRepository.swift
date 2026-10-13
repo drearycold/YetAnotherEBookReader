@@ -38,6 +38,9 @@ struct FolioReaderPreferenceValue: Equatable {
     var currentHighlightStyle: Int
     var currentMediaOverlayStyle: Int
     var currentScrollDirection: Int
+    /// One Page / Two Pages in a wide landscape view. nil is no choice: FolioReaderKit then uses
+    /// `FolioReaderConfig.landscapeSpread`.
+    var currentLandscapeSpread: Bool?
     var currentNavigationMenuIndex: Int
     var currentAnnotationMenuIndex: Int
     var currentNavigationMenuBookListStyle: Int
@@ -66,6 +69,7 @@ struct FolioReaderPreferenceValue: Equatable {
         currentHighlightStyle: Int = FolioReaderHighlightStyle.yellow.rawValue,
         currentMediaOverlayStyle: Int = MediaOverlayStyle.default.rawValue,
         currentScrollDirection: Int,
+        currentLandscapeSpread: Bool? = nil,
         currentNavigationMenuIndex: Int = 0,
         currentAnnotationMenuIndex: Int = 0,
         currentNavigationMenuBookListStyle: Int = NavigationMenuBookListStyle.List.rawValue,
@@ -93,6 +97,7 @@ struct FolioReaderPreferenceValue: Equatable {
         self.currentHighlightStyle = currentHighlightStyle
         self.currentMediaOverlayStyle = currentMediaOverlayStyle
         self.currentScrollDirection = currentScrollDirection
+        self.currentLandscapeSpread = currentLandscapeSpread
         self.currentNavigationMenuIndex = currentNavigationMenuIndex
         self.currentAnnotationMenuIndex = currentAnnotationMenuIndex
         self.currentNavigationMenuBookListStyle = currentNavigationMenuBookListStyle
@@ -147,6 +152,8 @@ struct FolioReaderPreferenceValue: Equatable {
             // "No choice", as in FolioReaderDelegatePreferenceProvider: a concrete direction here
             // would count as the user's choice in every book that uses this profile.
             currentScrollDirection: FolioReaderScrollDirection.defaultVertical.rawValue,
+            // No choice, likewise: the configured layout.
+            currentLandscapeSpread: nil,
             currentNavigationMenuIndex: 0,
             currentAnnotationMenuIndex: 0,
             currentNavigationMenuBookListStyle: NavigationMenuBookListStyle.List.rawValue,
@@ -179,6 +186,7 @@ struct FolioReaderPreferenceValue: Equatable {
             currentHighlightStyle: values["currentHighlightStyle"] as? Int ?? defaults.currentHighlightStyle,
             currentMediaOverlayStyle: values["currentMediaOverlayStyle"] as? Int ?? defaults.currentMediaOverlayStyle,
             currentScrollDirection: values["currentScrollDirection"] as? Int ?? defaults.currentScrollDirection,
+            currentLandscapeSpread: values["currentLandscapeSpread"] as? Bool ?? defaults.currentLandscapeSpread,
             currentNavigationMenuIndex: values["currentNavigationMenuIndex"] as? Int ?? defaults.currentNavigationMenuIndex,
             currentAnnotationMenuIndex: values["currentAnnotationMenuIndex"] as? Int ?? defaults.currentAnnotationMenuIndex,
             currentNavigationMenuBookListStyle: values["currentNavigationMenuBookListStyle"] as? Int ?? defaults.currentNavigationMenuBookListStyle,
@@ -209,6 +217,12 @@ struct FolioReaderPreferenceValue: Equatable {
         values["currentHighlightStyle"] = currentHighlightStyle
         values["currentMediaOverlayStyle"] = currentMediaOverlayStyle
         values["currentScrollDirection"] = currentScrollDirection
+        // Absent is no choice, so a book or profile without one doesn't keep an earlier one.
+        if let currentLandscapeSpread {
+            values["currentLandscapeSpread"] = currentLandscapeSpread
+        } else {
+            values.removeValue(forKey: "currentLandscapeSpread")
+        }
         values["currentNavigationMenuIndex"] = currentNavigationMenuIndex
         values["currentAnnotationMenuIndex"] = currentAnnotationMenuIndex
         values["currentNavigationMenuBookListStyle"] = currentNavigationMenuBookListStyle

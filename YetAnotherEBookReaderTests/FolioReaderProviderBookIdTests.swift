@@ -834,6 +834,43 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(restoredProvider.preference(intFor: "currentLineHeight", default: -1), 6)
     }
 
+    /// The page menu's One Page / Two Pages choice (FolioReaderKit's `currentLandscapeSpread`) is
+    /// saved with the book and back when it opens again. Before a choice the provider has none, so
+    /// FolioReaderKit uses its configured layout.
+    func testLandscapeSpreadChoicePersistsPerBook() {
+        let folioReader = FolioReader()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+        let delegate = PreferenceProviderDelegate(provider: provider)
+        folioReader.delegate = delegate
+
+        // No choice: whatever default the reader asks with comes back.
+        XCTAssertFalse(provider.preference(boolFor: "currentLandscapeSpread", default: false))
+        XCTAssertTrue(provider.preference(boolFor: "currentLandscapeSpread", default: true))
+
+        folioReader.preferences.currentLandscapeSpread = false
+        XCTAssertEqual(container.readerPreferenceRepository.loadFolioPreferences(for: book)?.currentLandscapeSpread, false)
+
+        let reopened = FolioReader()
+        let reopenedProvider = FolioReaderDelegatePreferenceProvider(
+            reopened,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+        let reopenedDelegate = PreferenceProviderDelegate(provider: reopenedProvider)
+        reopened.delegate = reopenedDelegate
+        XCTAssertFalse(reopened.preferences.currentLandscapeSpread)
+
+        withExtendedLifetime((delegate, reopenedDelegate)) {}
+    }
+
     func testProviderApplyCompatibilityPreferencesDoesNotCreateNativeFolioRowUntilUserChange() {
         let folioReader = FolioReader()
         let provider = FolioReaderDelegatePreferenceProvider(

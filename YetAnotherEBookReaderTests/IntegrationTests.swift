@@ -146,9 +146,13 @@ final class IntegrationTests: XCTestCase {
             XCTFail("Download start failed with error: \(error)")
         }
         
-        // Wait a bit for the mock download task to complete
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        
+        // The mock download finishes on URLSession's delegate queue, which on CI's runner can take
+        // longer than a fixed half second. Wait for the file, bounded generously.
+        let deadline = Date().addingTimeInterval(10)
+        while !FileManager.default.fileExists(atPath: savedURL.path), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
         XCTAssertTrue(FileManager.default.fileExists(atPath: savedURL.path))
     }
     

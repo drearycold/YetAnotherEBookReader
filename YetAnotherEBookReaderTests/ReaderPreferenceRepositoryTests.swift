@@ -214,6 +214,25 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         XCTAssertEqual(saved.toValue(defaults: .fallbackDefaults), preferences)
     }
 
+    /// No landscape spread choice stays no choice, so FolioReaderKit keeps its configured layout,
+    /// and a later save of no choice clears an earlier one.
+    func testFolioNativePreferencesKeepNoLandscapeSpreadChoice() throws {
+        let book = TestFixtures.makeBook(id: 38)
+        var preferences = makeFullFolioPreferenceValue()
+        preferences.currentLandscapeSpread = nil
+
+        repository.saveFolioPreferences(preferences, for: book)
+        XCTAssertNil(try XCTUnwrap(repository.loadFolioPreferences(for: book)).currentLandscapeSpread)
+
+        preferences.currentLandscapeSpread = true
+        repository.saveFolioPreferences(preferences, for: book)
+        XCTAssertEqual(repository.loadFolioPreferences(for: book)?.currentLandscapeSpread, true)
+
+        preferences.currentLandscapeSpread = nil
+        repository.saveFolioPreferences(preferences, for: book)
+        XCTAssertNil(try XCTUnwrap(repository.loadFolioPreferences(for: book)).currentLandscapeSpread)
+    }
+
     func testFolioCompatibilitySaveDoesNotBecomeFullNativePreferences() {
         let book = TestFixtures.makeBook(id: 38)
 
@@ -530,6 +549,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
             currentHighlightStyle: FolioReaderHighlightStyle.blue.rawValue,
             currentMediaOverlayStyle: MediaOverlayStyle.textColor.rawValue,
             currentScrollDirection: 2,
+            currentLandscapeSpread: false,
             currentNavigationMenuIndex: 1,
             currentAnnotationMenuIndex: 2,
             currentNavigationMenuBookListStyle: NavigationMenuBookListStyle.Grid.rawValue,
