@@ -355,6 +355,10 @@ it. Book Detail and Reading History are pushed:
   NavigationLinks. A button inside a NavigationLink row pushes the row instead
   of running its own action.
 
+Opening a reader into a workspace also publishes `publishDismissAll`, so a sheet
+or popover that can stay up while a reader opens should close on
+`dismissAllEvents()` (as `LibraryInfoView` and `ReaderOptionsViewModel` do).
+
 Readers opened from these screens pass `@Environment(\.readerWorkspaceID)` as
 the `targetWorkspaceID`. Opening a reader at a saved position goes through
 `ReadingPositionListViewModel.continueReading(at:format:readerType:targetWorkspaceID:)`.

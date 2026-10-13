@@ -13,6 +13,8 @@ placement (content right of center, top offset / drift after page turns).
   - Book Detail (Recent and Discover) and Reading History were `.sheet`s, which
     are UIKit modals above the overlay.
 - **The rule now:** a screen that can open a reader is pushed, never a sheet.
+  Opening a reader also publishes `publishDismissAll`, which sheets and
+  popovers subscribed to `dismissAllEvents()` close on.
   AGENTS.md "Book Detail" lists the hidden `NavigationLink(isActive:)` per
   screen.
 - **Reading History redesign.** One inset-grouped List:
@@ -25,6 +27,8 @@ placement (content right of center, top offset / drift after page turns).
 - **Shared opener.** `ReadingPositionListViewModel.continueReading(...)` returns
   an `AlertItem` or opens the reader. An unsupported reader now alerts instead
   of opening an empty workspace.
+- **Closing a format preview** restores the session's reader info, as 29f311e5
+  intended. It no longer opens the reader.
 - **Deployment target.** iOS 15.6 → 15.5 (the user's call), so the iOS 15.5
   iPhone 7 can run tests.
   - On iOS 15 only the first `.confirmationAction` toolbar item showed, which
@@ -33,7 +37,9 @@ placement (content right of center, top offset / drift after page turns).
 - **Known risks:**
   - Pushed screens in Recent and Discover get the wood nav bar
     (`yabrAppChrome`). iOS 15 has no per-screen override.
-  - A History page under an open reader doesn't reload until it reappears.
+  - History reloads while shown (`observeChanges`): on reader-info and
+    presentation changes and on calibre updates, since a reader above it never
+    makes it reappear.
   - **UI journey timing on iOS 15.** A FolioReader opened right after an earlier
     session restores the saved position a few seconds after its content
     appears, and an early swipe is undone. By hand, paging works.
