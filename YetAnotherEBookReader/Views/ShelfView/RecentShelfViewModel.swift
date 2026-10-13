@@ -25,6 +25,13 @@ enum RecentShelfAlert: Identifiable {
     }
 }
 
+/// A screen pushed from the Recent shelf. Pushed rather than presented in a sheet, so a reader opened
+/// from it shows above it in the reader workspace overlay.
+enum RecentShelfRoute: Equatable {
+    case bookDetail(bookId: String)
+    case readingHistory(bookId: String)
+}
+
 @MainActor @available(macCatalyst 14.0, *)
 final class RecentShelfViewModel: ObservableObject {
     let container: AppContainer
@@ -38,8 +45,25 @@ final class RecentShelfViewModel: ObservableObject {
     }
     @Published var selectionState = ShelfSelectionState()
     
-    @Published var presentingBookDetailId: String? = nil
-    @Published var presentingHistoryBookId: String? = nil
+    // Setting either one pushes its screen and replaces the other: the shelf has a single pushed
+    // route, driven by one hidden NavigationLink.
+    @Published var presentingBookDetailId: String? = nil {
+        didSet {
+            guard let bookId = presentingBookDetailId else { return }
+            presentingHistoryBookId = nil
+            displayedRoute = .bookDetail(bookId: bookId)
+        }
+    }
+    @Published var presentingHistoryBookId: String? = nil {
+        didSet {
+            guard let bookId = presentingHistoryBookId else { return }
+            presentingBookDetailId = nil
+            displayedRoute = .readingHistory(bookId: bookId)
+        }
+    }
+    /// The route's destination. Kept after the route is dismissed, so the page doesn't go blank
+    /// while it slides out.
+    @Published private(set) var displayedRoute: RecentShelfRoute? = nil
     @Published var activeAlert: RecentShelfAlert? = nil
     
     init(container: AppContainer, targetWorkspaceID: UUID? = nil) {
@@ -68,14 +92,27 @@ final class RecentShelfViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self = self else { return }
                 if case .deleted(let deletedId) = signal {
-                    if self.presentingBookDetailId == deletedId {
-                        self.presentingBookDetailId = nil
+                    if self.presentingBookDetailId == deletedId || self.presentingHistoryBookId == deletedId {
+                        self.dismissRoute()
                     }
                 }
             }
         }
     }
     
+    var isRouteActive: Bool {
+        presentingBookDetailId != nil || presentingHistoryBookId != nil
+    }
+
+    func dismissRoute() {
+        presentingBookDetailId = nil
+        presentingHistoryBookId = nil
+    }
+
+    func readingHistoryBook(bookId: String) -> CalibreBook? {
+        container.bookManager.booksInShelf[bookId]
+    }
+
     func refreshShelf() {
         container.bookManager.refreshShelfMetadataV2(serverReachableChanged: false)
         container.serverManager.probeServersReachability(with: [], updateLibrary: true)

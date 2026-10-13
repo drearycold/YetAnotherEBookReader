@@ -432,6 +432,9 @@ final class ReaderWorkspaceViewModel: ObservableObject {
                 guard !Task.isCancelled, let self else { return }
                 guard request.targetWorkspaceID == nil || request.targetWorkspaceID == self.id else { continue }
                 self.attachPresentation(id: request.presentationID)
+                // The workspace is an overlay in the view tree, under any sheet or popover. Ask
+                // presentations subscribed to dismissAllEvents to close so the reader is on top.
+                self.container.publishDismissAll("reader-opened")
             }
         }
 

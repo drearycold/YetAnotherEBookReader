@@ -372,6 +372,55 @@ import Combine
         XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
     }
 
+    func testReaderOpenTargetsInitiatingReadingHistoryWorkspace() async throws {
+        let secondViewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
+        var book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        book.inShelf = true
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        XCTAssertFalse(readerInfo.missing)
+
+        let listViewModel = ReadingPositionListViewModel(container: mockAppContainer, book: book, positions: [])
+        let alert = listViewModel.continueReading(
+            at: readerInfo.position,
+            format: readerInfo.format,
+            readerType: readerInfo.readerType,
+            targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id
+        )
+
+        XCTAssertNil(alert, "continueReading raised alert: \(alert?.id ?? "")")
+        let attachedToSecond = await waitUntil(timeout: 10) {
+            secondViewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attachedToSecond)
+        XCTAssertTrue(secondViewModel.readerWorkspaceViewModel.isPresented)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
+    }
+
+    func testReaderOpenAsksPresentationsToDismiss() async throws {
+        var dismissReasons = [String]()
+        let dismissEvents = mockAppContainer.dismissAllEvents()
+        let dismissTask = Task { @MainActor in
+            for await reason in dismissEvents {
+                dismissReasons.append(reason)
+            }
+        }
+        defer { dismissTask.cancel() }
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+
+        mockAppContainer.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .readingPosition,
+            targetWorkspaceID: viewModel.readerWorkspaceViewModel.id
+        )
+
+        let dismissed = await waitUntil(timeout: 10) { dismissReasons.isEmpty == false }
+        XCTAssertTrue(dismissed, "Opening a reader should close sheets and popovers above the workspace")
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
+    }
+
     func testOpenEmptyReaderWindowDoesNotChangeReaderTabs() async throws {
         mockAppContainer.readerWindowSupportOverride = true
         var requestedActivities: [NSUserActivity?] = []

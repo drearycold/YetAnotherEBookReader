@@ -31,7 +31,17 @@ final class SectionShelfViewModel: ObservableObject {
     @Published var displaySections = [ShelfSectionItem]()
     @Published var libraryFilters = [ShelfLibraryFilterItem]()
 
-    @Published var presentingBookDetailId: String? = nil
+    /// Pushes the book's detail (not a sheet, so a reader opened from it shows above it).
+    @Published var presentingBookDetailId: String? = nil {
+        didSet {
+            if let presentingBookDetailId {
+                displayedBookDetailId = presentingBookDetailId
+            }
+        }
+    }
+    /// The pushed detail's book. Kept after it is dismissed, so the page doesn't go blank while it
+    /// slides out.
+    @Published private(set) var displayedBookDetailId: String? = nil
     @Published var activeAlert: SectionShelfAlert? = nil
     @Published var selectionState = ShelfSelectionState()
     @Published private(set) var isInitialLoadComplete = false
@@ -105,6 +115,10 @@ final class SectionShelfViewModel: ObservableObject {
             else { return }
             container.bookManager.addToShelf(book: book, formats: [format])
         }
+    }
+
+    func dismissBookDetail() {
+        presentingBookDetailId = nil
     }
 
     func tapBook(bookId: String) {

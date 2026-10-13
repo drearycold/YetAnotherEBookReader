@@ -21,10 +21,16 @@ class BookDetailViewModel: ObservableObject {
     
     @Published var activityListViewPresenting = false
 
-    @Published var readingPositionHistoryViewPresenting = false
+    /// Drives the push of Reading History. It is pushed, not a sheet, so a reader opened from it
+    /// shows above it in the workspace overlay.
+    @Published var isReadingPositionHistoryActive = false
     
     private weak var container: AppContainer?
     var targetWorkspaceID: UUID?
+    private var loadedBookId: String?
+    /// Set when Reading History is pushed, so the detail's next appearance (the pop back) doesn't
+    /// reload; any other appearance, such as a tab switch back, refreshes as before.
+    private var isReturningFromHistory = false
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
@@ -52,10 +58,23 @@ class BookDetailViewModel: ObservableObject {
         bookObserverTask?.cancel()
     }
     
-    func setup(bookId: String) {
+    /// Loads the book and refreshes its metadata, except when coming back from Reading History,
+    /// which would otherwise hit the server on every pop.
+    func onAppear(bookId: String, targetWorkspaceID: UUID?) {
+        self.targetWorkspaceID = targetWorkspaceID
+        let isReturningFromHistory = self.isReturningFromHistory
+        self.isReturningFromHistory = false
+        guard !(isReturningFromHistory && loadedBookId == bookId) else { return }
+        guard setup(bookId: bookId), let calibreBook else { return }
+        loadedBookId = bookId
+        fetchMetadata(book: calibreBook)
+    }
+    
+    @discardableResult
+    func setup(bookId: String) -> Bool {
         guard let container = self.container else {
             print("Warning: BookDetailViewModel setup called before container was set")
-            return
+            return false
         }
         
         activeDownloadsTask?.cancel()
@@ -70,7 +89,7 @@ class BookDetailViewModel: ObservableObject {
         
         guard let calibreBook = container.bookRepository.getBook(id: bookId) else {
             print("Error: CalibreBook not found for primary key \(bookId)")
-            return
+            return false
         }
         self.calibreBook = calibreBook
         
@@ -95,6 +114,7 @@ class BookDetailViewModel: ObservableObject {
                 }
             }
         }
+        return true
     }
     
     func fetchMetadata(book: CalibreBook) {
@@ -192,6 +212,12 @@ class BookDetailViewModel: ObservableObject {
         listVM?.positions = container.readingPositionRepository.getPositions(for: book)
     }
     
+    func showReadingPositionHistory(book: CalibreBook) {
+        prepareReadingPositionHistory(book: book)
+        isReturningFromHistory = true
+        isReadingPositionHistoryActive = true
+    }
+    
     func prepareReadingPositionHistory(book: CalibreBook) {
         guard let container = container else { return }
         if listVM == nil {
@@ -265,8 +291,10 @@ class BookDetailViewModel: ObservableObject {
         previewViewModel.toc = parseTOCNode(node: tocNode, level: 0)
     }
     
+    /// The preview prepared a session at the book's start; restore the book's own reading position
+    /// without opening a reader (closing a preview isn't a request to read).
     func handlePreviewDismiss(book: CalibreBook) {
-        prepareReadingSession(for: book)
+        _ = container?.sessionManager.prepareBookReading(book: book)
     }
 
     private func prepareReadingSession(for book: CalibreBook) {

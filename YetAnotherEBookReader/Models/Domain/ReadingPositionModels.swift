@@ -241,7 +241,9 @@ extension BookDeviceReadingPositionHistory {
             let duration = epoch - history.startDatetime.timeIntervalSince1970
             let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
             let nowDayDate = Calendar.current.startOfDay(for: Date())
-            let offset = limitDays - Int(floor(nowDayDate.timeIntervalSince(readDayDate) / 86400.0))
+            // Calendar days, not 86400-second spans: a DST change makes a day 23 or 25 hours long.
+            guard let daysAgo = Calendar.current.dateComponents([.day], from: readDayDate, to: nowDayDate).day else { return }
+            let offset = limitDays - daysAgo
             if offset < 0 || offset > limitDays { return }
             result[offset] += duration / 60
         }

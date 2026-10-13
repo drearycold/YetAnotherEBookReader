@@ -24,7 +24,7 @@ This file is the working guide for agents contributing to YetAnotherEBookReader
 
 ## Project Snapshot
 
-- App: iOS 15+ and macOS 12+ via Catalyst ebook reader.
+- App: iOS 15.5+ and macOS 12+ via Catalyst ebook reader.
 - UI: SwiftUI for app structure/settings and UIKit for reader-heavy surfaces.
 - Readers: Readium R2 for EPUB/PDF/CBZ, FolioReaderKit for legacy EPUB, custom
   PDFKit stack for YabrPDF. YabrPDF requires iOS 16 / Mac Catalyst 16 (native
@@ -133,12 +133,17 @@ hard-coding them.
 
 | iOS | iPhone | iPad |
 |---|---|---|
+| 15.5 | iPhone 7 | none |
 | 17.5 | none | iPad Pro (10.5-inch) |
 | 18.5 | iPhone 16 | iPad mini (A17 Pro) |
 | 26.5 | iPhone 17 | iPad mini (A17 Pro) |
 
 - `name=iPhone 17` in the commands above resolves to the iOS 26.5 device. For
-  iOS 18 runs pass `platform=iOS Simulator,id=<iPhone 16 UDID>`.
+  iOS 18 runs pass `platform=iOS Simulator,id=<iPhone 16 UDID>`, and for iOS 15
+  runs `id=<iPhone 7 UDID>`.
+- iOS 15.5 is the deployment target, so the iPhone 7 is the oldest system the
+  app runs on. Run it for SwiftUI navigation or presentation changes: iOS 15
+  differs there (`NavigationLink(isActive:)`, one toolbar item per placement).
 - When a simulator runtime is removed in Xcode, its devices stay on disk as
   `unavailable`. Clear them with `xcrun simctl delete unavailable`.
 - If a delete fails with "Operation not permitted", QuickLook thumbnails under
@@ -336,6 +341,28 @@ empty-library-ids meaning of "all active libraries".
 Start with `BookDetailViewModel` and `BookDetailSubviews`. Avoid reintroducing
 direct `AppContainer` or Realm dependencies into `BookDetailView` subviews.
 
+Any screen that can open a reader is pushed, never presented in a sheet. The
+reader workspace is an overlay in `MainView` (a `ZStack` over the tabs), and a
+sheet is a UIKit modal above it, so a reader opened from a sheet appears behind
+it. Book Detail and Reading History are pushed:
+- **Recent and Discover:** one hidden `NavigationLink(isActive:)` on the
+  shelf's root, driven by the view model (`RecentShelfRoute`,
+  `presentingBookDetailId`).
+- **Book Detail to Reading History:** a hidden link driven by
+  `isReadingPositionHistoryActive`.
+- **Reading History to a position:** a hidden link driven by `detailPosition`.
+  Its rows are sibling buttons (details, and ▶ to continue reading), not
+  NavigationLinks. A button inside a NavigationLink row pushes the row instead
+  of running its own action.
+
+Opening a reader into a workspace also publishes `publishDismissAll`, so a sheet
+or popover that can stay up while a reader opens should close on
+`dismissAllEvents()` (as `LibraryInfoView` and `ReaderOptionsViewModel` do).
+
+Readers opened from these screens pass `@Environment(\.readerWorkspaceID)` as
+the `targetWorkspaceID`. Opening a reader at a saved position goes through
+`ReadingPositionListViewModel.continueReading(at:format:readerType:targetWorkspaceID:)`.
+
 ### Reader Behavior
 
 Start with `ReadingSessionManager`, `ReaderEngineProtocol`,
@@ -457,8 +484,9 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result (2026-10-09, with CI's flags from clean derived data): 835
-unit tests passed, 1 skipped (the opt-in margin-detection benchmark). The Mac
+Recorded result (2026-10-12): 853 unit tests passed, 1 skipped (the opt-in
+margin-detection benchmark). The Recent and Browse detail UI journeys pass on
+the iPhone 17 (iOS 26.5) and the iPhone 7 (iOS 15.5). The Mac
 Catalyst build succeeds; the old SPM product resolution failure (`R2Navigator`,
 `GCDWebServer`, `R2Shared`, `R2Streamer`) no longer reproduces.
 

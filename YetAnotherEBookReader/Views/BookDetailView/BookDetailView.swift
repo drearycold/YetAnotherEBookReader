@@ -43,14 +43,26 @@ struct BookDetailView: View {
                     .padding()
             }
         }
+        .background(readingHistoryLink)
         .onAppear() {
-            _viewModel.targetWorkspaceID = readerWorkspaceID
-            _viewModel.setup(bookId: bookId)
-            if let calibreBook = _viewModel.calibreBook {
-                _viewModel.fetchMetadata(book: calibreBook)
-            }
+            _viewModel.onAppear(bookId: bookId, targetWorkspaceID: readerWorkspaceID)
         }
         .accessibilityIdentifier("screen.book-detail")
+    }
+    
+    /// Reading History is pushed, so a reader opened from it shows above it (the reader workspace is
+    /// an overlay in `MainView`, which a sheet would cover). One hidden link drives both entry points:
+    /// the progress row and the toolbar's clock.
+    private var readingHistoryLink: some View {
+        NavigationLink(isActive: $_viewModel.isReadingPositionHistoryActive) {
+            if let calibreBook = _viewModel.calibreBook {
+                ReadingPositionHistoryView(library: calibreBook.library, bookId: calibreBook.id)
+                    .id(calibreBook.inShelfId)
+            }
+        } label: {
+            EmptyView()
+        }
+        .hidden()
     }
 }
 

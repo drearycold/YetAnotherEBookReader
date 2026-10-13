@@ -150,12 +150,53 @@ import Combine
         XCTAssertNil(viewModel.presentingBookDetailId)
     }
 
+    func testPushedRoutesAreMutuallyExclusive() throws {
+        XCTAssertFalse(viewModel.isRouteActive)
+
+        viewModel.presentingBookDetailId = "book-1"
+        XCTAssertTrue(viewModel.isRouteActive)
+        XCTAssertEqual(viewModel.displayedRoute, .bookDetail(bookId: "book-1"))
+
+        viewModel.presentingHistoryBookId = "book-2"
+        XCTAssertNil(viewModel.presentingBookDetailId)
+        XCTAssertEqual(viewModel.displayedRoute, .readingHistory(bookId: "book-2"))
+
+        viewModel.presentingBookDetailId = "book-3"
+        XCTAssertNil(viewModel.presentingHistoryBookId)
+        XCTAssertEqual(viewModel.displayedRoute, .bookDetail(bookId: "book-3"))
+    }
+
+    func testDismissRouteKeepsDisplayedRouteForThePopAnimation() throws {
+        viewModel.presentingHistoryBookId = "book-1"
+
+        viewModel.dismissRoute()
+
+        XCTAssertFalse(viewModel.isRouteActive)
+        XCTAssertNil(viewModel.presentingHistoryBookId)
+        XCTAssertEqual(viewModel.displayedRoute, .readingHistory(bookId: "book-1"))
+    }
+
+    func testCalibreUpdatedDeletionDismissesHistoryRoute() async throws {
+        viewModel.presentingHistoryBookId = "deleted-book-id"
+        await waitForViewModelUpdate {
+            self.viewModel.loadedBooks != nil
+        }
+        mockAppContainer.publishCalibreUpdate(.deleted("deleted-book-id"))
+
+        await waitForViewModelUpdate {
+            self.viewModel.presentingHistoryBookId == nil
+        }
+        XCTAssertFalse(viewModel.isRouteActive)
+    }
+
     private func waitForViewModelUpdate(
         _ predicate: @escaping () -> Bool,
         file: StaticString = #filePath,
         line: UInt = #line
     ) async {
-        for _ in 0..<50 {
+        // A deadline, not a fixed number of sleeps: CI's runner is slower than a desktop Mac.
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             if predicate() { return }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
