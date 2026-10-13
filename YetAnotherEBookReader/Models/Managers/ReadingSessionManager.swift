@@ -133,6 +133,10 @@ class ReadingSessionManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
     private var legacyPresentingEBookReaderFromShelf = false
     private var latestPositionsByPresentationID = [ReaderPresentation.ID: BookDeviceReadingPosition]()
+    /// Presentations opened at a position the user picked (Continue Reading, `.readingPosition`).
+    /// They mount at that position rather than this device's latest one in the repository, until
+    /// their reader records a position of its own.
+    private var pickedPositionPresentationIDs = Set<ReaderPresentation.ID>()
     private let persistenceStore: ReaderPresentationPersistenceStore
     private var suppressPersistence = false
     private var hasAttemptedPersistedRestore = false
@@ -374,7 +378,14 @@ class ReadingSessionManager {
         reuseExisting: Bool = true
     ) -> ReaderPresentation {
         let resolvedReaderInfo = readerInfo ?? prepareBookReading(book: book)
-        if reuseExisting,
+        let opensPickedPosition = source == .readingPosition
+        if opensPickedPosition {
+            // A tab already showing this book in this reader would be reused at its own position;
+            // the user picked another one, so it is replaced.
+            readerPresentations
+                .filter { $0.matches(book: book, readerInfo: resolvedReaderInfo) }
+                .forEach { closeReader(id: $0.id) }
+        } else if reuseExisting,
            let existingPresentation = readerPresentations.first(where: { $0.matches(book: book, readerInfo: resolvedReaderInfo) }) {
             legacyReadingBook = existingPresentation.book
             legacyReaderInfo = existingPresentation.readerInfo
@@ -391,6 +402,9 @@ class ReadingSessionManager {
             readerInfo: resolvedReaderInfo,
             source: source
         )
+        if opensPickedPosition {
+            pickedPositionPresentationIDs.insert(presentation.id)
+        }
         legacyReadingBook = book
         legacyReaderInfo = resolvedReaderInfo
         legacyPresentingEBookReaderFromShelf = true
@@ -406,6 +420,7 @@ class ReadingSessionManager {
         let wasActive = activeReaderPresentationID == id
         readerPresentations.removeAll { $0.id == id }
         latestPositionsByPresentationID.removeValue(forKey: id)
+        pickedPositionPresentationIDs.remove(id)
         if wasActive {
             activeReaderPresentationID = readerPresentations.last?.id
         }
@@ -441,6 +456,12 @@ class ReadingSessionManager {
         if let recordedPosition = latestPositionsByPresentationID[presentation.id],
            recordedPosition.readerName == presentation.readerInfo.readerType.rawValue {
             return recordedPosition
+        }
+
+        // The picked position stands until the reader records one; this device's latest position
+        // in the repository is the one the user chose to leave.
+        if pickedPositionPresentationIDs.contains(presentation.id) {
+            return nil
         }
 
         return container?.readingPositionRepository

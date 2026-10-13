@@ -203,6 +203,96 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(mountPresentation.readerInfo.position.readerName, ReaderType.YabrEPUB.rawValue)
     }
 
+    /// Continue Reading from a history row: the row's position, not this device's latest one.
+    func testReaderPresentationForMountKeepsPickedPosition() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 111, library: library)
+        let deviceLatest = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 42, epoch: 500)
+        container.readingPositionRepository.savePosition(deviceLatest, for: book)
+        defer { container.readingPositionRepository.removePosition(deviceName: container.deviceName, for: book) }
+        let pickedPosition = TestFixtures.makeReadingPosition(id: "other-device", lastReadPage: 7, epoch: 100)
+
+        let presentation = manager.openReader(
+            book: book,
+            readerInfo: makeMountTestReaderInfo(position: pickedPosition),
+            source: .readingPosition
+        )
+
+        let mountPresentation = try XCTUnwrap(manager.readerPresentationForMount(id: presentation.id))
+        XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 7)
+        XCTAssertEqual(mountPresentation.readerInfo.position.id, "other-device")
+    }
+
+    func testReaderPresentationForMountFromShelfUsesDeviceLatestPosition() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 112, library: library)
+        let deviceLatest = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 42, epoch: 500)
+        container.readingPositionRepository.savePosition(deviceLatest, for: book)
+        defer { container.readingPositionRepository.removePosition(deviceName: container.deviceName, for: book) }
+        let initialPosition = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 1, epoch: 100)
+
+        let presentation = manager.openReader(
+            book: book,
+            readerInfo: makeMountTestReaderInfo(position: initialPosition),
+            source: .shelf
+        )
+
+        let mountPresentation = try XCTUnwrap(manager.readerPresentationForMount(id: presentation.id))
+        XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 42)
+    }
+
+    func testPickedPositionYieldsToRecordedPosition() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 113, library: library)
+        let pickedPosition = TestFixtures.makeReadingPosition(id: "other-device", lastReadPage: 7, epoch: 100)
+        let readOnPosition = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 9, epoch: 600)
+
+        let presentation = manager.openReader(
+            book: book,
+            readerInfo: makeMountTestReaderInfo(position: pickedPosition),
+            source: .readingPosition
+        )
+        manager.recordReaderPresentationPosition(id: presentation.id, position: readOnPosition)
+
+        let mountPresentation = try XCTUnwrap(manager.readerPresentationForMount(id: presentation.id))
+        XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 9)
+    }
+
+    func testPickedPositionReplacesOpenTabOfSameBookAndReader() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 114, library: library)
+        let shelfPosition = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 42, epoch: 500)
+        let pickedPosition = TestFixtures.makeReadingPosition(id: "other-device", lastReadPage: 7, epoch: 100)
+        let shelfPresentation = manager.openReader(
+            book: book,
+            readerInfo: makeMountTestReaderInfo(position: shelfPosition),
+            source: .shelf
+        )
+
+        let pickedPresentation = manager.openReader(
+            book: book,
+            readerInfo: makeMountTestReaderInfo(position: pickedPosition),
+            source: .readingPosition
+        )
+
+        XCTAssertNotEqual(pickedPresentation.id, shelfPresentation.id)
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [pickedPresentation.id])
+        XCTAssertEqual(manager.activeReaderPresentation?.id, pickedPresentation.id)
+        let mountPresentation = try XCTUnwrap(manager.readerPresentationForMount(id: pickedPresentation.id))
+        XCTAssertEqual(mountPresentation.readerInfo.position.lastReadPage, 7)
+    }
+
+    private func makeMountTestReaderInfo(position: BookDeviceReadingPosition) -> ReaderInfo {
+        ReaderInfo(
+            deviceName: container.deviceName,
+            url: URL(fileURLWithPath: "/tmp/first.epub"),
+            missing: false,
+            format: .EPUB,
+            readerType: .YabrEPUB,
+            position: position
+        )
+    }
+
     func testReaderPresentationsPersistSnapshotsWhenOpenedAndActivated() throws {
         let firstBook = try makeRestorableBook(id: 301, title: "First Persisted Reader")
         let secondBook = try makeRestorableBook(id: 302, title: "Second Persisted Reader")
