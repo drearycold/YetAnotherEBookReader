@@ -9,6 +9,9 @@ import XCTest
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+// The managers' state is main-thread state. Without this, the async tests run on
+// the cooperative pool and race the managers' main-queue writes.
+@MainActor
 final class CalibreLibraryManagerTests: XCTestCase {
     private var container: AppContainer!
     private var libraryManager: CalibreLibraryManager!
@@ -470,22 +473,18 @@ final class CalibreLibraryManagerTests: XCTestCase {
             request: CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
         )
 
-        let authors = try XCTUnwrap(
-            container.categoryCacheRepository.fetchLibraryCategoryResult(
-                libraryId: library.id,
-                categoryName: "Authors"
-            )
-        )
+        // The category service writes from its own actor, and the main thread's Realm
+        // sees those writes only after it refreshes on a run loop turn.
+        let authors = try await waitForCachedCategory(named: "Authors") { result in
+            result.items.map(\.name) == ["New Author"]
+        }
         XCTAssertGreaterThan(authors.generation, oldLastModified)
         XCTAssertEqual(authors.items.map(\.name), ["New Author"])
         XCTAssertEqual(authors.items.first?.count, 7)
 
-        let tags = try XCTUnwrap(
-            container.categoryCacheRepository.fetchLibraryCategoryResult(
-                libraryId: library.id,
-                categoryName: "Tags"
-            )
-        )
+        let tags = try await waitForCachedCategory(named: "Tags") { result in
+            result.items.map(\.name) == ["New Tag"]
+        }
         XCTAssertEqual(tags.items.map(\.name), ["New Tag"])
         XCTAssertNil(
             try container.categoryCacheRepository.fetchLibraryCategoryResult(
