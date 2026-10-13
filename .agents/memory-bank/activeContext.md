@@ -5,6 +5,74 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## FolioReaderKit 1c1a23a, One Page / Two Pages Kept, Schema 145 (2026-10-13, merged)
+
+**Merged to `main`** in drearycold/YetAnotherEBookReader#109 (merge commit
+`e41b4f4e`, 2026-10-13). The branch `claude/update-folioreaderkit` is deleted,
+remote and local.
+
+- **FolioReaderKit `196fcd5` → `1c1a23a` (033af35d).**
+  - Two pages side by side in landscape on iPad (FolioReaderKit#14), with One
+    Page / Two Pages in the page menu (preference `currentLandscapeSpread`).
+  - Tiered pages for vertical writing on iPad (FolioReaderKit#15). They use the
+    existing `.vertical` direction, so stored direction values don't change.
+  - Kept-chapter and layout fixes (FolioReaderKit#16–#21).
+  - Updating also moved four transitive packages. They were kept: all are
+    within Readium's and FolioReaderKit's ranges, and the app uses no changed
+    API.
+    - CryptoSwift 1.9.0 → 1.10.0
+    - Fuzi 4.0.0 → 4.0.1
+    - SQLite.swift 0.15.5 → 0.16.0
+    - SwiftSoup 2.13.3 → 2.14.1 (macOS minimum 12, the Catalyst target's)
+- **A book's One Page / Two Pages choice is saved (b5572ae9, schema 145).**
+  - The provider kept it in memory only: `FolioReaderPreferenceValue` saves a
+    fixed set of fields.
+  - `currentLandscapeSpread` is now in `FolioReaderPreferenceValue` and
+    `FolioReaderPreferenceRealm` (`RealmProperty<Bool?>`), so per-book rows and
+    profiles keep it.
+  - `nil` is no choice: FolioReaderKit then uses
+    `FolioReaderConfig.landscapeSpread`, as `.defaultVertical` means no scroll
+    direction. Applying a value without a choice removes the key, so a book or
+    profile without one doesn't keep an earlier one.
+  - Schema 145: `CFBundleVersion`, `CURRENT_PROJECT_VERSION`,
+    `DatabaseSchema.defaultVersion`. Optional column, no data migration; old
+    rows read nil (test: `testFolioPreferencesSavedAtSchema144HaveNoLandscapeSpreadChoice`).
+- **CI fix (660ffff2).** `IntegrationTests.testSearchToDownloadFlow` slept a
+  fixed 0.5 s for a mock download and failed on the runner. It now waits for
+  the file, bounded at 10 s.
+- **Flaky tests, not fixed:**
+  - `CalibreLibraryManagerTests.testRemoveLibrary` crashes the test host about
+    1 in 26 runs (`-[NSIndexPath count]` or `-[__NSCFNumber count]` sent to
+    `0x8000000000000000`).
+    - It's `async` in a class that isn't `@MainActor`, so it writes
+      `booksInShelf` off the main thread while `updateBook`'s main-queue
+      publish writes the same dictionary.
+    - Production callers (`removeLibrary`, `getBooksMetadata`) are
+      `@MainActor`.
+    - Fix: isolate the test to the main actor.
+  - `IntegrationTests.testDatabaseInitialization` can hit
+    `assertionFailure("Missing AppContainer environment")`
+    (`AppContainer.swift`, `AppContainerEnvironmentKey`).
+    - It happens only when the test repeats itself (`-test-iterations`):
+      `tearDown` sets `AppContainer.shared = nil`, and the host app's SwiftUI
+      then reads the environment default.
+    - The normal order doesn't hit it.
+- **Verified:**
+  - CI green on `660ffff2`.
+  - Locally: 871 unit tests passed, 1 skipped; Mac Catalyst builds.
+  - Dropping the Realm write fails the three new round-trip tests.
+  - A Debug build of `b5572ae9` (build 145) installed and launched on the iPad
+    Pro 10.5 (iOS 17.7); no crash log after launch.
+    - `devicectl device info processes` fails on that iPad (CoreDevice
+      StreamingAction error); check `--domain-type systemCrashLogs` instead.
+    - Its Realm is now at 145, so a pre-145 build can't open it. The data stays
+      on disk; a 145+ build opens it again.
+- **Not verified:** One Page / Two Pages in the running app on an iPad.
+- **Network (2026-10-13):** `github.com` didn't resolve on this machine's
+  network, so SSH fetch and push failed. `gh` worked through `HTTPS_PROXY`, and
+  git did over HTTPS with
+  `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push https://github.com/drearycold/YetAnotherEBookReader.git …`.
+
 ## Reading Positions: Picked, Synced, Newer (2026-10-13, merged)
 
 **Merged to `main`** in drearycold/YetAnotherEBookReader#107 (merge commit
