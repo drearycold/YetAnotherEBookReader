@@ -1280,4 +1280,86 @@ final class CalibreServerServiceTests: XCTestCase {
         }
         XCTAssertEqual(statusCode, 500)
     }
+
+    // MARK: - Session cache
+
+    /// A session's task delegate answers calibre's challenge with the password the session was
+    /// created with, so a changed password for the same URL and username needs its own session.
+    func testSessionsAreNotSharedAcrossPasswords() throws {
+        let saved = authenticatedServer(password: "old-pass")
+        var changed = saved
+        changed.password = "new-pass"
+        XCTAssertEqual(saved, changed, "a server's identity leaves the password out")
+
+        let savedSession = service.urlSession(server: saved)
+        let changedSession = service.urlSession(server: changed)
+
+        XCTAssertFalse(savedSession === changedSession)
+        XCTAssertTrue(service.urlSession(server: changed) === changedSession, "the same password reuses its session")
+        let credential = try XCTUnwrap((changedSession.delegate as? CalibreServerTaskDelegate)?.userCredential)
+        XCTAssertEqual(credential.user, "reader")
+        XCTAssertEqual(credential.password, "new-pass")
+    }
+
+    func testANewPasswordRetiresTheOldPasswordsSessions() async throws {
+        let saved = authenticatedServer(password: "old-pass")
+        var changed = saved
+        changed.password = "new-pass"
+        let savedSessions = [
+            service.urlSession(server: saved),
+            service.urlSession(server: saved, timeout: 10, qos: .background)
+        ]
+
+        let changedSession = service.urlSession(server: changed)
+
+        let cachedKeys = service.metadataSessions.keys.filter { $0.server == saved }
+        XCTAssertEqual(cachedKeys.map(\.server.password), ["new-pass"])
+        for session in savedSessions {
+            await waitUntilInvalidated(session)
+        }
+        XCTAssertNotNil(changedSession.delegate)
+    }
+
+    func testARetiredSessionStaysValidUntilItsRequestEnds() async throws {
+        let saved = authenticatedServer(password: "old-pass")
+        var changed = saved
+        changed.password = "new-pass"
+
+        let leased = await service.withURLSession(server: saved) { session -> URLSession in
+            _ = service.urlSession(server: changed)
+            // Creating a task in an invalidated session raises, which would stop the test host.
+            session.dataTask(with: URL(string: "http://127.0.0.1:9")!).cancel()
+            return session
+        }
+
+        await waitUntilInvalidated(leased)
+    }
+
+    func testRetiringAServerInvalidatesItsSessions() async throws {
+        let removed = authenticatedServer(password: "pass")
+        let sessions = [
+            service.urlSession(server: removed),
+            service.urlSession(server: removed, qos: .background)
+        ]
+
+        service.retireSessions(for: removed)
+
+        XCTAssertFalse(service.metadataSessions.keys.contains { $0.server == removed })
+        for session in sessions {
+            await waitUntilInvalidated(session)
+        }
+    }
+
+    private func authenticatedServer(password: String) -> CalibreServer {
+        CalibreServer(uuid: UUID(), name: "Auth", baseUrl: "http://calibre.example:8080", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "reader", password: password)
+    }
+
+    /// An invalidated session lets go of its delegate once the invalidation is delivered.
+    private func waitUntilInvalidated(_ session: URLSession, file: StaticString = #filePath, line: UInt = #line) async {
+        let deadline = Date().addingTimeInterval(10)
+        while session.delegate != nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertNil(session.delegate, "the session is invalidated", file: file, line: line)
+    }
 }

@@ -142,7 +142,8 @@ class CalibreServerManager {
             container.libraryManager.hideLibrary(libraryId: library.id)
             await container.libraryManager.removeLibrary(library: library)
         }
-        
+        container.calibreServerService.retireSessions(for: server)
+
         container.publishCalibreUpdate(.shelf)
     }
     

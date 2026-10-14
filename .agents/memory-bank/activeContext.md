@@ -5,6 +5,62 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Server Sessions Follow Password Changes (2026-10-14, branch)
+
+Branch `claude/session-credentials`, not yet pushed.
+
+- **Bug:** `CalibreServerService.urlSession(server:timeout:qos:)` cached one
+  `URLSession` per `CalibreServerURLSessionKey`, whose equality came from
+  `CalibreServer` (`baseUrl` + `username`), and never dropped any. The session's
+  `CalibreServerTaskDelegate` keeps the password it was created with. After a
+  password change in Settings, every request answered calibre's challenge with
+  the old password until the app restarted. Found by the contract tests.
+- **Fix:** the key also compares and hashes `server.password`. `CalibreServer`'s
+  own `==`/`hash` are unchanged, because the rest of the app identifies servers
+  by them. On a cache miss, the same server's sessions for any other password (all
+  timeouts and QoS) are retired, so a server keeps sessions for one password: the
+  newest one asked for. `retireSessions(for:)` drops a removed server's sessions,
+  and `CalibreServerManager.removeServer` calls it.
+- **Why leases:** creating a task in an invalidated session raises
+  `NSGenericException` ("Task created in a session that has been invalidated"),
+  which crashes the app. This was checked with a scratch program; invalidation
+  takes effect synchronously. `withURLSession(server:…)` counts a lease for the
+  whole request, and a retired session is invalidated
+  (`finishTasksAndInvalidate`) only when its last lease ends. `validatedData`
+  and `LibraryCategoryService`'s non-HTTP branch use it. `urlSession(server:)`
+  is still there for tests and `DSReaderHelperConnector.urlSession` (only used by
+  tests).
+- **Known transient:** after an edit, in-memory copies of the server holding the
+  old password (books in `booksInShelf`, for example) and fresh copies alternate
+  retiring each other's sessions. That costs new connections, but it is safe and
+  stops once the old copies are gone. The mod-server probe of a candidate
+  password retires the saved password's sessions the same way.
+- **Not changed:** `CalibreServerManager.populateServers` stores `.permanent`
+  credentials in `URLCredentialStorage.shared` at launch, and nothing updates
+  them on an edit. Challenges are answered by the delegates, so they don't decide
+  what is sent. Only the Digest path is covered by the contract tests.
+- **Tests:** `CalibreServerServiceTests` (4 new):
+  - different passwords get different sessions, and each delegate has its own
+    credential;
+  - a new password retires and invalidates the old password's sessions;
+  - a leased session stays usable until its request ends;
+  - `retireSessions(for:)` invalidates a server's sessions.
+
+  `CalibreServerManagerTests.testRemoveServer` checks the sessions are retired.
+  `CalibreServerContractTests` replaces the unknown-user workaround with
+  `testAWrongPasswordIsReportedByTheProbe`: contract-writer with a wrong password
+  after the right one's session is cached, then the right password again. It
+  keeps `testAnUnknownUserIsReportedByTheProbe`, so there are now 5 contract
+  tests.
+- **Verified** (iPhone 17, calibre 9.11 contract server running): the full
+  unit suite ran 888 tests with 0 failures and 1 skipped (the benchmark), and
+  all 5 contract tests ran. The scheme also ran the 5 UI journeys, which
+  passed. The Mac Catalyst build succeeds. On the pre-fix code (`ded54897`),
+  `testAWrongPasswordIsReportedByTheProbe` fails: the wrong-password probe is
+  reachable with no error.
+- **Local build note:** `/tmp/YabrSourcePackages` was gone entirely, so the
+  runs used package and derived-data directories in the session scratchpad.
+
 ## Highlight UUID Conversion Without UB (2026-10-14, branch)
 
 Branch `claude/highlight-uuid-ub`, not yet pushed.
