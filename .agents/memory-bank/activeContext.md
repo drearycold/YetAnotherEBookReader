@@ -9,7 +9,8 @@ placement (content right of center, top offset / drift after page turns).
 
 - **Ruleset "Protect main"** (id 25044670, on the default branch). AGENTS.md
   "CI" has the rules:
-  - a pull request is required, merged with a merge commit, with 0 approvals;
+  - a pull request is required, merged with a merge commit or squashed (squash
+    added the same day; no rebase), with 0 approvals;
   - **iOS unit tests** and **Mac Catalyst build** must pass, and the branch
     need not be up to date with `main`;
   - force pushes and deletion are blocked, with no bypass actors (admins

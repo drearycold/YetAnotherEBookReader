@@ -88,7 +88,7 @@ hand, on `macos-26` with the Xcode the project is developed with
 Rules):
 
 - Changes reach `main` only through a pull request, merged with a merge
-  commit. No approval is required.
+  commit or squashed (no rebase merges). No approval is required.
 - The **iOS unit tests** and **Mac Catalyst build** checks must pass; the
   branch need not be up to date with `main`. **Calibre contract tests** isn't
   required yet.
@@ -97,8 +97,10 @@ Rules):
 - A required check is matched by its job `name:`. Renaming that job, or adding
   one that should be required, means updating the ruleset as well, or every
   pull request waits for a check that never reports.
-- Auto-merge is allowed (`gh pr merge --auto`), and GitHub deletes a pull
-  request's branch when it merges.
+- Auto-merge is allowed (`gh pr merge --auto --merge` or `--squash`), and
+  GitHub deletes a pull request's branch when it merges. A squashed branch
+  isn't an ancestor of `main`, so `git branch -d` refuses it; check that the
+  pull request merged from the branch's tip, then delete it with `-D`.
 
 ### Calibre Contract Tests
 
