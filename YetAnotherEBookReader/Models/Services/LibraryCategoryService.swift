@@ -52,8 +52,9 @@ actor LibraryCategoryService {
             if url.scheme?.lowercased().hasPrefix("http") == true {
                 (data, _) = try await service.validatedData(from: url, server: library.server, qos: .background)
             } else {
-                let session = service.urlSession(server: library.server, qos: .background)
-                (data, _) = try await session.data(from: url)
+                (data, _) = try await service.withURLSession(server: library.server, qos: .background) {
+                    try await $0.data(from: url)
+                }
             }
             let result = try JSONDecoder().decode(LibraryCategoryListResult.self, from: data)
             

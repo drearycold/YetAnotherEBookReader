@@ -22,7 +22,12 @@ final class CalibreServerService {
     }()
     
     private let sessionsQueue = DispatchQueue(label: "io.github.dsreader.CalibreServerService.sessions")
-    
+    /// Requests running in each session (`withURLSession`). Creating a task in an invalidated
+    /// session raises, so a retired session is invalidated only after its last request.
+    private var sessionLeases = [ObjectIdentifier: Int]()
+    /// Retired sessions that still have requests running.
+    private var retiredSessions = [ObjectIdentifier: URLSession]()
+
     private let configLock = NSRecursiveLock()
     private var _localDeviceName = ""
     private var _localCalibreLibraries = [String: CalibreLibrary]()
@@ -115,22 +120,89 @@ final class CalibreServerService {
         config?.getPreferredFormat(for: book)
     }
 
+    /// The cached session for `server`'s address, username and password. A server's sessions all
+    /// use the newest password asked for: a session for another password is retired, and
+    /// invalidated once its requests finish. Make requests through `withURLSession` (or
+    /// `validatedData`), which keeps the session valid until the request is done.
     func urlSession(server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> URLSession {
         let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-        
-        return sessionsQueue.sync {
-            if let session = metadataSessions[key] {
-                return session
+        return sessionsQueue.sync { cachedSession(for: key) }
+    }
+
+    /// Runs `body` with the session for `server`, which stays valid until `body` returns even if a
+    /// newer password retires it meanwhile.
+    func withURLSession<T>(
+        server: CalibreServer,
+        timeout: Double = 600,
+        qos: DispatchQoS.QoSClass = .default,
+        _ body: (URLSession) async throws -> T
+    ) async rethrows -> T {
+        let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
+        let session = sessionsQueue.sync {
+            let session = cachedSession(for: key)
+            sessionLeases[ObjectIdentifier(session), default: 0] += 1
+            return session
+        }
+        defer { endLease(of: session) }
+        return try await body(session)
+    }
+
+    /// Retires every session for `server` (matched by address and username), for a removed server.
+    func retireSessions(for server: CalibreServer) {
+        sessionsQueue.sync {
+            for key in metadataSessions.keys.filter({ $0.server == server }) {
+                if let session = metadataSessions.removeValue(forKey: key) {
+                    retire(session)
+                }
             }
-            let urlSessionConfiguration = URLSessionConfiguration.default
-            urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            urlSessionConfiguration.timeoutIntervalForRequest = timeout
-            urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
-            let urlSessionDelegate = CalibreServerTaskDelegate(server)
-            let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
-            
-            metadataSessions[key] = urlSession
-            return urlSession
+        }
+    }
+
+    /// On `sessionsQueue`.
+    private func cachedSession(for key: CalibreServerURLSessionKey) -> URLSession {
+        if let session = metadataSessions[key] {
+            return session
+        }
+        let staleKeys = metadataSessions.keys.filter {
+            $0.server == key.server && $0.server.password != key.server.password
+        }
+        for staleKey in staleKeys {
+            if let session = metadataSessions.removeValue(forKey: staleKey) {
+                retire(session)
+            }
+        }
+
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        urlSessionConfiguration.timeoutIntervalForRequest = key.timeout
+        urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
+        let urlSessionDelegate = CalibreServerTaskDelegate(key.server)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
+
+        metadataSessions[key] = urlSession
+        return urlSession
+    }
+
+    /// On `sessionsQueue`, after removing `session` from `metadataSessions`.
+    private func retire(_ session: URLSession) {
+        let id = ObjectIdentifier(session)
+        // Tests cache one mock session under several keys.
+        guard metadataSessions.values.contains(where: { $0 === session }) == false else { return }
+        if sessionLeases[id] != nil {
+            retiredSessions[id] = session
+        } else {
+            session.finishTasksAndInvalidate()
+        }
+    }
+
+    private func endLease(of session: URLSession) {
+        sessionsQueue.sync {
+            let id = ObjectIdentifier(session)
+            let leases = (sessionLeases[id] ?? 1) - 1
+            sessionLeases[id] = leases > 0 ? leases : nil
+            if leases <= 0, let retired = retiredSessions.removeValue(forKey: id) {
+                retired.finishTasksAndInvalidate()
+            }
         }
     }
 
@@ -175,7 +247,9 @@ final class CalibreServerService {
 
     func validatedData(for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) async throws -> (Data, HTTPURLResponse) {
         do {
-            let (data, response) = try await urlSession(server: server, timeout: timeout, qos: qos).data(for: request)
+            let (data, response) = try await withURLSession(server: server, timeout: timeout, qos: qos) {
+                try await $0.data(for: request)
+            }
             let httpResponse = try validateHTTPResponse(data: data, response: response)
             return (data, httpResponse)
         } catch {
@@ -207,13 +281,23 @@ final class CalibreServerService {
     }
 }
 
-struct CalibreServerURLSessionKey: Hashable, Equatable {
+/// A session's task delegate answers authentication challenges with the password the session was
+/// created with, so the key includes the password. `CalibreServer`'s own equality leaves it out.
+struct CalibreServerURLSessionKey: Hashable {
     let server: CalibreServer
     let timeout: Double
     let qos: DispatchQoS.QoSClass
-    
+
+    static func == (lhs: CalibreServerURLSessionKey, rhs: CalibreServerURLSessionKey) -> Bool {
+        lhs.server == rhs.server
+            && lhs.server.password == rhs.server.password
+            && lhs.timeout == rhs.timeout
+            && lhs.qos == rhs.qos
+    }
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(server)
+        hasher.combine(server.password)
         hasher.combine(timeout)
         hasher.combine(qos)
     }

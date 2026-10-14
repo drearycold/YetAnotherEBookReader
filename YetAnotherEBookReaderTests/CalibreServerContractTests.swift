@@ -123,14 +123,27 @@ final class CalibreServerContractTests: XCTestCase {
         XCTAssertEqual(stored.first?.removed, true)
     }
 
-    /// The task delegate answers calibre's Digest challenge with the saved credential, then gives
-    /// up: credentials calibre rejects end as a cancelled request, which the probe reports as
+    /// The task delegate answers calibre's Digest challenge with the server's credential, then
+    /// gives up: credentials calibre rejects end as a cancelled request, which the probe reports as
     /// possibly needing authentication.
     ///
-    /// The user is unknown rather than the password wrong: sessions are cached per server URL and
-    /// username, so a wrong password for contract-writer would reuse the session that answers with
-    /// the right one.
-    func testRejectedCredentialsAreReportedByTheProbe() async throws {
+    /// setUp already cached a session for the right password. A changed password gets a session
+    /// of its own, which answers with it, and the right password still works afterwards.
+    func testAWrongPasswordIsReportedByTheProbe() async throws {
+        let server = library.server
+        guard server.hasAuth, let serverURL = URL(string: server.baseUrl) else {
+            throw XCTSkip("Needs a calibre-server with authentication")
+        }
+        var wrongPassword = server
+        wrongPassword.password = "wrong-\(UUID().uuidString)"
+
+        assertRejected(await probe(wrongPassword, at: serverURL))
+
+        let probedAgain = await probe(server, at: serverURL)
+        XCTAssertTrue(probedAgain.reachable, "the right password: \(probedAgain.errorMsg)")
+    }
+
+    func testAnUnknownUserIsReportedByTheProbe() async throws {
         let server = library.server
         guard server.hasAuth, let serverURL = URL(string: server.baseUrl) else {
             throw XCTSkip("Needs a calibre-server with authentication")
@@ -146,17 +159,19 @@ final class CalibreServerContractTests: XCTestCase {
             password: server.password
         )
 
-        let probed = await probe(unknownUser, at: serverURL)
-
-        XCTAssertFalse(probed.reachable)
-        guard case .transport(let error) = probed.error else {
-            return XCTFail("expected a cancelled request, got \(String(describing: probed.error))")
-        }
-        XCTAssertEqual(error.code, .cancelled)
-        XCTAssertEqual(probed.errorMsg, "cancelled, server may require authentication")
+        assertRejected(await probe(unknownUser, at: serverURL))
     }
 
     // MARK: - Helpers
+
+    private func assertRejected(_ probed: CalibreServerInfo, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(probed.reachable, file: file, line: line)
+        guard case .transport(let error) = probed.error else {
+            return XCTFail("expected a cancelled request, got \(String(describing: probed.error))", file: file, line: line)
+        }
+        XCTAssertEqual(error.code, .cancelled, file: file, line: line)
+        XCTAssertEqual(probed.errorMsg, "cancelled, server may require authentication", file: file, line: line)
+    }
 
     private func probe(_ server: CalibreServer, at url: URL) async -> CalibreServerInfo {
         let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)

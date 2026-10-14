@@ -95,13 +95,16 @@ final class CalibreServerManagerTests: XCTestCase {
         
         // Verify library exists in repository before deletion
         XCTAssertNotNil(container.libraryRepository.getAllLibraries().first { $0.id == library.id })
-        
+        _ = container.calibreServerService.urlSession(server: server)
+
         // Remove server
         await serverManager.removeServer(server: server)
-        
+
         // Verify libraries associated with server are deleted from repository
         XCTAssertNil(container.libraryRepository.getAllLibraries().first { $0.id == library.id })
         XCTAssertNil(container.libraryManager.calibreLibraries[library.id])
+        // Its cached sessions are retired
+        XCTAssertFalse(container.calibreServerService.metadataSessions.keys.contains { $0.server == server })
     }
 
     func testDSReaderHelperOperations() throws {
