@@ -5,6 +5,66 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Unique Bookmark Titles, Merged by Title (2026-10-14, branch)
+
+Branch `claude/unique-bookmark-titles`, based on `main` after #118.
+
+- **Problem:** calibre keeps one bookmark per title for each book, format and
+  user. The app merged by `pos`, and the PDF reader titled bookmarks with the
+  chapter's outline label, so two in one chapter collapsed on the server. Also:
+  - removals never reached the server (uploads used `excludeRemoved: true`);
+  - remote PDF (`yabrpdf`) bookmarks were never imported (the merge took only
+    `epubcfi`);
+  - every format's list merged into the book's single pool.
+- **Titles:** `RealmAnnotationRepository.saveBookmark` makes a title unique
+  among the book's visible bookmarks (`BookmarkMerge.uniqueTitle`: `T #2`,
+  `#3`…, calibre's viewer style). A retitle is a tombstone of the old title plus
+  a new record, so the old title is removed on the server too. PDF titles are
+  `"<outline label>, p. N"` (`PDFBookmark.title`). `getBookmark(byPos:)` skips
+  removed ones.
+- **Merge:** `BookmarkMerge.plan` (`Models/Domain/BookmarkMerge.swift`):
+  - calibre's bookmark of a title matches the local one with that title at the
+    same position, and the newer wins (ties within 2 ms go to the server, as in
+    calibre);
+  - one at another position is a different bookmark: it keeps the title and
+    the local one is retitled, so nothing is lost. That covers legacy
+    duplicates and two devices' same-titled PDF bookmarks. The trade-off: a
+    bookmark moved in calibre's viewer (re-added under an existing title)
+    stays behind here under a new title;
+  - `syncBookmarks(entries:forBookId:posType:)` returns exactly the entries to
+    upload, tombstones included (calibre merges, so the rest stay home).
+    `BookMetadataSyncWorker` uploads those.
+- **Per format:** `Format.bookmarkPosType` (EPUB `epubcfi`, PDF `yabrpdf`, CBZ
+  none). Each format merges and uploads only its reader's bookmarks. Without
+  this, two formats disagreeing about a title's position would rename a bit
+  more on every sync. FolioReader's provider now lists `epubcfi` bookmarks only.
+- **Tolerance found by the contract test:** the planner first used the old
+  0.1 s "same edit" window. An edit within 0.1 s of the last upload then tied,
+  and the server's visible copy revived it. Now 2 ms
+  (`testAnEditSoonAfterASyncIsNewer`).
+- **Tests:** `RealmAnnotationRepositoryTests`:
+  - the pos-era tests are rewritten;
+  - two-device tests run against a simulated calibre merge: PDF bookmarks on
+    one page, legacy duplicates, removal not resurrected, retitle not
+    duplicated, one title at two places, a removal elsewhere, per format;
+  - plus title and page helpers.
+
+  Worker, Folio provider and PDF title tests too. Contract:
+  `testTwoDevicesKeepEachBookmark` (19 contract tests). Mutation-checked:
+  dropping tombstone uploads and the collision retitle fails the removal,
+  retitle and one-title-two-places tests.
+- **Verified** (iPhone 17, calibre 9.11 contract server running): the full
+  scheme ran 916 unit tests with 0 failures and 1 skipped (the benchmark),
+  including all 19 contract tests, plus the 5 UI journeys. The Mac Catalyst
+  build succeeds. Packages and derived data were in the session scratchpad
+  (`/tmp/YabrSourcePackages` was gone).
+- **Found, filed separately:** `yabrPDFOutline(_:for:)` passes the 1-based
+  page to the 0-based `page(at:)`, so a chapter's last page reports the next
+  chapter (titles and list sections alike).
+- **Not changed:** bookmarks at one position are one to FolioReader
+  (`removeBookmark(pos:)` removes all of them); legacy cross-format entries on
+  the server (PDF bookmarks in an EPUB's list) are left alone.
+
 ## Server Sessions Follow Password Changes (2026-10-14, branch)
 
 Branch `claude/session-credentials`, not yet pushed.
