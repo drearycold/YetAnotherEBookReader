@@ -191,41 +191,76 @@ extension LibraryInfoView {
                     $0.key
                 })
                 .reduce(0, { partialResult, libraryId in
-                    if result.unifiedOffsets[libraryId] == nil {
-                        return partialResult + 1
+                    // A library is searched until it answers or fails, as its status says.
+                    if let status = libraryStatuses[libraryId] {
+                        return partialResult + (status.loading ? 1 : 0)
                     }
-                    if libraryStatuses[libraryId]?.loading == true {
+                    if result.unifiedOffsets[libraryId] == nil {
                         return partialResult + 1
                     }
                     return partialResult
                 })
         }
-        
+
+        /// The searched libraries whose search failed, by name.
+        func getLibrarySearchFailures(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> [(library: CalibreLibrary, status: LibrarySearchStatus)] {
+            guard let result = searchResult else { return [] }
+            return container.libraryManager.calibreLibraries.values
+                .filter {
+                    $0.hidden == false
+                    && $0.server.removed == false
+                    && (result.libraryIds.isEmpty || result.libraryIds.contains($0.id))
+                }
+                .compactMap { library in
+                    guard let status = libraryStatuses[library.id],
+                          status.loading == false,
+                          status.failure != nil else { return nil }
+                    return (library, status)
+                }
+                .sorted { $0.library.name < $1.library.name }
+        }
+
+        /// What the list says when it has no books and no library is still being searched: why,
+        /// if a search failed.
+        func getLibrarySearchFailureText(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> String? {
+            let failures = getLibrarySearchFailures(container: container, searchResult: searchResult, libraryStatuses: libraryStatuses)
+            guard failures.isEmpty == false else { return nil }
+            return failures
+                .map { "Couldn't search \($0.library.name): \($0.status.failure?.message ?? "")" }
+                .joined(separator: "\n")
+        }
+
         func getLibrarySearchingText(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> String {
             let librariesLoading = getLibraryLoadingCount(container: container, searchResult: searchResult, libraryStatuses: libraryStatuses)
-            
+            let librariesFailed = getLibrarySearchFailures(container: container, searchResult: searchResult, libraryStatuses: libraryStatuses).count
+
             guard let result = searchResult else { return "Preparing Book List" }
-            
+
             let offsets = result.unifiedOffsets.filter {
                 $0.value.searchObjectSource.isEmpty == false
             }
-            
+
             var text = ""
-            
+
             if offsets.count < 1 {
                 if librariesLoading > 0 {
                     text = "Still searching \(librariesLoading) libraries"
+                } else if librariesFailed > 0 {
+                    text = "Couldn't search \(librariesFailed) \(librariesFailed == 1 ? "library" : "libraries")"
                 } else {
                     text = "Cannot find in any library"
                 }
             } else {
                 text = "From \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
-                
+
                 if librariesLoading > 0 {
                     text += ", \(librariesLoading) to go"
                 }
+                if librariesFailed > 0 {
+                    text += ", \(librariesFailed) failed"
+                }
             }
-            
+
             return text
         }
         

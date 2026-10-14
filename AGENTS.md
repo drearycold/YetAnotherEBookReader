@@ -456,6 +456,12 @@ Start with `LibraryInfoViewModel`, `UnifiedSearchViewModel`,
 Preserve criteria isolation, limit expansion, cache generation checks, and the
 empty-library-ids meaning of "all active libraries".
 
+A library's search status (`LibrarySearchStatus`) says whether it is loading
+or failed; the UI reads loading from it, not from the merge offsets. A library
+whose search fails shows what its search cache has, from any of its server's
+URLs (`UnifiedSearchService.cachedResult`), and the cache is shown before the
+server answers.
+
 ### Book Detail
 
 Start with `BookDetailViewModel` and `BookDetailSubviews`. Avoid reintroducing
