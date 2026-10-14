@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# A calibre-server for CalibreServerContractTests. The library holds one EPUB and is named with
-# a space and non-ASCII characters (its key is "Test_Library_测试"). It has two users:
-# contract-writer and the read-only contract-reader. Authentication is calibre's default
-# (Digest over HTTP).
+# A calibre-server for CalibreServerContractTests. The library holds one EPUB and an integer
+# custom column, #read_progress, and is named with a space and non-ASCII characters (its key is
+# "Test_Library_测试"). It has two users: contract-writer and the read-only contract-reader.
+# Authentication is calibre's default (Digest over HTTP). A DIR seeded before a change to seed()
+# keeps its old library: start from an empty DIR.
 #
 #   calibre-contract-server.sh start DIR   seed DIR if it's new, start the server, wait for it
 #   calibre-contract-server.sh stop DIR    stop the server started on DIR
@@ -25,6 +26,8 @@ seed() {
   "$BIN/ebook-convert" "$dir/book.txt" "$dir/book.epub" --title "Contract Test Book" --authors "Test Author" > "$dir/convert.log"
   mkdir -p "$library"
   "$BIN/calibredb" add --with-library "$library" "$dir/book.epub"
+  # Like the reading-progress column the Goodreads sync writes (readingProgressColumnName).
+  "$BIN/calibredb" add_custom_column --with-library "$library" read_progress "Read progress" int
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$WRITER" "$WRITER_PASSWORD"
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$READER" "$READER_PASSWORD"
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- readonly "$READER" set
@@ -55,7 +58,9 @@ start() {
 
   local variables="TEST_RUNNER_YABR_CALIBRE_URL=$url
 TEST_RUNNER_YABR_CALIBRE_USER=$WRITER
-TEST_RUNNER_YABR_CALIBRE_PASSWORD=$WRITER_PASSWORD"
+TEST_RUNNER_YABR_CALIBRE_PASSWORD=$WRITER_PASSWORD
+TEST_RUNNER_YABR_CALIBRE_READONLY_USER=$READER
+TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=$READER_PASSWORD"
   echo "$variables"
   if [ -n "${GITHUB_ENV:-}" ]; then
     echo "$variables" >> "$GITHUB_ENV"

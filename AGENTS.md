@@ -115,36 +115,75 @@ real calibre-server, for what the hand-written mocks can't show: how calibre
 stores, merges and refuses what the app sends. They skip unless
 `TEST_RUNNER_YABR_CALIBRE_URL` is set.
 
-`.github/scripts/calibre-contract-server.sh start DIR` seeds `DIR` (a library
-named `Test Library 测试`, key `Test_Library_测试`, with one EPUB; users
-`contract-writer` and the read-only `contract-reader`), starts the server on
-port 18080 with Digest authentication, and prints the variables to set. It uses
-calibre's command-line tools from `/Applications/calibre.app` (override with
-`CALIBRE_BIN`). To run them locally:
+`.github/scripts/calibre-contract-server.sh start DIR` seeds an empty `DIR`:
+- a library named `Test Library 测试` (key `Test_Library_测试`) with one EPUB
+  and an integer custom column `#read_progress`;
+- users `contract-writer` and the read-only `contract-reader`.
+
+It starts the server on port 18080 with Digest authentication and prints the
+variables to set. It uses calibre's command-line tools from
+`/Applications/calibre.app` (override with `CALIBRE_BIN`). Only one calibre
+program can run per user at a time, so stop any other calibre-server or the
+calibre app first. To run them locally:
 
 ```bash
 .github/scripts/calibre-contract-server.sh start /tmp/yabr-calibre
-TEST_RUNNER_YABR_CALIBRE_URL=http://127.0.0.1:18080 TEST_RUNNER_YABR_CALIBRE_USER=contract-writer TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
+TEST_RUNNER_YABR_CALIBRE_URL=http://127.0.0.1:18080 TEST_RUNNER_YABR_CALIBRE_USER=contract-writer TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass TEST_RUNNER_YABR_CALIBRE_READONLY_USER=contract-reader TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=reader-pass xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
 .github/scripts/calibre-contract-server.sh stop /tmp/yabr-calibre
 ```
 
-What calibre 9.11 does. The tests pin the first three; the rest was checked by
-hand with `curl`.
+A test marked `XCTExpectFailure(…, strict: true)` pins a known bug. Once the bug
+is fixed it passes, which fails it: remove the marker with the fix.
 
-- **calibre stamps positions with its own clock** and drops the `epoch` the
-  app sends. It keeps one position per user, device and format. Across devices,
-  the newest epoch is the newest upload, not the newest read.
-- **Highlights merge per `uuid`:** the newest `timestamp` wins, a removal is a
-  newer copy marked `removed`, and an older copy doesn't bring it back.
-- **A wrong password ends as a cancelled request** in the app (the task
-  delegate stops answering the challenge), which the probe reports as
+What calibre 9.11 does, as the tests pin it:
+
+- **Reading positions:** calibre stamps them with its own clock and drops the
+  `epoch` the app sends, keeping one per user, device and format. Across
+  devices, the newest epoch is the newest upload, not the newest read.
+- **Highlights merge per `uuid`, bookmarks per `title`:** the newest
+  `timestamp` wins, a removal is a newer copy marked `removed`, and an older
+  copy doesn't bring it back. Two bookmarks with one title are one bookmark to
+  calibre, while the app's `syncBookmarks` tells them apart by `pos`.
+- **Read-only users** can still save positions and annotations, but a
+  metadata change gets 403 ("does not have permission to make changes"), which
+  the app reports as `.authFailed`.
+- **Credentials calibre rejects** end as a cancelled request in the app (the
+  task delegate stops answering the challenge). The probe reports it as
   "cancelled, server may require authentication".
+- **Library sync:**
+  - The last-modified probe (`syncLegacyLibraryResult`), categories, book
+    metadata (`ajax/books`, `get/json`) and `set_metadata` work.
+  - `last_modified` carries microseconds and the server's offset after an edit;
+    `parseLastModified` reads it.
+  - Known bugs:
+    - The full sync's `/cdb/cmd/list/<key>` and `/cdb/cmd/custom_columns/<key>`
+      answer 404. calibre's only route is `/cdb/cmd/{which}/{version=0}`, with
+      `?library_id=<key>`, the same in 8.15 and 9.11.
+    - `syncLibrary(resultPrev:)` swallows that failure (no `isError`), so
+      `CalibreLibraryManager.syncLibrary` reports "Success" and marks every
+      non-shelf book of the library as deleted (`librarySyncStatus.del`), which
+      Settings' remove-deleted button would then delete locally.
+    - A custom column with `"display": {}` fails
+      `CalibreCustomColumnDisplayInfo`'s decoding.
+- **Downloads:** `BookDownloadManager` saves the EPUB. calibre writes current
+  metadata into the file it sends, so the size can differ from
+  `format_metadata`.
+
+Checked by hand, not pinned:
+
 - **Reading positions need a user.** Anonymously, setting one fails inside
   calibre with HTTP 500 and `book-get-last-read-position` answers 404 ("login
   required for sync"); the positions in `book-get-annotations` stay empty.
 - **Annotations are per user**, anonymous ones included. Uploading some
   highlights leaves the others.
-- **Read-only users can still save positions and annotations.**
+- **`--url-prefix`:** calibre answers both the prefixed and the bare paths, so
+  `makeEndpointURL` dropping a server URL's path prefix only breaks behind a
+  reverse proxy that forwards nothing but the prefix.
+
+Not covered: DSReader Helper's `/dshelper/*` endpoints. The plugin
+(`dsreader/DSReaderHelper`) is a calibre GUI plugin that starts its own server
+from the calibre app, so testing it means running the calibre GUI, not
+`calibre-server`.
 
 ### Swift Packages
 

@@ -117,6 +117,60 @@ Branch `claude/highlight-uuid-ub`, not yet pushed.
   pull-request rule by default. It isn't documented publicly and didn't block
   #113. If a pull request unexpectedly needs a review, check it first.
 
+## Calibre Contract Coverage (2026-10-14, `claude/calibre-contract-coverage`)
+
+- **Tests:** `CalibreServerContractTests` has 18 tests (was 5), covering
+  bookmarks, a read-only user, library sync (probe, full sync, custom columns,
+  categories), metadata reads and writes, and downloads.
+  `calibre-contract-server.sh` now seeds an int column `#read_progress` and
+  prints the read-only user's variables. AGENTS.md "Calibre Contract Tests"
+  lists what each pins.
+- **Known bugs, pinned with strict `XCTExpectFailure`:**
+  - the full sync's `/cdb/cmd/list/<key>` and `/cdb/cmd/custom_columns/<key>`
+    answer 404 (since 88665ad6, April). The mocks match with `path.contains`,
+    so they pass;
+  - `CalibreCustomColumnDisplayInfo` requires `description`, which calibre
+    omits (`"display": {}`).
+  - The failure is swallowed (`syncLibrary(resultPrev:)` sets `errmsg`, not
+    `isError`). The manager reports "Success" and marks every non-shelf book
+    as deleted, which Settings' remove-deleted button would delete locally.
+    `testAFailedFullSyncSaysSo` pins the swallowed error.
+    - Run through `CalibreLibraryManager.syncLibrary(request:)` against the real
+      server, the status read `isError: false, msg: "Success", cnt: 0,
+      del: [1]`.
+    - In one of three runs `del` came out empty, probably a background Realm
+      not seeing the main-thread write (not investigated). So no strict test
+      pins `del`.
+  - That's why main seemed to work against the user's calibre 8.15: calibre's
+    `/cdb/cmd/{which}/{version=0}` route is the same in v8.15.0 and v9.11.0
+    (checked in calibre's source; not yet run against 8.15).
+  - **Decision (2026-10-14, the user): retire the full library sync's book
+    list** rather than fix it. Nothing user-facing reads its records:
+    - Browse, Discover and search use `ajax/search` + `ajax/books`, and
+      `writeMetadataEntries` creates records on demand.
+    - V2 search (June) stopped using the local `file:///realm` source for
+      remote "Available when Offline" libraries.
+    - Keep categories, custom-column definitions, per-book deletion and the
+      last-modified probe, moved out of `syncLibrary`.
+    - Filed as the task "Retire the full library sync's book list". No need to
+      run the tests against calibre 8.15: its `/cdb/cmd` route is the same as
+      9.11's.
+- **Found, filed separately:** calibre merges bookmarks by `title`, the app by
+  `pos`, and the PDF reader titles bookmarks by chapter, so two in one chapter
+  collapse on the server ("Give each PDF bookmark a title calibre can keep").
+- **Found, not filed:**
+  - a read-only user's 403 shows as "Authentication Failed";
+  - `--url-prefix` is harmless against calibre itself (it answers bare paths
+    too), so the prefix `makeEndpointURL` drops only matters behind a proxy.
+- **Checked:** `parseLastModified` reads calibre's microsecond timestamps.
+  Download sizes differ from `format_metadata` (calibre embeds metadata), which
+  is harmless: the cache check uses mtime.
+- **Not covered:** DSReader Helper, a GUI plugin that starts its own server in
+  the calibre app; an older calibre version.
+- **Verified locally** against a freshly seeded calibre 9.11 server: 18 run,
+  0 unexpected failures. Only one calibre program can run per user, so stop the
+  calibre app or another server first.
+
 ## Calibre Contract Tests (2026-10-14, merged)
 
 **Merged to `main`** in drearycold/YetAnotherEBookReader#113 (merge commit
