@@ -79,6 +79,12 @@ hand, on `macos-26` with the Xcode the project is developed with
 - **Calibre contract tests:** `CalibreServerContractTests` against a real
   `calibre-server` (version `CALIBRE_VERSION`, see below).
 - **Mac Catalyst build** of `YetAnotherEBookReader-Catalyst`.
+- **Detect changes** runs first. When everything a pull request or push
+  changes is documentation (Markdown at the repository root, or anything under
+  `.agents/`), the three jobs above are skipped, and GitHub reports a skipped
+  job as passed. Anything else, or any doubt
+  (`.github/scripts/changed-code.sh` failing or listing a partial set), runs
+  them all.
 - All three build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
   `Package.resolved` fails CI instead of resolving anew, and with
   `CODE_SIGNING_ALLOWED=NO`.

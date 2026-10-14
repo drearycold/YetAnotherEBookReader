@@ -18,8 +18,38 @@ env:
   PROJECT: YetAnotherEBookReader.xcodeproj
 
 jobs:
+  # A change to documentation only (root Markdown, .agents/) skips the jobs below. A job skipped by
+  # its `if:` reports success, so the required checks still pass; skipping the whole workflow
+  # (paths-ignore) would leave them pending. The jobs also run when this job fails, because
+  # needs.changes.outputs.code is then empty, not "false".
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Classify
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: .github/scripts/changed-code.sh | tee -a "$GITHUB_OUTPUT"
+
   test:
     name: iOS unit tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 75
     env:
@@ -96,6 +126,8 @@ jobs:
   # The unit-test job runs those tests too, but without a server they skip.
   calibre-contract:
     name: Calibre contract tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -200,6 +232,8 @@ jobs:
 
   catalyst:
     name: Mac Catalyst build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 60
     env:
