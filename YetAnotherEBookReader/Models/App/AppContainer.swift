@@ -333,7 +333,13 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         librarySnapshotProvider: self
     )
     lazy var searchCacheRepository: SearchCacheRepository = self.defaultSearchCacheStore
-    lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
+    lazy var librarySearchService = LibrarySearchService(
+        service: self.calibreServerService,
+        repository: self.searchCacheRepository,
+        onMetadataAnswers: { @MainActor [weak self] library, missing, present in
+            self?.bookManager.recordMetadataAnswers(library: library, missing: missing, present: present)
+        }
+    )
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
         librarySearchService: self.librarySearchService,

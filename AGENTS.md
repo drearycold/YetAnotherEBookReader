@@ -166,14 +166,14 @@ What calibre 9.11 does, as the tests pin it:
 
   `last_modified` carries microseconds and the server's offset after an edit;
   `parseLastModified` reads it.
-- **A user with a per-library restriction** gets 403 from calibre's `cdb`
-  interface ("Cannot use the command-line db interface with a user who has
-  per library restrictions"), so the sync doesn't use it. `ajax/search`
-  answers within the restriction.
+- **A user with a per-library restriction:** `ajax/search` answers within the
+  restriction, so the summary counts the books that user may see.
 - **Deleted books** show per book: `ajax/books` answers null for a book calibre
   doesn't have, and for one a restricted user may not see.
-  `BookRepository.persistMetadataEntries` reports it, and Settings lists it
-  (`librarySyncStatus.del`). Nothing is deleted locally.
+  `BookRepository.persistMetadataEntries` reports it, and Settings lists it as
+  unavailable on the server (`librarySyncStatus.del`, kept by
+  `CalibreBookManager.recordMetadataAnswers` from shelf and Book Detail
+  refreshes and from browsing). Nothing is deleted locally.
 - **Metadata:** book metadata (`ajax/books`, `get/json`) and `set_metadata`
   work.
 - **Downloads:** `BookDownloadManager` saves the EPUB. calibre writes current
@@ -187,6 +187,9 @@ Checked by hand, not pinned:
   required for sync"); the positions in `book-get-annotations` stay empty.
 - **Annotations are per user**, anonymous ones included. Uploading some
   highlights leaves the others.
+- **The `cdb` interface refuses a user with a per-library restriction** with 403
+  ("Cannot use the command-line db interface with a user who has per library
+  restrictions"), so the library sync doesn't use it.
 - **`--url-prefix`:** calibre answers both the prefixed and the bare paths, so
   `makeEndpointURL` dropping a server URL's path prefix only breaks behind a
   reverse proxy that forwards nothing but the prefix.
@@ -340,7 +343,7 @@ code.
     `CalibreBookAnnotationsResult`, `CalibreBookAnnotationsMap`,
     `CalibreLibraryBooksResult`, etc.).
   - `Calibre/CalibreSyncModels.swift`: custom columns, category keys, probe/sync
-    requests, `CalibreCdbCmdListResult`.
+    requests, `CalibreLibrarySummary`.
   - `Calibre/CalibrePluginModels.swift`: DSReader Helper / Count Pages /
     Goodreads Sync preferences and `CalibreDSReaderHelperConfiguration`.
   - `Network/CalibreActivityModels.swift`: `CalibreActivity`/`Start`/`Finish`.

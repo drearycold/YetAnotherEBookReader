@@ -40,33 +40,6 @@ struct CalibreBookFormatMetadataEntry: Codable {
     }
 }
 
-struct CalibreBookUserMetadataEntry: Codable {
-    var table: String = ""
-    var column: String = ""
-    var datatype: String = ""
-    var is_multiple: Bool? = nil
-    var kind: String = ""
-    var name: String = ""
-    var search_terms: [String] = []
-    var label: String = ""
-    var colnum: Int = 0
-    var display: [String: String?] = [:]
-    var is_custom: Bool = false
-    var is_category: Bool = false
-    var link_column: String = ""
-    var category_sort: String = ""
-    var is_csp: Bool = false
-    var is_editable: Bool = false
-    var rec_index: Int = 0
-    var value: Any? = nil   //dynamic
-    var extra: Any? = nil   //dynamic
-    //var is_multiple2: ???
-    
-    enum CodingKeys: String, CodingKey {
-        case table
-    }
-}
-
 /// A custom column as a book's `user_metadata` in `ajax/books` describes it. calibre lists every
 /// column of the library there, on every book, valued or not (`Cache._get_metadata`).
 /// `is_multiple` is the list separator, or null; `is_multiple2` has the separators.
@@ -111,9 +84,10 @@ struct CalibreLibrarySummaryBookEntry: Decodable {
     var user_metadata: [String: CalibreBookUserMetadataColumn]
 }
 
+/// A book in `ajax/books`. Its `user_metadata` values are read from the JSON itself
+/// (`CalibreBookMetadataValue`), and the columns it describes by `CalibreBookUserMetadataColumn`.
 struct CalibreBookEntry: Codable {
 //    var author_link_map: [String: String] = [:]   //removed as of calibre 6.18
-    var user_metadata: [String: CalibreBookUserMetadataEntry] = [:]
     var tags: [String] = []
     var author_sort: String = ""
     var comments: String? = nil

@@ -60,9 +60,9 @@ struct LibraryDetailView: View {
                                     }
                                 }
                             }
-                        }.navigationTitle(Text("Book IDs Deleted on Server"))
+                        }.navigationTitle(Text("Book IDs Unavailable on Server"))
                     } label: {
-                        Text("Book IDs Deleted on Server")
+                        Text("Book IDs Unavailable on Server")
                     }
                 }
             }

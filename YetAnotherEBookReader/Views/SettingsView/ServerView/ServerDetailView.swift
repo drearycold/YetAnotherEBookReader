@@ -170,9 +170,10 @@ struct ServerDetailView: View {
                             Text(msg)
                         }
 
+                        // Deleted, or out of a restricted user's reach: calibre answers both alike.
                         if status.del.count > 0 {
-                            Text("\(status.del.count) entries deleted from server")
-                                .foregroundColor(.red)
+                            Text("\(status.del.count) books unavailable on server")
+                                .foregroundColor(.orange)
                         }
                     }
                 } else {

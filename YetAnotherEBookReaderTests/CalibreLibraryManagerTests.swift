@@ -400,8 +400,92 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, oldLastModified)
     }
 
+    /// A deleted book changes no other book, so calibre's newest change stays put. A book count
+    /// that changed since the last summary moves the generation instead, once, so the search and
+    /// category caches are fetched again.
+    func testAChangedBookCountMovesTheGenerationOnce() async throws {
+        let newest = try XCTUnwrap(parseLastModified(Self.newestChange))
+        library.lastModified = newest
+        libraryManager.calibreLibraries[library.id] = library
+        try libraryRepository.saveLibrary(library)
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, cnt: 13)
+        configureReachableMockSession()
+        _ = MockURLProtocol.answer(Self.syncAnswers())
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        let moved = try XCTUnwrap(libraryManager.calibreLibraries[library.id]?.lastModified)
+        XCTAssertGreaterThan(moved, newest)
+        let saved = try XCTUnwrap(libraryRepository.getLibrary(id: library.id))
+        XCTAssertEqual(saved.lastModified.timeIntervalSince1970, moved.timeIntervalSince1970, accuracy: 0.0001)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.cnt, 12)
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, moved)
+    }
+
+    /// A category that couldn't be refreshed fails the sync, rather than showing it as a success.
+    func testAFailedCategoryIsReported() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers(categories: """
+        [{"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true}]
+        """))
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(requests.unexpected, ["/ajax/category/Authors"])
+        let syncStatus = try XCTUnwrap(libraryManager.librarySyncStatus[library.id])
+        XCTAssertFalse(syncStatus.isSync)
+        XCTAssertTrue(syncStatus.isError)
+        XCTAssertNotEqual(syncStatus.msg, "Success")
+        XCTAssertEqual(syncStatus.cnt, 12)
+    }
+
+    /// A library removed while its summary is read stays removed, and no categories are cached for it.
+    func testARemovedLibraryIsNotSavedOrGivenCategories() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers())
+        await libraryManager.removeLibrary(library: library)
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(Set(requests.answered), ["/ajax/search/test_lib", "/ajax/books/test_lib"])
+        XCTAssertNil(libraryManager.calibreLibraries[library.id])
+        XCTAssertNil(libraryRepository.getLibrary(id: library.id))
+    }
+
+    /// Browsing reads books with the same `ajax/books` request, and keeps the list of books
+    /// unavailable on the server as well.
+    func testBrowsingListsABookCalibreAnswersNullForAndClearsOneItHas() async throws {
+        configureReachableMockSession()
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, del: [101])
+        _ = MockURLProtocol.answer([
+            "/ajax/search/test_lib": """
+            {"total_num": 2, "sort_order": "asc", "num_books_without_search": 2, "offset": 0, "num": 2,
+             "sort": "sort", "base_url": "/ajax/search/test_lib", "query": "browse",
+             "library_id": "test_lib", "book_ids": [101, 102], "vl": ""}
+            """,
+            "/ajax/books/test_lib": #"{"101": \#(Self.bookEntryJSON(title: "Back")), "102": null}"#
+        ])
+
+        _ = try await container.librarySearchService.searchAndFetchMetadata(
+            library: library,
+            criteria: SearchCriteria(
+                searchString: "browse",
+                sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+                filterCriteriaCategory: [:]
+            ),
+            limit: 100,
+            force: true
+        )
+
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [102])
+    }
+
     /// calibre answers null for a book it no longer has. Settings lists it, but its record (here
-    /// a shelf book's) stays; once calibre has it again, it's no longer listed.
+    /// a shelf book's) stays; once calibre has it again, it's no longer listed. A book that failed
+    /// to sync before is no longer listed as failed once it's read.
     func testABookCalibreAnswersNullForIsListedNotRemoved() async throws {
         configureReachableMockSession()
         for id: Int32 in [101, 102] {
@@ -409,12 +493,14 @@ final class CalibreLibraryManagerTests: XCTestCase {
             book.inShelf = true
             container.bookManager.updateBook(book: book)
         }
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, err: [101])
         var answers = ["/ajax/books/test_lib": #"{"101": \#(Self.bookEntryJSON(title: "Kept")), "102": null}"#]
         _ = MockURLProtocol.answer(answers)
 
         await container.bookManager.getBooksMetadata(request: .init(library: library, books: [101, 102], getAnnotations: false))
 
         XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [102])
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.err, [])
         XCTAssertTrue(container.bookManager.bookExists(forPrimaryKey: CalibreBook(id: 102, library: library).inShelfId))
 
         answers["/ajax/books/test_lib"] = #"{"102": \#(Self.bookEntryJSON(title: "Back"))}"#

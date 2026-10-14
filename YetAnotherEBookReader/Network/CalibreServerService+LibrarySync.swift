@@ -19,9 +19,9 @@ extension CalibreServerService {
     func getLibrarySummary(library: CalibreLibrary) async throws -> CalibreLibrarySummary {
         let searchURL = try makeEndpointURL(
             server: library.server,
-            path: "ajax/search/\(library.key)",
+            path: "/ajax/search/\(library.key)",
             queryItems: [
-                URLQueryItem(name: "sort", value: "last_modified"),
+                URLQueryItem(name: "sort", value: SortCriteria.Modified.sortQueryParam),
                 URLQueryItem(name: "sort_order", value: "desc"),
                 URLQueryItem(name: "num", value: "1")
             ]
@@ -38,7 +38,7 @@ extension CalibreServerService {
             if let bookId = search.book_ids.first {
                 let booksURL = try makeEndpointURL(
                     server: library.server,
-                    path: "ajax/books/\(library.key)",
+                    path: "/ajax/books/\(library.key)",
                     queryItems: [
                         URLQueryItem(name: "ids", value: bookId.description),
                         URLQueryItem(name: "category_urls", value: "false")
@@ -67,7 +67,7 @@ extension CalibreServerService {
     func getLibraryCategories(library: CalibreLibrary) async throws -> [CalibreLibraryCategory] {
         let endpointURL = try makeEndpointURL(
             server: library.server,
-            path: "ajax/categories/\(library.key)"
+            path: "/ajax/categories/\(library.key)"
         )
         let (data, _) = try await validatedData(from: endpointURL, server: library.server)
         return try decodePayload([CalibreLibraryCategory].self, from: data)

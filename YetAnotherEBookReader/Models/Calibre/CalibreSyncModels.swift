@@ -36,20 +36,6 @@ struct CalibreCustomColumnInfo: Codable, Hashable {
 }
 
 extension CalibreCustomColumnInfo {
-    /// Only the label, name and type are required: a missing or unexpected value elsewhere takes its
-    /// default rather than losing the column.
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        label = try container.decode(String.self, forKey: .label)
-        name = try container.decode(String.self, forKey: .name)
-        datatype = try container.decode(String.self, forKey: .datatype)
-        editable = (try? container.decodeIfPresent(Bool.self, forKey: .editable)) ?? false
-        display = (try? container.decodeIfPresent(CalibreCustomColumnDisplayInfo.self, forKey: .display)) ?? .init()
-        num = (try? container.decodeIfPresent(Int.self, forKey: .num)) ?? 0
-        isMultiple = (try? container.decodeIfPresent(Bool.self, forKey: .isMultiple)) ?? false
-        multipleSeps = (try? container.decodeIfPresent([String: String].self, forKey: .multipleSeps)) ?? [:]
-    }
-
     init(userMetadata column: CalibreBookUserMetadataColumn) {
         self.init(
             label: column.label,
@@ -76,7 +62,8 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     //tyoe composite
     var compositeTemplate: String?
     var compositeSort: String?
-    var useDecorations: Int?
+    /// calibre stores a bool; columns made before calibre 5.35 have 0 or 2 (a Qt check state).
+    var useDecorations: Bool?
     var makeCategory: Bool?
     var containsHtml: Bool?
     
@@ -117,7 +104,8 @@ extension CalibreCustomColumnDisplayInfo {
         isNames = try? container.decodeIfPresent(Bool.self, forKey: .isNames)
         compositeTemplate = try? container.decodeIfPresent(String.self, forKey: .compositeTemplate)
         compositeSort = try? container.decodeIfPresent(String.self, forKey: .compositeSort)
-        useDecorations = try? container.decodeIfPresent(Int.self, forKey: .useDecorations)
+        useDecorations = (try? container.decodeIfPresent(Bool.self, forKey: .useDecorations))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .useDecorations)).map { $0 != 0 }
         makeCategory = try? container.decodeIfPresent(Bool.self, forKey: .makeCategory)
         containsHtml = try? container.decodeIfPresent(Bool.self, forKey: .containsHtml)
         numberFormat = try? container.decodeIfPresent(String.self, forKey: .numberFormat)
@@ -154,8 +142,8 @@ struct CalibreProbeServerRequest: Identifiable {
     
     /// Add the server's new libraries and sync each one (`CalibreLibraryManager.syncLibrary`).
     let updateLibrary: Bool
-    /// An automatic probe: with `updateLibrary`, it doesn't also fetch the DSReader Helper
-    /// configuration, as a probe the user asks for does.
+    /// With `updateLibrary`, false also fetches the DSReader Helper configuration
+    /// (`CalibreServerManager.requestServerHelperConfigSync`). Every probe the app makes passes true.
     let autoUpdateOnly: Bool
 }
 

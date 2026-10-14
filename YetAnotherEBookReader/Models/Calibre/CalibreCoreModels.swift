@@ -380,9 +380,12 @@ struct CalibreSyncStatus {
     var isUpd = false
     var isError = false
     var msg: String? = nil
-    /// The books the user may see, from `CalibreLibraryManager.syncLibrary`.
+    /// The books the user may see, as the last summary counted them
+    /// (`CalibreLibraryManager.syncLibrary`); a sync that changes it moves the caches' generation.
     var cnt: Int? = nil
     /// Books whose metadata calibre answered null: deleted, or out of a restricted user's reach.
     var del = Set<Int32>()
+    /// Books whose metadata couldn't be read. Both sets drop a book once it is read
+    /// (`CalibreBookManager.recordMetadataAnswers`).
     var err = Set<Int32>()
 }

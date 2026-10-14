@@ -324,6 +324,9 @@ class CalibreLibraryManager {
     ///   custom columns that turn category filters into searches (`buildLibrarySearchTasks`), and
     ///   the newest change, which is the search and category caches' generation;
     /// - its categories and their cached items.
+    ///
+    /// `isSync` covers the summary only. The categories can take long to refresh, and a category
+    /// the user refreshes meanwhile (`UnifiedCategoryViewModel`) syncs again rather than waiting.
     @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
         guard let container = self.container else { return }
@@ -340,7 +343,6 @@ class CalibreLibraryManager {
             status.isSync = true
             status.isError = false
             status.msg = ""
-            status.cnt = nil
             self.librarySyncStatus[libraryId] = status
         } else {
             self.librarySyncStatus[libraryId] = .init(library: request.library, isSync: true)
@@ -348,11 +350,12 @@ class CalibreLibraryManager {
 
         let calibreServerService = container.calibreServerService
         var library = calibreLibraries[libraryId] ?? request.library
-        var errorMessages = [String]()
+        var summaryError: String?
 
         do {
             let summary = try await calibreServerService.getLibrarySummary(library: library)
-            let (updatedLibrary, changed) = applySummary(summary, to: library)
+            let previousBookCount = self.librarySyncStatus[libraryId]?.cnt
+            let (updatedLibrary, changed) = applySummary(summary, previousBookCount: previousBookCount, to: library)
             library = updatedLibrary
             self.librarySyncStatus[libraryId]?.cnt = summary.bookCount
             if changed {
@@ -360,34 +363,58 @@ class CalibreLibraryManager {
             }
         } catch {
             logger.error("Failed to read the summary of \(library.name): \(error.localizedDescription)")
-            errorMessages.append(error.localizedDescription)
+            summaryError = error.localizedDescription
         }
 
+        self.librarySyncStatus[libraryId]?.isSync = false
+        self.librarySyncStatus[libraryId]?.isError = summaryError != nil
+        self.librarySyncStatus[libraryId]?.msg = summaryError ?? "Success"
+
+        // A library removed meanwhile stays removed: no categories are cached for it.
+        guard calibreLibraries[libraryId] != nil else { return }
+
+        var categoryError: String?
         do {
             let categories = try await calibreServerService.getLibraryCategories(library: library)
-            await refreshCategoryCaches(
+            categoryError = await refreshCategoryCaches(
                 container: container,
                 library: library,
                 categories: categories
             )
         } catch {
             logger.error("Failed to read the categories of \(library.name): \(error.localizedDescription)")
-            errorMessages.append(error.localizedDescription)
+            categoryError = error.localizedDescription
         }
 
-        self.librarySyncStatus[libraryId]?.isSync = false
-        self.librarySyncStatus[libraryId]?.isError = errorMessages.isEmpty == false
-        self.librarySyncStatus[libraryId]?.msg = errorMessages.first ?? "Success"
+        // Unless a newer sync has started, or the summary already failed.
+        if let categoryError,
+           let status = self.librarySyncStatus[libraryId],
+           status.isSync == false,
+           status.isError == false {
+            self.librarySyncStatus[libraryId]?.isError = true
+            self.librarySyncStatus[libraryId]?.msg = categoryError
+        }
     }
 
-    /// Keeps the newer `lastModified` (an older one means the newest book was deleted, which
-    /// changes no other book) and the custom columns, when the library has a book to describe them.
+    /// Keeps the newer `lastModified` and the custom columns, when the library has a book to
+    /// describe them.
+    ///
+    /// A deleted book changes no other book, so calibre's newest change stays put, or goes back
+    /// when it was the newest. A book count that changed since the last summary moves the
+    /// generation just past the date it had, so the search and category caches are fetched again.
     @MainActor
-    private func applySummary(_ summary: CalibreLibrarySummary, to library: CalibreLibrary) -> (CalibreLibrary, Bool) {
+    private func applySummary(
+        _ summary: CalibreLibrarySummary,
+        previousBookCount: Int?,
+        to library: CalibreLibrary
+    ) -> (CalibreLibrary, Bool) {
         var updated = calibreLibraries[library.id] ?? library
         var changed = false
         if let lastModified = summary.lastModified, lastModified > updated.lastModified {
             updated.lastModified = lastModified
+            changed = true
+        } else if let previousBookCount, previousBookCount != summary.bookCount {
+            updated.lastModified = updated.lastModified.addingTimeInterval(0.001)
             changed = true
         }
         if let customColumnInfos = summary.customColumnInfos, customColumnInfos != updated.customColumnInfos {
@@ -408,12 +435,13 @@ class CalibreLibraryManager {
         return (updated, true)
     }
 
+    /// Returns the first error of a category that couldn't be refreshed, so the sync reports it.
     @MainActor
     private func refreshCategoryCaches(
         container: AppContainerProtocol,
         library: CalibreLibrary,
         categories: [CalibreLibraryCategory]
-    ) async {
+    ) async -> String? {
         let activeCategories = categories.filter { $0.is_category }
         let activeCategoryNames = Set(activeCategories.map(\.name))
 
@@ -426,6 +454,7 @@ class CalibreLibraryManager {
             logger.error("Failed to prune stale categories for \(library.name): \(error.localizedDescription)")
         }
 
+        var firstError: String?
         for category in activeCategories {
             do {
                 _ = try await container.libraryCategoryService.fetchAndCacheCategory(
@@ -434,7 +463,9 @@ class CalibreLibraryManager {
                 )
             } catch {
                 logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
+                firstError = firstError ?? "\(category.name): \(error.localizedDescription)"
             }
         }
+        return firstError
     }
 }

@@ -759,10 +759,9 @@ class CalibreBookManager {
 
         let booksHandled = task.booksUpdated.union(task.booksError).union(task.booksDeleted)
 
-        recordBooksMissingOnServer(library: task.library, missing: task.booksDeleted, present: task.booksUpdated)
+        recordMetadataAnswers(library: task.library, missing: task.booksDeleted, failed: task.booksError, present: task.booksUpdated)
 
         if task.booksError.isEmpty == false {
-            container?.librarySyncStatus[task.library.id]?.err.formUnion(task.booksError)
             let booksRetry = task.books.filter { booksHandled.contains($0) == false }
 
             if booksRetry.isEmpty == false {
@@ -795,18 +794,24 @@ class CalibreBookManager {
         return bookRepository.bookExists(id: forPrimaryKey)
     }
 
-    /// Books whose `ajax/books` entry came back null (`BookRepository.persistMetadataEntries`):
-    /// deleted on the server, or out of a restricted user's reach, which calibre answers alike.
-    /// Settings lists them; nothing is deleted locally, as a shelf book's files and positions
-    /// are still the user's.
+    /// Records what an `ajax/books` answer said about each book, for Settings to list:
+    /// - `missing`: its entry came back null (`BookRepository.persistMetadataEntries`), as calibre
+    ///   answers for a book it doesn't have and for one out of a restricted user's reach. Nothing
+    ///   is deleted locally, as a shelf book's files and positions are still the user's.
+    /// - `failed`: its entry couldn't be read.
+    /// - `present`: its entry was read, which clears both.
+    ///
+    /// Browsing reports its answers here too (`LibrarySearchService`).
     @MainActor
-    private func recordBooksMissingOnServer(library: CalibreLibrary, missing: Set<Int32>, present: Set<Int32>) {
+    func recordMetadataAnswers(library: CalibreLibrary, missing: Set<Int32>, failed: Set<Int32> = [], present: Set<Int32>) {
         guard let container else { return }
         var status = container.librarySyncStatus[library.id] ?? .init(library: library)
-        let previous = status.del
+        let previous = (status.del, status.err)
         status.del.subtract(present)
         status.del.formUnion(missing)
-        guard status.del != previous else { return }
+        status.err.subtract(present)
+        status.err.formUnion(failed)
+        guard (status.del, status.err) != previous else { return }
         container.librarySyncStatus[library.id] = status
     }
 

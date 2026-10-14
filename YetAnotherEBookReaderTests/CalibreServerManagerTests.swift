@@ -238,11 +238,15 @@ final class CalibreServerManagerTests: XCTestCase {
         let libraryIds = ["lib_default": "Default Library", "lib_other": "Other Library"].map {
             CalibreLibrary(server: server, key: $0.key, name: $0.value).id
         }
+        // The categories are read after the status says "Success".
+        let categoryPaths: Set = ["/ajax/categories/lib_default", "/ajax/categories/lib_other"]
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline,
-              !libraryIds.allSatisfy({ container.libraryManager.librarySyncStatus[$0]?.msg == "Success" }) {
+              !libraryIds.allSatisfy({ container.libraryManager.librarySyncStatus[$0]?.msg == "Success" })
+                || !categoryPaths.isSubset(of: requests.answered) {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
+        XCTAssertTrue(categoryPaths.isSubset(of: requests.answered), "\(requests.answered)")
         for libraryId in libraryIds {
             XCTAssertEqual(container.libraryManager.librarySyncStatus[libraryId]?.msg, "Success", libraryId)
             XCTAssertEqual(container.libraryManager.librarySyncStatus[libraryId]?.cnt, 0, libraryId)

@@ -225,23 +225,26 @@ final class CalibreDataSplitTests: XCTestCase {
 
     /// calibre stores only the display settings that were set: a column made with
     /// `calibredb add_custom_column` has `"display": {}`. A setting of an unexpected type is
-    /// dropped, not the column.
-    func testCalibreCustomColumnInfoToleratesAnEmptyOrUnexpectedDisplay() throws {
+    /// dropped, not the column. `use_decorations` is a bool, or 0 / 2 from before calibre 5.35.
+    func testCalibreCustomColumnDisplayInfoToleratesAnEmptyOrUnexpectedDisplay() throws {
         let json = """
         {
-            "read_progress": {"label": "read_progress", "name": "Read progress", "datatype": "int", "display": {}},
-            "pages": {"label": "pages", "name": "Pages", "datatype": "int",
-                      "display": {"description": "Page count", "use_decorations": true, "number_format": null}}
+            "empty": {},
+            "pages": {"description": "Page count", "use_decorations": true, "number_format": null, "is_names": "yes"},
+            "checked": {"use_decorations": 2},
+            "unchecked": {"use_decorations": 0}
         }
         """.data(using: .utf8)!
 
-        let columns = try JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: json)
+        let displays = try JSONDecoder().decode([String: CalibreCustomColumnDisplayInfo].self, from: json)
 
-        XCTAssertEqual(columns["read_progress"]?.display, CalibreCustomColumnDisplayInfo())
-        XCTAssertEqual(columns["read_progress"]?.isMultiple, false)
-        XCTAssertEqual(columns["pages"]?.display.description, "Page count")
-        XCTAssertNil(columns["pages"]?.display.useDecorations)
-        XCTAssertNil(columns["pages"]?.display.numberFormat)
+        XCTAssertEqual(displays["empty"], CalibreCustomColumnDisplayInfo())
+        XCTAssertEqual(displays["pages"]?.description, "Page count")
+        XCTAssertEqual(displays["pages"]?.useDecorations, true)
+        XCTAssertNil(displays["pages"]?.numberFormat)
+        XCTAssertNil(displays["pages"]?.isNames)
+        XCTAssertEqual(displays["checked"]?.useDecorations, true)
+        XCTAssertEqual(displays["unchecked"]?.useDecorations, false)
     }
 
     // MARK: - Array.chunks helper

@@ -16,14 +16,22 @@ carries out the decision in "Calibre Contract Coverage" below.
     `sort=last_modified&sort_order=desc&num=1`, then
     `ajax/books?ids=<newest>&category_urls=false`.
     - The book count (`num_books_without_search`) goes to
-      `librarySyncStatus.cnt`.
-    - The newest `last_modified` is kept only if newer. The custom columns come
-      from that book's `user_metadata` (`CalibreBookUserMetadataColumn`). Both
-      are saved on the library and published as `.library`.
-  - `getLibraryCategories(library:)`, then `refreshCategoryCaches`.
+      `librarySyncStatus.cnt`, which a sync no longer resets.
+    - The newest `last_modified` is kept only if newer. If it isn't, but the
+      count differs from the last summary's, the generation moves 1 ms past
+      what it had (`applySummary`): a deleted book changes no other book.
+    - The custom columns come from that book's `user_metadata`
+      (`CalibreBookUserMetadataColumn`). Changes are saved on the library and
+      published as `.library`.
+  - `getLibraryCategories(library:)`, then `refreshCategoryCaches`, which now
+    returns the first category that failed.
 
-  A failure in either sets `isError` with its message. Nothing is inferred
-  from an answer that didn't arrive.
+  `isSync` covers the summary only, so a category refresh the user asks for
+  meanwhile isn't dropped. The status reads "Success" or the summary's error
+  once the summary is in; a failed categories request or category then sets
+  `isError`, unless the summary failed or a newer sync started. A library
+  removed meanwhile gets no categories. Nothing is inferred from an answer that
+  didn't arrive.
 - **Removed:**
   - the book list: `syncLibraryResult` / `syncLibrary(resultPrev:)`,
     `saveBookMetadata` (`.save`, `.updateDeleted`, `.complete`), and
@@ -45,21 +53,24 @@ carries out the decision in "Calibre Contract Coverage" below.
   to a user with per-library restrictions (checked against 9.11).
   `ajax/search` answers within the restriction.
 - **Custom columns:**
-  - `CalibreCustomColumnInfo` and `CalibreCustomColumnDisplayInfo` decode
-    leniently. Only label, name and datatype are required; a display field
-    that's missing or of another type is dropped.
+  - `CalibreCustomColumnDisplayInfo` decodes leniently: a field that's missing
+    or of another type is dropped. `useDecorations` is a Bool, as calibre
+    stores it since 5.35; the older 0 / 2 read as false / true.
+    `CalibreCustomColumnInfo` keeps the synthesized decoder, as only the app's
+    own Realm JSON reaches it.
   - `normalized` is removed: nothing read it, and `ajax/books` doesn't give it.
     Realm keeps the JSON with the `cdb` key names.
-  - `CalibreBookUserMetadataEntry` (it decodes `table` only) is unchanged.
-    Widening it would fail every book's decoding on, say,
-    `allow_half_stars: true` against `display: [String: String?]`.
+  - `CalibreBookUserMetadataEntry` and `CalibreBookEntry.user_metadata` are
+    removed: nothing read them (values come from the JSON itself), and the
+    entry's required `table` was checked on every book.
   - Checked in calibre's source (`Cache._get_metadata`) and against a library
     of 2 books × 3 columns: every column is on every book, valued or not.
 - **Deletions are per book, and only shown.**
-  `CalibreBookManager.getBooksMetadata` now always records
-  `persistMetadataEntries`' `booksDeleted` in `librarySyncStatus.del`. Before,
-  that happened only when other books errored. A book leaves the set once
-  calibre has it again.
+  `CalibreBookManager.recordMetadataAnswers` keeps `librarySyncStatus.del`
+  (null answers) and `err` (unreadable ones); a book that's read leaves both.
+  It hears from `getBooksMetadata` (shelf, Book Detail) and from browsing
+  (`LibrarySearchService`'s `onMetadataAnswers`, set in `AppContainer`).
+  Settings says "unavailable on server", as a restricted user gets null too.
   - The remove-deleted toolbar button and `removeDeleteBooksFromServer` are
     gone: calibre also answers null for a book a restricted user may not see
     (`ajax.books`, `allowed_book_ids`).
@@ -75,10 +86,22 @@ carries out the decision in "Calibre Contract Coverage" below.
   them, a stale library generation refetches every listed book, and
   `writeMetadataEntries` creates records on demand. Removing a library deletes
   its records.
-- **Unchanged limit:** deleting a book changes no other book's
-  `last_modified`, so the generation doesn't move. Search caches notice through
-  `total_num` (`shouldRebuildAfterIncrementalFetch`). The `cdb` probe had the
-  same limit.
+- **Deleted books and the caches:** deleting a book changes no other book's
+  `last_modified`. The changed count moves the generation instead, but the
+  count lives in memory (`librarySyncStatus.cnt`), so the first sync after a
+  launch has nothing to compare: a deletion made while the app was closed shows
+  after the next edit or a forced refresh. `total_num`
+  (`shouldRebuildAfterIncrementalFetch`) is only checked when a page is
+  fetched incrementally.
+- **Review fixes (2026-10-14):**
+  - `LibraryViewModel.setDiscoverable` also sets the manager's copy, which
+    whole-library saves (`applySummary`, hide, restore) wrote back.
+  - Summary, categories and the library probe use absolute paths through
+    `makeEndpointURL`, like every other request, and `SortCriteria.Modified`.
+  - AGENTS.md lists the restricted user's `cdb` 403 as checked by hand, not
+    pinned.
+  - `autoUpdateOnly`'s comment now says every probe passes true; the
+    DSReader Helper branch it guards is dead, as on `main`.
 - **Tests:**
   - **Contract: 20 (was 18).**
     - The three full-sync tests are removed.
@@ -93,12 +116,19 @@ carries out the decision in "Calibre Contract Coverage" below.
       library and server manager tests and the service tests use it.
     - New: `testABookCalibreAnswersNullForIsListedNotRemoved`,
       `testAFailedSummaryIsReportedAndChangesNothing`,
-      `testPersistMetadataEntriesReportsANullEntryAsDeleted` and
-      `testCalibreCustomColumnInfoToleratesAnEmptyOrUnexpectedDisplay`.
+      `testPersistMetadataEntriesReportsANullEntryAsDeleted`,
+      `testCalibreCustomColumnDisplayInfoToleratesAnEmptyOrUnexpectedDisplay`,
+      `testAChangedBookCountMovesTheGenerationOnce`,
+      `testAFailedCategoryIsReported`,
+      `testARemovedLibraryIsNotSavedOrGivenCategories` and
+      `testBrowsingListsABookCalibreAnswersNullForAndClearsOneItHas`.
 - **Verified (iPhone 17):**
-  - The full scheme ran 920 unit tests with 0 failures and 21 skipped (the 20
-    contract tests, with no server running, and the benchmark). The 5 UI
-    journeys passed.
+  - After the review fixes: 924 unit tests, 0 failures, 21 skipped; contract
+    tests 20 of 20 against a fresh calibre 9.11 seed, no 404 in its access
+    log; Mac Catalyst builds. UI journeys not rerun.
+  - Before them, the full scheme ran 920 unit tests with 0 failures and 21
+    skipped (the 20 contract tests, with no server running, and the
+    benchmark). The 5 UI journeys passed.
   - The contract tests passed 20 of 20, twice, against a freshly seeded calibre
     9.11, and calibre's access log had no 404. The only `cdb` request left is
     `set_metadata`.

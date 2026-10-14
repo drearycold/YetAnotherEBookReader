@@ -71,6 +71,9 @@ class LibraryViewModel: ObservableObject {
     func setDiscoverable(_ newValue: Bool) {
         guard discoverable != newValue else { return }
         discoverable = newValue
+        // The manager saves its copy of the library whole (a sync's summary, hiding it), so that
+        // copy changes too, or the next save would put the old value back.
+        container.libraryManager.calibreLibraries[library.id]?.discoverable = newValue
         try? libraryRepository.updateLibraryFlags(
             id: library.id,
             discoverable: newValue
