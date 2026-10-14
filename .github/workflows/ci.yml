@@ -13,6 +13,8 @@ concurrency:
 env:
   # The Xcode the project is developed with, so CI and local runs agree.
   XCODE_VERSION: "26.6"
+  # The calibre the contract tests run against.
+  CALIBRE_VERSION: "9.11.0"
   PROJECT: YetAnotherEBookReader.xcodeproj
 
 jobs:
@@ -33,28 +35,8 @@ jobs:
           xcodebuild -version
           mkdir -p "$LOGS"
 
-      # Use the newest iOS runtime the SDK supports, and on it prefer "iPhone 17" (the name used in
-      # AGENTS.md), else its first iPhone. Picking by UDID keeps the name and the runtime together.
       - name: Pick simulator
-        run: |
-          SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)
-          PICK=$(xcrun simctl list devices available -j | jq -r --arg sdk "$SDK" '
-            def ver: split(".") | map(tonumber);
-            [.devices | to_entries[]
-              | select(.key | test("SimRuntime\\.iOS-"))
-              | (.key | capture("iOS-(?<v>[0-9-]+)$").v | gsub("-"; ".")) as $os
-              | select(($os | ver) <= ($sdk | ver))
-              | .value[] | select(.name | startswith("iPhone"))
-              | {udid, os: $os, name}]
-            | (map(.os | ver) | max) as $newest
-            | map(select((.os | ver) == $newest))
-            | ((map(select(.name == "iPhone 17")) + .)[0] // empty)
-            | "\(.udid) \(.os) \(.name)"')
-          if [ -z "$PICK" ]; then echo "No iPhone simulator available for the iOS $SDK SDK" >&2; exit 1; fi
-          read -r UDID OS NAME <<< "$PICK"
-          echo "Using simulator: $NAME (iOS $OS, $UDID)"
-          echo "DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
-          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+        run: .github/scripts/pick-simulator.sh
 
       # Boot now, so the simulator settles while the app builds.
       - name: Boot simulator
@@ -106,6 +88,112 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-tests
+          path: .build/logs
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  # The app's CalibreServerService against a real calibre-server (CalibreServerContractTests).
+  # The unit-test job runs those tests too, but without a server they skip.
+  calibre-contract:
+    name: Calibre contract tests
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      SPM_DIR: ${{ github.workspace }}/.build/spm
+      DERIVED_DATA: ${{ github.workspace }}/.build/DerivedData
+      LOGS: ${{ github.workspace }}/.build/logs
+      CALIBRE_DMG: ${{ github.workspace }}/.build/calibre/calibre.dmg
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
+          xcodebuild -version
+          mkdir -p "$LOGS"
+
+      - name: Pick simulator
+        run: .github/scripts/pick-simulator.sh
+
+      - name: Boot simulator
+        run: xcrun simctl boot "$SIMULATOR_UDID" || true
+
+      - name: Cache calibre
+        uses: actions/cache@v6
+        with:
+          path: .build/calibre
+          key: calibre-dmg-${{ env.CALIBRE_VERSION }}
+
+      # The command-line tools run from the app bundle; nothing is installed system-wide.
+      - name: Install calibre
+        run: |
+          if [ ! -f "$CALIBRE_DMG" ]; then
+            mkdir -p "$(dirname "$CALIBRE_DMG")"
+            curl -fsSL -o "$CALIBRE_DMG" "https://download.calibre-ebook.com/$CALIBRE_VERSION/calibre-$CALIBRE_VERSION.dmg"
+          fi
+          yes | hdiutil attach -nobrowse -readonly -noverify -mountpoint "$RUNNER_TEMP/calibre-dmg" "$CALIBRE_DMG" > /dev/null
+          ditto "$RUNNER_TEMP/calibre-dmg/calibre.app" "$RUNNER_TEMP/calibre.app"
+          hdiutil detach -quiet "$RUNNER_TEMP/calibre-dmg"
+          echo "CALIBRE_BIN=$RUNNER_TEMP/calibre.app/Contents/MacOS" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/calibre.app/Contents/MacOS/calibre-server" --version
+
+      # Seeds a library and two users, and sets the TEST_RUNNER_YABR_CALIBRE_* variables.
+      - name: Start calibre-server
+        run: .github/scripts/calibre-contract-server.sh start "$LOGS/calibre"
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: .build/spm
+          key: spm-${{ runner.os }}-${{ hashFiles('YetAnotherEBookReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader \
+            -destination "$DESTINATION" \
+            -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$LOGS/build-for-testing.log" | xcbeautify --renderer github-actions
+
+      - name: Wait for the simulator
+        run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      # A skipped test means the server wasn't configured: fail rather than pass on nothing.
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader \
+            -destination "$DESTINATION" \
+            -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$LOGS/TestResults.xcresult" \
+            -test-timeouts-enabled YES \
+            2>&1 | tee "$LOGS/test.log" | xcbeautify --renderer github-actions
+          if grep -qE "^Test Case .* skipped" "$LOGS/test.log"; then
+            echo "::error::Contract tests were skipped: the calibre-server variables didn't reach them"
+            exit 1
+          fi
+
+      - name: Stop calibre-server
+        if: always()
+        run: .github/scripts/calibre-contract-server.sh stop "$LOGS/calibre"
+
+      # Includes the server's log and access log.
+      - name: Upload logs and test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: calibre-contract-tests
           path: .build/logs
           if-no-files-found: ignore
           include-hidden-files: true

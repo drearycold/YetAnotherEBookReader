@@ -158,6 +158,7 @@
 		A04D200130C0000200000005 /* CalibreServerService+ReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */; };
 		A04D200130C0000200000006 /* CalibreServerService+Annotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */; };
 		A04D200130C0000200000008 /* CalibreServerService+Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000008 /* CalibreServerService+Search.swift */; };
+		C0A7AC7100000000000000B1 /* CalibreServerContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A7AC7100000000000000A1 /* CalibreServerContractTests.swift */; };
 		A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000007 /* CalibreServerServiceTests.swift */; };
 		A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */; };
 		A051200130D1000100000001 /* ReaderPreferenceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000001 /* ReaderPreferenceRepository.swift */; };
@@ -655,6 +656,7 @@
 		A04D100130C0000100000004 /* CalibreServerService+Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Discovery.swift"; sourceTree = "<group>"; };
 		A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+ReadingPosition.swift"; sourceTree = "<group>"; };
 		A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Annotations.swift"; sourceTree = "<group>"; };
+		C0A7AC7100000000000000A1 /* CalibreServerContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerContractTests.swift; sourceTree = "<group>"; };
 		A04D100130C0000100000007 /* CalibreServerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerServiceTests.swift; sourceTree = "<group>"; };
 		A04D100130C0000100000008 /* CalibreServerService+Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Search.swift"; sourceTree = "<group>"; };
 		A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2MigrationDependencyTests.swift; sourceTree = "<group>"; };
@@ -1202,6 +1204,7 @@
 		2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */ = {
 			isa = PBXGroup;
 			children = (
+				C0A7AC7100000000000000A1 /* CalibreServerContractTests.swift */,
 				A04D100130C0000100000007 /* CalibreServerServiceTests.swift */,
 				2AC3EC3425BDBC11004A6633 /* Info.plist */,
 				E71F34852FD3AED3007AB0B1 /* BookDetailViewModelTests.swift */,
@@ -1971,6 +1974,7 @@
 				E71F357D2FE8CC8A007AB0B1 /* LibraryInfoBookListViewModelTests.swift in Sources */,
 				E71F35932FE8E881007AB0B1 /* ShelfDisplayModelsTests.swift in Sources */,
 				E71F34B82FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift in Sources */,
+				C0A7AC7100000000000000B1 /* CalibreServerContractTests.swift in Sources */,
 				A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */,
 				E71F35AE2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift in Sources */,
 				E7226E2F2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift in Sources */,
