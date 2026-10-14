@@ -76,11 +76,51 @@ hand, on `macos-26` with the Xcode the project is developed with
 - **iOS unit tests:** `build-for-testing` then `test-without-building` of
   `YetAnotherEBookReaderTests` on the newest iPhone 17 simulator. The UI
   journeys (`YetAnotherEBookReaderUITests`) aren't run.
+- **Calibre contract tests:** `CalibreServerContractTests` against a real
+  `calibre-server` (version `CALIBRE_VERSION`, see below).
 - **Mac Catalyst build** of `YetAnotherEBookReader-Catalyst`.
-- Both build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
+- All three build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
   `Package.resolved` fails CI instead of resolving anew, and with
   `CODE_SIGNING_ALLOWED=NO`.
 - On failure the raw logs and the `.xcresult` are uploaded as an artifact.
+
+### Calibre Contract Tests
+
+`CalibreServerContractTests` run the app's own `CalibreServerService` against a
+real calibre-server, for what the hand-written mocks can't show: how calibre
+stores, merges and refuses what the app sends. They skip unless
+`TEST_RUNNER_YABR_CALIBRE_URL` is set.
+
+`.github/scripts/calibre-contract-server.sh start DIR` seeds `DIR` (a library
+named `Test Library 测试`, key `Test_Library_测试`, with one EPUB; users
+`contract-writer` and the read-only `contract-reader`), starts the server on
+port 18080 with Digest authentication, and prints the variables to set. It uses
+calibre's command-line tools from `/Applications/calibre.app` (override with
+`CALIBRE_BIN`). To run them locally:
+
+```bash
+.github/scripts/calibre-contract-server.sh start /tmp/yabr-calibre
+TEST_RUNNER_YABR_CALIBRE_URL=http://127.0.0.1:18080 TEST_RUNNER_YABR_CALIBRE_USER=contract-writer TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
+.github/scripts/calibre-contract-server.sh stop /tmp/yabr-calibre
+```
+
+What calibre 9.11 does. The tests pin the first three; the rest was checked by
+hand with `curl`.
+
+- **calibre stamps positions with its own clock** and drops the `epoch` the
+  app sends. It keeps one position per user, device and format. Across devices,
+  the newest epoch is the newest upload, not the newest read.
+- **Highlights merge per `uuid`:** the newest `timestamp` wins, a removal is a
+  newer copy marked `removed`, and an older copy doesn't bring it back.
+- **A wrong password ends as a cancelled request** in the app (the task
+  delegate stops answering the challenge), which the probe reports as
+  "cancelled, server may require authentication".
+- **Reading positions need a user.** Anonymously, setting one fails inside
+  calibre with HTTP 500 and `book-get-last-read-position` answers 404 ("login
+  required for sync"); the positions in `book-get-annotations` stay empty.
+- **Annotations are per user**, anonymous ones included. Uploading some
+  highlights leaves the others.
+- **Read-only users can still save positions and annotations.**
 
 ### Swift Packages
 

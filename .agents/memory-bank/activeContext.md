@@ -5,6 +5,32 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Calibre Contract Tests (2026-10-14, prototype on `claude/calibre-contract-tests`)
+
+- **What:** `CalibreServerContractTests` (4 tests) run the app's own
+  `CalibreServerService` against a real calibre-server. CI runs them in a new
+  `calibre-contract` job, installing calibre `CALIBRE_VERSION` from the
+  official dmg (cached). `.github/scripts/calibre-contract-server.sh` seeds and
+  starts the server; `.github/scripts/pick-simulator.sh` is now shared by both
+  simulator jobs. AGENTS.md "Calibre Contract Tests" has the commands and what
+  calibre does.
+- **Verified locally** (calibre 9.11, iPhone 17): all 4 pass. Without the
+  server variables all 4 skip, which the CI job treats as a failure. Not yet
+  run on CI; the full unit suite wasn't rerun locally (no app code changed).
+- **Found:**
+  - calibre stamps reading positions with its own clock. #107's "newer position
+    from another device" compares epochs, so a device that read earlier but
+    synced later (offline reading) is offered as newer and moves the reader
+    back. Not fixed.
+  - Sessions are cached per server URL and username, and their delegate holds
+    the password: a changed password keeps the old one until relaunch. Filed as
+    a separate task.
+  - `uuidFolioToCalibre` / `uuidCalibreToFolio` read and write memory they
+    don't own (UB that happens to work). Filed as a separate task.
+  - Positions need a calibre user: anonymously, uploads fail with HTTP 500.
+- **Next:** DSReader Helper (`calibre-customize`), bookmarks, metadata
+  (`cdb/cmd`), downloads, an oldest-supported calibre.
+
 ## FolioReaderKit 1c1a23a, One Page / Two Pages Kept, Schema 145 (2026-10-13, merged)
 
 **Merged to `main`** in drearycold/YetAnotherEBookReader#109 (merge commit
