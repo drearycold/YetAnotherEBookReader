@@ -110,7 +110,7 @@ import Combine
         viewModel.updateServerList()
         let initialServerList = viewModel.serverList
 
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
         let probingInfo = CalibreServerInfo(
             server: server,
             isPublic: false,

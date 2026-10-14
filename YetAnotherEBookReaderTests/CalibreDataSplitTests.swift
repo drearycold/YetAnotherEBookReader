@@ -223,6 +223,30 @@ final class CalibreDataSplitTests: XCTestCase {
         XCTAssertEqual(info.display.allowHalfStars, true)
     }
 
+    /// calibre stores only the display settings that were set: a column made with
+    /// `calibredb add_custom_column` has `"display": {}`. A setting of an unexpected type is
+    /// dropped, not the column. `use_decorations` is a bool, or 0 / 2 from before calibre 5.35.
+    func testCalibreCustomColumnDisplayInfoToleratesAnEmptyOrUnexpectedDisplay() throws {
+        let json = """
+        {
+            "empty": {},
+            "pages": {"description": "Page count", "use_decorations": true, "number_format": null, "is_names": "yes"},
+            "checked": {"use_decorations": 2},
+            "unchecked": {"use_decorations": 0}
+        }
+        """.data(using: .utf8)!
+
+        let displays = try JSONDecoder().decode([String: CalibreCustomColumnDisplayInfo].self, from: json)
+
+        XCTAssertEqual(displays["empty"], CalibreCustomColumnDisplayInfo())
+        XCTAssertEqual(displays["pages"]?.description, "Page count")
+        XCTAssertEqual(displays["pages"]?.useDecorations, true)
+        XCTAssertNil(displays["pages"]?.numberFormat)
+        XCTAssertNil(displays["pages"]?.isNames)
+        XCTAssertEqual(displays["checked"]?.useDecorations, true)
+        XCTAssertEqual(displays["unchecked"]?.useDecorations, false)
+    }
+
     // MARK: - Array.chunks helper
 
     func testArrayChunksPreservesAllElements() {

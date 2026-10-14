@@ -56,10 +56,6 @@ final class CalibreServerService {
         get { config?.updatingMetadataSucceed ?? false }
         set { config?.updatingMetadataSucceed = newValue }
     }
-    var librarySyncStatus: [String: CalibreSyncStatus] {
-        get { config?.librarySyncStatus ?? [:] }
-        set { config?.librarySyncStatus = newValue }
-    }
     var deviceName: String {
         configLock.lock()
         defer { configLock.unlock() }

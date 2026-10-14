@@ -59,14 +59,12 @@ final class RealmLibraryRepositoryTests: XCTestCase {
         
         // 4. Update
         var updatedField = library
-        updatedField.autoUpdate = true
         updatedField.discoverable = false
         updatedField.hidden = true
         try repository.saveLibrary(updatedField)
         
         let allUpdated = repository.getAllLibraries()
         XCTAssertEqual(allUpdated.count, 1)
-        XCTAssertTrue(allUpdated.first?.autoUpdate ?? false)
         XCTAssertFalse(allUpdated.first?.discoverable ?? true)
         XCTAssertTrue(allUpdated.first?.hidden ?? false)
         
@@ -112,7 +110,6 @@ final class RealmLibraryRepositoryTests: XCTestCase {
 
         var library = TestFixtures.makeLibrary(server: server, key: "observe_lib", name: "Observe Library")
         library.discoverable = true
-        library.autoUpdate = false
         try repository.saveLibrary(library)
 
         let initialExpectation = expectation(description: "Initial existing library observed")
@@ -133,7 +130,7 @@ final class RealmLibraryRepositoryTests: XCTestCase {
         }
 
         await fulfillment(of: [initialExpectation], timeout: 2.0)
-        try repository.updateLibraryFlags(id: library.id, discoverable: false, autoUpdate: true)
+        try repository.updateLibraryFlags(id: library.id, discoverable: false)
 
         await fulfillment(of: [updateExpectation], timeout: 2.0)
         task.cancel()
@@ -141,9 +138,7 @@ final class RealmLibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(observedLibraries.count, 2)
         XCTAssertEqual(observedLibraries[0]?.id, library.id)
         XCTAssertEqual(observedLibraries[0]?.discoverable, true)
-        XCTAssertEqual(observedLibraries[0]?.autoUpdate, false)
         XCTAssertEqual(observedLibraries[1]?.id, library.id)
         XCTAssertEqual(observedLibraries[1]?.discoverable, false)
-        XCTAssertEqual(observedLibraries[1]?.autoUpdate, true)
     }
 }

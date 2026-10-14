@@ -78,17 +78,6 @@ struct ServerDetailView: View {
             viewModel.updateLibraryList()
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(action: {
-                    viewModel.removeDeleteBooksFromServer(server: server)
-                }) {
-                    Image(systemName: "xmark.bin")
-                }.disabled(
-                    viewModel.librarySyncStatus.filter {
-                        $0.value.library.server.id == server.id && $0.value.del.count > 0
-                    }.isEmpty
-                )
-            }
             ToolbarItem(placement: .confirmationAction) {
                 Button(action: {
                     viewModel.probeReachability(server: server)
@@ -152,13 +141,6 @@ struct ServerDetailView: View {
     @ViewBuilder
     private func libraryRowBuilder(library: CalibreLibrary) -> some View {
         HStack(spacing: 8) {
-            if library.autoUpdate {
-                Image(systemName: "play.fill")
-                    .foregroundColor(.green)
-            } else {
-                Image(systemName: "play.slash.fill")
-                    .foregroundColor(.gray)
-            }
             if library.discoverable {
                 Image(systemName: "eye.fill")
                     .foregroundColor(.green)
@@ -188,15 +170,10 @@ struct ServerDetailView: View {
                             Text(msg)
                         }
 
-                        if status.isUpd && status.upd.count > 0 {
-                            Text("Pulling book info, \(status.upd.count) to go")
-                        } else if status.upd.count > 0 {
-                            Text("\(status.upd.count) entries not up to date")
-                        }
-
+                        // Deleted, or out of a restricted user's reach: calibre answers both alike.
                         if status.del.count > 0 {
-                            Text("\(status.del.count) entries deleted from server")
-                                .foregroundColor(.red)
+                            Text("\(status.del.count) books unavailable on server")
+                                .foregroundColor(.orange)
                         }
                     }
                 } else {

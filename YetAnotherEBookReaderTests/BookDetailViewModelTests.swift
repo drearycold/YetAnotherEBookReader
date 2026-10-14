@@ -36,8 +36,7 @@ class BookDetailViewModelTests: XCTestCase {
             server: server,
             isPublic: false,
             updateLibrary: false,
-            autoUpdateOnly: false,
-            incremental: false
+            autoUpdateOnly: false
         )
         let serverInfo = CalibreServerInfo(
             server: server,
@@ -1049,11 +1048,13 @@ class ActivityListViewModelTests: XCTestCase {
 class LibraryViewModelTests: XCTestCase {
     func testInitializationReadsPersistedFlagsAndObservesUpdates() async throws {
         let container = MockAppContainerFactory.makeContainer(testName: "LibraryViewModelTests")
-        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        var library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        library.discoverable = false
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
 
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
+        XCTAssertFalse(viewModel.discoverable)
 
         for _ in 0..<50 where repository.observeLibrarySubscriberCount == 0 {
             try await Task.sleep(nanoseconds: 20_000_000)
@@ -1064,14 +1065,12 @@ class LibraryViewModelTests: XCTestCase {
 
         var updatedLibrary = library
         updatedLibrary.discoverable = true
-        updatedLibrary.autoUpdate = true
         repository.sendObservedLibrary(updatedLibrary)
-        for _ in 0..<50 where !viewModel.discoverable || !viewModel.autoUpdate {
+        for _ in 0..<50 where !viewModel.discoverable {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
         XCTAssertTrue(viewModel.discoverable)
-        XCTAssertTrue(viewModel.autoUpdate)
     }
 
     func testFlagMutationsCallUpdateLibraryFlags() throws {
@@ -1088,6 +1087,8 @@ class LibraryViewModelTests: XCTestCase {
         XCTAssertTrue(repository.updateLibraryFlagsCalled)
         XCTAssertEqual(repository.updateLibraryFlagsIdParam, library.id)
         XCTAssertEqual(repository.updateLibraryFlagsDiscoverableParam, !library.discoverable)
+        // The manager's copy too, which it saves whole.
+        XCTAssertEqual(container.libraryManager.calibreLibraries[library.id]?.discoverable, !library.discoverable)
     }
 }
 

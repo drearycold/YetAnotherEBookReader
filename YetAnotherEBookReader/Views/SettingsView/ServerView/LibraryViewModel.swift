@@ -14,7 +14,6 @@ class LibraryViewModel: ObservableObject {
     private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var discoverable: Bool = false
-    @Published var autoUpdate: Bool = false
     
     // UI state derived from container.librarySyncStatus
     @Published var isSync = false
@@ -22,7 +21,6 @@ class LibraryViewModel: ObservableObject {
     @Published var isError = false
     @Published var msg = "nil"
     @Published var cnt = -1
-    @Published var updCount = -1
     @Published var delCount = -1
     @Published var errCount = -1
     
@@ -51,7 +49,6 @@ class LibraryViewModel: ObservableObject {
     private func setupBindings() {
         if let persistedLibrary = libraryRepository.getLibrary(id: library.id) {
             self.discoverable = persistedLibrary.discoverable
-            self.autoUpdate = persistedLibrary.autoUpdate
         }
 
         libraryObservationTask?.cancel()
@@ -74,26 +71,17 @@ class LibraryViewModel: ObservableObject {
     func setDiscoverable(_ newValue: Bool) {
         guard discoverable != newValue else { return }
         discoverable = newValue
+        // The manager saves its copy of the library whole (a sync's summary, hiding it), so that
+        // copy changes too, or the next save would put the old value back.
+        container.libraryManager.calibreLibraries[library.id]?.discoverable = newValue
         try? libraryRepository.updateLibraryFlags(
             id: library.id,
-            discoverable: newValue,
-            autoUpdate: autoUpdate
-        )
-    }
-
-    func setAutoUpdate(_ newValue: Bool) {
-        guard autoUpdate != newValue else { return }
-        autoUpdate = newValue
-        try? libraryRepository.updateLibraryFlags(
-            id: library.id,
-            discoverable: discoverable,
-            autoUpdate: newValue
+            discoverable: newValue
         )
     }
 
     private func applyObservedFlags(from library: CalibreLibrary) {
         discoverable = library.discoverable
-        autoUpdate = library.autoUpdate
     }
 
     private func applySyncStatus(_ statusMap: [String: CalibreSyncStatus]) {
@@ -103,7 +91,6 @@ class LibraryViewModel: ObservableObject {
         isError = status?.isError ?? false
         msg = status?.msg ?? "nil"
         cnt = status?.cnt ?? -1
-        updCount = status?.upd.count ?? -1
         delCount = status?.del.count ?? -1
         errCount = status?.err.count ?? -1
 

@@ -213,7 +213,6 @@ class ServerViewModel: ObservableObject {
                     server: serverInfo.server,
                     key: $0,
                     name: $1,
-                    autoUpdate: false,
                     discoverable: true
                 )
             }
@@ -278,7 +277,7 @@ class ServerViewModel: ObservableObject {
     private func performProbeServer(server: CalibreServer, isAdd: Bool, completion: @escaping () -> Void) {
         isProbing = true
         Task {
-            let serverInfo = await container.serverManager.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
+            let serverInfo = await container.serverManager.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true))
 
             self.calibreServerInfo = serverInfo
             if let serverInfo = serverInfo {
@@ -340,12 +339,8 @@ class ServerViewModel: ObservableObject {
         libraryRestoreListActive.toggle()
     }
 
-    func removeDeleteBooksFromServer(server: CalibreServer) {
-        container.bookManager.removeDeleteBooksFromServer(server: server)
-    }
-
     func probeReachability(server: CalibreServer) {
-        container.serverManager.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: true, incremental: false)
+        container.serverManager.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: true)
     }
 
     // MARK: - DSReader Helper actions (ServerOptionsDSReaderHelper)

@@ -13,13 +13,15 @@
 //    TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass \
 //    TEST_RUNNER_YABR_CALIBRE_READONLY_USER=contract-reader \
 //    TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=reader-pass \
+//    TEST_RUNNER_YABR_CALIBRE_RESTRICTED_USER=contract-restricted \
+//    TEST_RUNNER_YABR_CALIBRE_RESTRICTED_PASSWORD=restricted-pass \
 //    xcodebuild test … -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
 //
 //  The server keeps its state between runs, so every test writes under its own device name,
 //  highlight id or bookmark title and only reads those back.
 //
-//  A test marked XCTExpectFailure pins a known bug. It's strict: once the bug is fixed the test
-//  passes, which fails it, so remove the marker with the fix.
+//  A test marked XCTExpectFailure would pin a known bug. It's strict: once the bug is fixed the
+//  test passes, which fails it, so remove the marker with the fix.
 //
 
 import XCTest
@@ -202,7 +204,7 @@ final class CalibreServerContractTests: XCTestCase {
     /// Positions and annotations are the user's own data: calibre lets a read-only account
     /// (which can't change the library) save them.
     func testAReadOnlyUserStillSavesItsReadingPosition() async throws {
-        let readOnly = try await readOnlyLibrary()
+        let readOnly = try await library(as: "READONLY", named: "Read-only")
         let device = "contract-readonly-\(UUID().uuidString)"
 
         try await upload(CalibreBookLastReadPositionEntry(device: device, cfi: "/2/4/2", epoch: 0, pos_frac: 0.75), in: readOnly)
@@ -252,81 +254,92 @@ final class CalibreServerContractTests: XCTestCase {
 
     // MARK: - Library sync
 
-    /// The library-changed probe (`CalibreLibraryManager.startProbeLibraryLastModifiedTask`).
-    func testTheLastModifiedProbeReadsTheLibrary() async throws {
-        let result = try await service.syncLegacyLibraryResult(resultPrev: syncResult(), order: "", filter: "", limit: 1)
+    /// `CalibreLibraryManager.syncLibrary` reads the library's summary: the number of books and the
+    /// newest change, which is the search and category caches' generation.
+    func testTheSummaryCountsTheBooksAndDatesTheNewestChange() async throws {
+        let summary = try await service.getLibrarySummary(library: library)
 
-        let lastModified = try XCTUnwrap(result.list.data.last_modified[book.id.description]?.v)
-        XCTAssertNotNil(parseLastModified(lastModified), lastModified)
+        XCTAssertGreaterThanOrEqual(summary.bookCount, 1)
+        let lastModified = try XCTUnwrap(summary.lastModified)
+        let task = try XCTUnwrap(service.buildBooksMetadataTask(library: library, books: [book]))
+        let metadata = await service.getBooksMetadata(task: task)
+        let entry = try XCTUnwrap(metadata.booksMetadataEntry?[book.id.description] ?? nil)
+        let bookLastModified = try XCTUnwrap(parseLastModified(entry.last_modified), entry.last_modified)
+        XCTAssertGreaterThanOrEqual(lastModified, bookLastModified)
     }
 
-    /// The full sync (`CalibreLibraryManager.syncLibrary`) lists the library's books.
-    func testTheFullSyncListsTheBooks() async throws {
-        XCTExpectFailure(
-            "The full sync posts to /cdb/cmd/list/<library key>; calibre's route is /cdb/cmd/list/0?library_id=<key>, so it answers 404",
-            strict: true
-        )
-        do {
-            let result = try await service.syncLibraryResult(resultPrev: syncResult())
-            XCTAssertTrue(result.list.book_ids.contains(book.id), "\(result.list.book_ids)")
-        } catch {
-            XCTFail("full sync: \(error)")
-        }
+    /// The summary reads the custom columns from a book's `user_metadata`: calibre lists every
+    /// column on every book, valued or not. One made with `calibredb add_custom_column` has
+    /// `"display": {}`.
+    func testTheSummaryReadsTheCustomColumns() async throws {
+        let summary = try await service.getLibrarySummary(library: library)
+
+        let column = try XCTUnwrap(summary.customColumnInfos?["read_progress"], "\(String(describing: summary.customColumnInfos))")
+        XCTAssertEqual(column.datatype, "int")
+        XCTAssertEqual(column.name, "Read progress")
+        XCTAssertEqual(column.display.description, "")
     }
 
-    /// The wrapper `CalibreLibraryManager.syncLibrary` calls either brings the books or says it
-    /// failed: the manager trusts `isError`.
-    ///
-    /// Today the list request's 404 is swallowed: `syncLibrary(resultPrev:)` sets `errmsg` but not
-    /// `isError`. The manager then goes on with an empty list, reports "Success", and on a full
-    /// (non-incremental) sync marks every library book not on the shelf as deleted on the server,
-    /// which Settings' remove-deleted button (`removeDeleteBooksFromServer`) deletes locally.
-    func testAFailedFullSyncSaysSo() async throws {
-        XCTExpectFailure(
-            "The full sync's list request fails (404) and syncLibrary(resultPrev:) reports it only in errmsg, not isError",
-            strict: true
-        )
-        let result = await service.syncLibrary(resultPrev: syncResult())
+    /// calibre's `cdb` interface refuses a user with a per-library restriction. The summary's
+    /// requests answer within the restriction, which here matches no book.
+    func testARestrictedUserGetsTheSummaryOfWhatItMaySee() async throws {
+        let restricted = try await library(as: "RESTRICTED", named: "Restricted")
 
-        XCTAssertTrue(
-            result.isError || result.list.book_ids.contains(book.id),
-            "isError: \(result.isError), errmsg: \(result.errmsg), books: \(result.list.book_ids)"
-        )
-    }
+        let summary = try await service.getLibrarySummary(library: restricted)
 
-    /// The full sync reads the custom columns first.
-    func testTheFullSyncReadsTheCustomColumns() async throws {
-        XCTExpectFailure(
-            "The full sync gets /cdb/cmd/custom_columns/<library key>; calibre's route is /cdb/cmd/custom_columns/0?library_id=<key>, so it answers 404",
-            strict: true
-        )
-        do {
-            let result = try await service.getCustomColumnsResult(request: syncRequest)
-            XCTAssertNotNil(result.result["result"]?["read_progress"], "\(result.result.keys)")
-        } catch {
-            XCTFail("custom columns: \(error)")
-        }
-    }
-
-    /// The pre-refactor request for the custom columns, which calibre still answers.
-    func testTheLegacyCustomColumnsRequestReadsThem() async throws {
-        XCTExpectFailure(
-            "CalibreCustomColumnDisplayInfo requires `description`, but calibre sends \"display\": {} for a column made with calibredb add_custom_column",
-            strict: true
-        )
-        do {
-            let result = try await service.getLegacyCustomColumnsResult(request: syncRequest)
-            let column = try XCTUnwrap(result.result["result"]?["read_progress"], "\(result.result)")
-            XCTAssertEqual(column.datatype, "int")
-        } catch {
-            XCTFail("legacy custom columns: \(error)")
-        }
+        XCTAssertEqual(summary, CalibreLibrarySummary(bookCount: 0))
     }
 
     func testTheCategoriesAreRead() async throws {
-        let result = try await service.getLibraryCategoriesResult(resultPrev: syncResult())
+        let categories = try await service.getLibraryCategories(library: library)
 
-        XCTAssertTrue(result.categories.contains { $0.name == "Authors" && $0.is_category }, "\(result.categories.map(\.name))")
+        XCTAssertTrue(categories.contains { $0.name == "Authors" && $0.is_category }, "\(categories.map(\.name))")
+    }
+
+    /// A whole sync through the manager: the summary and categories, and no book taken for deleted.
+    func testASyncReadsTheLibrary() async throws {
+        let libraryManager = container.libraryManager
+        libraryManager.calibreLibraries[library.id] = library
+
+        await libraryManager.syncLibrary(request: .init(library: library))
+
+        let status = try XCTUnwrap(libraryManager.librarySyncStatus[library.id])
+        XCTAssertFalse(status.isError, status.msg ?? "")
+        XCTAssertEqual(status.msg, "Success")
+        XCTAssertGreaterThanOrEqual(status.cnt ?? 0, 1)
+        XCTAssertEqual(status.del, [])
+        XCTAssertNotNil(libraryManager.calibreLibraries[library.id]?.customColumnInfos["read_progress"])
+    }
+
+    /// calibre answers null for a book it doesn't have. The app reports that book as deleted on
+    /// the server, per book, and keeps its record: a shelf book's files are still the user's.
+    func testABookCalibreDoesNotHaveIsReportedDeleted() async throws {
+        let missingId = Int32.random(in: 900_000 ..< 1_000_000)
+        let bookManager = container.bookManager
+        for id in [book.id, missingId] {
+            var shelved = CalibreBook(id: id, library: library)
+            shelved.inShelf = true
+            bookManager.updateBook(book: shelved)
+        }
+
+        await bookManager.getBooksMetadata(request: .init(library: library, books: [book.id, missingId], getAnnotations: false))
+
+        XCTAssertEqual(container.librarySyncStatus[library.id]?.del, [missingId])
+        XCTAssertEqual(bookManager.booksInShelf[book.inShelfId]?.title, "Contract Test Book")
+        XCTAssertTrue(bookManager.bookExists(forPrimaryKey: CalibreBook(id: missingId, library: library).inShelfId))
+    }
+
+    /// calibre answers a book a restricted user may not see as it does a deleted one, which is why
+    /// the app doesn't delete a book on that answer.
+    func testABookOutOfARestrictedUsersReachIsAnsweredNull() async throws {
+        let restricted = try await library(as: "RESTRICTED", named: "Restricted")
+        let task = try XCTUnwrap(service.buildBooksMetadataTask(library: restricted, books: [CalibreBook(id: book.id, library: restricted)]))
+
+        let result = await service.getBooksMetadata(task: task)
+
+        XCTAssertNil(result.error)
+        let entry = try XCTUnwrap(result.booksMetadataEntry?[book.id.description], "the book is in the answer")
+        XCTAssertNil(entry)
     }
 
     // MARK: - Metadata
@@ -355,7 +368,7 @@ final class CalibreServerContractTests: XCTestCase {
     /// calibre answers a read-only user's change with 403 "The user … does not have permission to
     /// make changes"; the app reports any 401 or 403 as a failed login.
     func testAReadOnlyUsersMetadataWriteIsRefused() async throws {
-        let readOnly = try await readOnlyLibrary()
+        let readOnly = try await library(as: "READONLY", named: "Read-only")
 
         do {
             try await service.updateMetadata(library: readOnly, bookId: book.id, metadata: [["#read_progress", 1]])
@@ -402,7 +415,7 @@ final class CalibreServerContractTests: XCTestCase {
     }
 
     private func probe(_ server: CalibreServer, at url: URL) async -> CalibreServerInfo {
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: url, reachable: false, probing: true, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
         return await service.probeServerReachability(serverInfo: info)
     }
@@ -432,25 +445,18 @@ final class CalibreServerContractTests: XCTestCase {
         return book
     }
 
-    private var syncRequest: CalibreSyncLibraryRequest {
-        CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-    }
-
-    private func syncResult() -> CalibreSyncLibraryResult {
-        CalibreSyncLibraryResult(request: syncRequest, result: [:])
-    }
-
-    /// The library as the read-only user sees it, its server probed and staged like setUp's.
-    private func readOnlyLibrary() async throws -> CalibreLibrary {
+    /// The library as another seeded user sees it (`YABR_CALIBRE_<user>_USER` and `_PASSWORD`), its
+    /// server probed and staged like setUp's.
+    private func library(as user: String, named name: String) async throws -> CalibreLibrary {
         let environment = ProcessInfo.processInfo.environment
-        guard let username = environment["YABR_CALIBRE_READONLY_USER"],
-              let password = environment["YABR_CALIBRE_READONLY_PASSWORD"],
+        guard let username = environment["YABR_CALIBRE_\(user)_USER"],
+              let password = environment["YABR_CALIBRE_\(user)_PASSWORD"],
               let serverURL = URL(string: library.server.baseUrl) else {
-            throw XCTSkip("Needs a read-only user: TEST_RUNNER_YABR_CALIBRE_READONLY_USER and _PASSWORD")
+            throw XCTSkip("Needs the \(name) user: TEST_RUNNER_YABR_CALIBRE_\(user)_USER and _PASSWORD")
         }
         let server = CalibreServer(
             uuid: UUID(),
-            name: "Read-only",
+            name: name,
             baseUrl: library.server.baseUrl,
             hasPublicUrl: false,
             publicUrl: "",

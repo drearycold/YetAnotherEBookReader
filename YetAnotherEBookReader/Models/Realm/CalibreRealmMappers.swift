@@ -58,7 +58,6 @@ extension CalibreLibraryRealm {
             server: server,
             key: self.key ?? name,
             name: name,
-            autoUpdate: self.autoUpdate,
             discoverable: self.discoverable,
             hidden: self.hidden,
             lastModified: self.lastModified,
@@ -73,7 +72,6 @@ extension CalibreLibraryRealm {
             self.serverUUID = library.server.uuid.uuidString
         }
         self.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
-        self.autoUpdate = library.autoUpdate
         self.discoverable = library.discoverable
         self.hidden = library.hidden
         self.lastModified = library.lastModified

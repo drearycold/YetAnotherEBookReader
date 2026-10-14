@@ -21,11 +21,6 @@ struct LibraryDetailView: View {
                     get: { viewModel.discoverable },
                     set: { viewModel.setDiscoverable($0) }
                 ))
-                
-                Toggle("Available when Offline", isOn: Binding(
-                    get: { viewModel.autoUpdate },
-                    set: { viewModel.setAutoUpdate($0) }
-                ))
             }
             
             Section(header: Text("Troubleshooting")) {
@@ -65,9 +60,9 @@ struct LibraryDetailView: View {
                                     }
                                 }
                             }
-                        }.navigationTitle(Text("Book IDs Deleted on Server"))
+                        }.navigationTitle(Text("Book IDs Unavailable on Server"))
                     } label: {
-                        Text("Book IDs Deleted on Server")
+                        Text("Book IDs Unavailable on Server")
                     }
                 }
             }
@@ -87,7 +82,6 @@ struct LibraryDetailView: View {
                 Text("isError: \(viewModel.isError ? "true" : "false")")
                 Text("MSG: \(viewModel.msg)")
                 Text("CNT: \(viewModel.cnt)")
-                Text("UPD: \(viewModel.updCount)")
                 Text("DEL: \(viewModel.delCount)")
                 Text("ERR: \(viewModel.errCount)")
             } header: {

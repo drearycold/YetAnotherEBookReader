@@ -19,7 +19,6 @@ class CalibreLibraryManager {
     private let libraryBroadcaster = ManagerAsyncBroadcaster<[String: CalibreLibrary]>()
     private let libraryInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreLibraryInfo]>()
     private let librarySyncStatusBroadcaster = ManagerAsyncBroadcaster<[String: CalibreSyncStatus]>()
-    private var probeLibraryLastModifiedTask: Task<Void, Never>?
 
     var calibreLibraries = [String: CalibreLibrary]() {
         didSet {
@@ -46,10 +45,6 @@ class CalibreLibraryManager {
         self.container = container
         self.databaseService = databaseService
         self.libraryRepository = libraryRepository
-    }
-
-    deinit {
-        probeLibraryLastModifiedTask?.cancel()
     }
 
     func stateChanges() -> AsyncStream<Void> {
@@ -229,7 +224,6 @@ class CalibreLibraryManager {
 
     func hideLibrary(libraryId: String) {
         calibreLibraries[libraryId]?.hidden = true
-        calibreLibraries[libraryId]?.autoUpdate = false
         if let library = calibreLibraries[libraryId] {
             try? libraryRepository.saveLibrary(library)
         }
@@ -324,68 +318,18 @@ class CalibreLibraryManager {
         self.librarySyncStatus[library.id]?.isSync = false
     }
 
-    func startProbeLibraryLastModifiedTask() {
-        guard let container = self.container else { return }
-        let requests = container.probeLibraryLastModifiedRequests()
-        probeLibraryLastModifiedTask?.cancel()
-        probeLibraryLastModifiedTask = Task { [weak self] in
-            for await request in requests {
-                guard !Task.isCancelled,
-                      let self,
-                      let calibreServerService = self.container?.calibreServerService else { return }
-
-                do {
-                    let syncResult = try await calibreServerService.syncLegacyLibraryResult(
-                        resultPrev: .init(request: request, result: [:]),
-                        order: "",
-                        filter: "",
-                        limit: 1
-                    )
-
-                    let updatedLibrary = await MainActor.run { () -> CalibreLibrary? in
-                        let dateFormatter = ISO8601DateFormatter()
-                        let dateFormatter2 = ISO8601DateFormatter()
-                        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
-
-                        guard var library = self.calibreLibraries[syncResult.request.library.id],
-                              let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
-                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
-                        else {
-                            return nil
-                        }
-
-                        var libraryNeedsSync: CalibreLibrary? = nil
-                        if lastModified > library.lastModified {
-                            library.lastModified = lastModified
-                            self.calibreLibraries[syncResult.request.library.id] = library
-                            try? self.libraryRepository.saveLibrary(library)
-                            libraryNeedsSync = library
-                        }
-
-                        self.container?.publishCalibreUpdate(.library(library))
-                        return libraryNeedsSync
-                    }
-
-                    if let updatedLibrary {
-                        await self.syncLibrary(
-                            request: .init(
-                                library: updatedLibrary,
-                                autoUpdateOnly: true,
-                                incremental: true
-                            )
-                        )
-                    }
-                } catch {
-                    self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-
+    /// Refreshes what the app keeps about a library besides its books, which calibre is asked for
+    /// as they're browsed or shelved:
+    /// - its summary (`CalibreServerService.getLibrarySummary`): the book count Settings shows, the
+    ///   custom columns that turn category filters into searches (`buildLibrarySearchTasks`), and
+    ///   the newest change, which is the search and category caches' generation;
+    /// - its categories and their cached items.
+    ///
+    /// `isSync` covers the summary only. The categories can take long to refresh, and a category
+    /// the user refreshes meanwhile (`UnifiedCategoryViewModel`) syncs again rather than waiting.
     @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
         guard let container = self.container else { return }
-        let calibreServerService = container.calibreServerService
         let libraryId = request.library.id
         guard (self.librarySyncStatus[libraryId]?.isSync ?? false) == false else {
             return
@@ -399,121 +343,105 @@ class CalibreLibraryManager {
             status.isSync = true
             status.isError = false
             status.msg = ""
-            status.cnt = nil
             self.librarySyncStatus[libraryId] = status
         } else {
             self.librarySyncStatus[libraryId] = .init(library: request.library, isSync: true)
         }
 
-        var result = await calibreServerService.getCustomColumns(request: request)
-        result = await calibreServerService.getLibraryCategories(resultPrev: result)
+        let calibreServerService = container.calibreServerService
+        var library = calibreLibraries[libraryId] ?? request.library
+        var summaryError: String?
 
-        let shouldSyncBooks = request.autoUpdateOnly == false || request.library.autoUpdate
-
-        if shouldSyncBooks {
-            var filter = ""
-            if request.incremental,
-               let cachedLib = calibreLibraries[result.request.library.id] {
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
-                formatter.timeZone = .current
-                let lastModifiedStr = formatter.string(from: cachedLib.lastModified)
-                filter = "last_modified:\">=\(lastModifiedStr)\""
+        do {
+            let summary = try await calibreServerService.getLibrarySummary(library: library)
+            let previousBookCount = self.librarySyncStatus[libraryId]?.cnt
+            let (updatedLibrary, changed) = applySummary(summary, previousBookCount: previousBookCount, to: library)
+            library = updatedLibrary
+            self.librarySyncStatus[libraryId]?.cnt = summary.bookCount
+            if changed {
+                container.publishCalibreUpdate(.library(library))
             }
+        } catch {
+            logger.error("Failed to read the summary of \(library.name): \(error.localizedDescription)")
+            summaryError = error.localizedDescription
+        }
 
-            result = await calibreServerService.syncLibrary(resultPrev: result, filter: filter)
+        self.librarySyncStatus[libraryId]?.isSync = false
+        self.librarySyncStatus[libraryId]?.isError = summaryError != nil
+        self.librarySyncStatus[libraryId]?.msg = summaryError ?? "Success"
 
-            self.librarySyncStatus[libraryId]?.isError = result.isError
+        // A library removed meanwhile stays removed: no categories are cached for it.
+        guard calibreLibraries[libraryId] != nil else { return }
 
-            if result.isError == false {
-                let library = result.request.library
+        var categoryError: String?
+        do {
+            let categories = try await calibreServerService.getLibraryCategories(library: library)
+            categoryError = await refreshCategoryCaches(
+                container: container,
+                library: library,
+                categories: categories
+            )
+        } catch {
+            logger.error("Failed to read the categories of \(library.name): \(error.localizedDescription)")
+            categoryError = error.localizedDescription
+        }
 
-                await withCheckedContinuation { continuation in
-                    DatabaseService.metadataWriteQueue.async { [weak self] in
-                        guard let self = self else {
-                            continuation.resume()
-                            return
-                        }
-                        try? self.libraryRepository.saveLibrary(library)
-                        continuation.resume()
-                    }
-                }
-
-                let dateFormatter = ISO8601DateFormatter()
-                let dateFormatter2 = ISO8601DateFormatter()
-                dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
-
-                var progress = 0
-                let total = result.list.book_ids.count
-                for chunk in result.list.book_ids.chunks(size: 1024) {
-                    let preMsg = "\(progress) / \(total)"
-                    let list = chunk.compactMap { id -> BookMetadataSyncRecord? in
-                        let idStr = id.description
-                        guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
-                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return nil }
-                        return BookMetadataSyncRecord(id: id, lastModified: lastModified)
-                    }
-                    progress += chunk.count
-                    let postMsg = "\(progress) / \(total)"
-                    await saveBookMetadata(metadata: .init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
-
-                    if let lastMod = list.last?.lastModified {
-                        result.lastModified = lastMod
-                    }
-                }
-
-                if result.request.incremental == false {
-                    await saveBookMetadata(metadata: .init(library: library, action: .updateDeleted(result.list.data.last_modified), preMsg: "", postMsg: ""))
-                }
-
-                await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
-
-                var updatedLibrary = self.calibreLibraries[library.id] ?? library
-                if let lastModified = result.lastModified,
-                   updatedLibrary.lastModified < lastModified {
-                    updatedLibrary.lastModified = lastModified
-                }
-                await refreshCategoryCaches(
-                    container: container,
-                    library: updatedLibrary,
-                    categories: result.categories
-                )
-
-                if container.serverManager.isServerReachable(server: library.server) {
-                    container.publishCalibreUpdate(.server(library.server))
-                    container.publishProbeLibraryLastModifiedRequest(.init(library: updatedLibrary, autoUpdateOnly: false, incremental: false))
-                }
-            }
-        } else {
-            let isError = !result.errmsg.isEmpty
-            self.librarySyncStatus[libraryId]?.isError = isError
-            self.librarySyncStatus[libraryId]?.isSync = false
-
-            if !isError {
-                let library = self.calibreLibraries[result.request.library.id] ?? result.request.library
-                await refreshCategoryCaches(
-                    container: container,
-                    library: library,
-                    categories: result.categories
-                )
-
-                self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
-
-                if container.serverManager.isServerReachable(server: library.server) {
-                    container.publishCalibreUpdate(.server(library.server))
-                }
-            } else {
-                self.librarySyncStatus[libraryId]?.msg = result.errmsg
-            }
+        // Unless a newer sync has started, or the summary already failed.
+        if let categoryError,
+           let status = self.librarySyncStatus[libraryId],
+           status.isSync == false,
+           status.isError == false {
+            self.librarySyncStatus[libraryId]?.isError = true
+            self.librarySyncStatus[libraryId]?.msg = categoryError
         }
     }
 
+    /// Keeps the newer `lastModified` and the custom columns, when the library has a book to
+    /// describe them.
+    ///
+    /// A deleted book changes no other book, so calibre's newest change stays put, or goes back
+    /// when it was the newest. A book count that changed since the last summary moves the
+    /// generation just past the date it had, so the search and category caches are fetched again.
+    @MainActor
+    private func applySummary(
+        _ summary: CalibreLibrarySummary,
+        previousBookCount: Int?,
+        to library: CalibreLibrary
+    ) -> (CalibreLibrary, Bool) {
+        var updated = calibreLibraries[library.id] ?? library
+        var changed = false
+        if let lastModified = summary.lastModified, lastModified > updated.lastModified {
+            updated.lastModified = lastModified
+            changed = true
+        } else if let previousBookCount, previousBookCount != summary.bookCount {
+            updated.lastModified = updated.lastModified.addingTimeInterval(0.001)
+            changed = true
+        }
+        if let customColumnInfos = summary.customColumnInfos, customColumnInfos != updated.customColumnInfos {
+            updated.customColumnInfos = customColumnInfos
+            changed = true
+        }
+        // A library removed meanwhile stays removed.
+        guard changed, calibreLibraries[library.id] != nil else {
+            return (updated, false)
+        }
+
+        calibreLibraries[library.id] = updated
+        do {
+            try libraryRepository.saveLibrary(updated)
+        } catch {
+            logger.error("Failed to save the summary of \(updated.name): \(error.localizedDescription)")
+        }
+        return (updated, true)
+    }
+
+    /// Returns the first error of a category that couldn't be refreshed, so the sync reports it.
     @MainActor
     private func refreshCategoryCaches(
         container: AppContainerProtocol,
         library: CalibreLibrary,
         categories: [CalibreLibraryCategory]
-    ) async {
+    ) async -> String? {
         let activeCategories = categories.filter { $0.is_category }
         let activeCategoryNames = Set(activeCategories.map(\.name))
 
@@ -526,6 +454,7 @@ class CalibreLibraryManager {
             logger.error("Failed to prune stale categories for \(library.name): \(error.localizedDescription)")
         }
 
+        var firstError: String?
         for category in activeCategories {
             do {
                 _ = try await container.libraryCategoryService.fetchAndCacheCategory(
@@ -534,101 +463,9 @@ class CalibreLibraryManager {
                 )
             } catch {
                 logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
+                firstError = firstError ?? "\(category.name): \(error.localizedDescription)"
             }
         }
-    }
-
-    @MainActor
-    func saveBookMetadata(metadata: CalibreSyncLibraryBooksMetadata) async {
-        guard let container = self.container else { return }
-        self.librarySyncStatus[metadata.library.id]?.msg = metadata.preMsg
-
-        var metadataResult = metadata
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DatabaseService.metadataWriteQueue.async { [weak self] in
-                guard let self = self, let bookRepository = self.container?.bookRepository else {
-                    continuation.resume()
-                    return
-                }
-
-                switch metadataResult.action {
-                case let .save(list):
-                    bookRepository.saveBookSyncRecords(list, library: metadataResult.library)
-                case let .updateDeleted(last_modified):
-                    metadataResult.bookDeleted = bookRepository.findDeletedBookIds(
-                        library: metadataResult.library,
-                        activeIds: last_modified
-                    )
-                case .complete:
-                    if metadataResult.library.autoUpdate {
-                        let syncInfo = bookRepository.countAndNeedUpdateBooks(library: metadataResult.library)
-                        metadataResult.bookCount = syncInfo.count
-                        metadataResult.bookToUpdate = syncInfo.needUpdateIds
-                    }
-                }
-                continuation.resume()
-            }
-        }
-
-        let library = metadata.library
-        var libraryUpdated: CalibreLibrary? = nil
-
-        switch metadataResult.action {
-        case let .complete(lastModified, columnInfos):
-            if columnInfos.isEmpty == false,
-               library.customColumnInfos != columnInfos {
-                if libraryUpdated == nil {
-                    libraryUpdated = library
-                }
-                libraryUpdated!.customColumnInfos = columnInfos
-            }
-            if let lastModified = lastModified,
-               library.lastModified != lastModified {
-                if libraryUpdated == nil {
-                    libraryUpdated = library
-                }
-                libraryUpdated!.lastModified = lastModified
-            }
-
-            if let libraryUpdated = libraryUpdated {
-                self.calibreLibraries[library.id] = libraryUpdated
-                await withCheckedContinuation { continuation in
-                    DatabaseService.metadataWriteQueue.async { [weak self] in
-                        guard let self = self else {
-                            continuation.resume()
-                            return
-                        }
-                        try? self.libraryRepository.saveLibrary(libraryUpdated)
-                        continuation.resume()
-                    }
-                }
-            }
-
-            self.librarySyncStatus[library.id]?.isSync = false
-            self.librarySyncStatus[library.id]?.cnt = metadataResult.bookCount
-
-            let bookToUpdate = metadataResult.bookToUpdate.filter {
-                self.librarySyncStatus[library.id]?.upd.contains($0) == false
-            }
-            self.librarySyncStatus[library.id]?.upd.formUnion(bookToUpdate)
-
-            bookToUpdate.chunks(size: 256).forEach { chunk in
-                Task {
-                    await container.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
-                }
-            }
-        case .updateDeleted:
-            self.librarySyncStatus[library.id]?.del.formUnion(metadataResult.bookDeleted)
-        case let .save(list):
-            let bookIds = list.map(\.id)
-            bookIds.chunks(size: 256).forEach { chunk in
-                Task {
-                    await container.bookManager.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
-                }
-            }
-        }
-
-        self.librarySyncStatus[library.id]?.msg = metadata.postMsg
+        return firstError
     }
 }

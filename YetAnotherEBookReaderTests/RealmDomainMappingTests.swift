@@ -108,7 +108,6 @@ final class RealmDomainMappingTests: XCTestCase {
             server: server,
             key: "my-key",
             name: "My Library",
-            autoUpdate: true,
             discoverable: false,
             hidden: true,
             lastModified: Date(timeIntervalSince1970: 123456789),
@@ -121,7 +120,6 @@ final class RealmDomainMappingTests: XCTestCase {
         libraryRealm.name = library.name
         libraryRealm.serverUUID = library.server.uuid.uuidString
         libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
-        libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
         libraryRealm.hidden = library.hidden
         libraryRealm.lastModified = library.lastModified
@@ -129,7 +127,6 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(libraryRealm.key, "my-key")
         XCTAssertEqual(libraryRealm.name, "My Library")
         XCTAssertEqual(libraryRealm.serverUUID, server.uuid.uuidString)
-        XCTAssertEqual(libraryRealm.autoUpdate, true)
         XCTAssertEqual(libraryRealm.discoverable, false)
         XCTAssertEqual(libraryRealm.hidden, true)
         XCTAssertEqual(libraryRealm.lastModified, Date(timeIntervalSince1970: 123456789))
@@ -144,7 +141,6 @@ final class RealmDomainMappingTests: XCTestCase {
             server: server,
             key: libraryRealm.key ?? name,
             name: name,
-            autoUpdate: libraryRealm.autoUpdate,
             discoverable: libraryRealm.discoverable,
             hidden: libraryRealm.hidden,
             lastModified: libraryRealm.lastModified,
@@ -157,7 +153,6 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(mappedLibrary.server.uuid, library.server.uuid)
         XCTAssertEqual(mappedLibrary.key, library.key)
         XCTAssertEqual(mappedLibrary.name, library.name)
-        XCTAssertEqual(mappedLibrary.autoUpdate, library.autoUpdate)
         XCTAssertEqual(mappedLibrary.discoverable, library.discoverable)
         XCTAssertEqual(mappedLibrary.hidden, library.hidden)
         XCTAssertEqual(mappedLibrary.lastModified, library.lastModified)
@@ -562,7 +557,6 @@ final class RealmDomainMappingTests: XCTestCase {
             server: server,
             key: "my-key",
             name: "My Library",
-            autoUpdate: true,
             discoverable: false,
             hidden: true,
             lastModified: Date(timeIntervalSince1970: 123456789),
@@ -578,7 +572,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(mappedLibrary.server.uuid, library.server.uuid)
         XCTAssertEqual(mappedLibrary.key, library.key)
         XCTAssertEqual(mappedLibrary.name, library.name)
-        XCTAssertEqual(mappedLibrary.autoUpdate, library.autoUpdate)
+        XCTAssertEqual(mappedLibrary.discoverable, library.discoverable)
     }
     
     func testNewCalibreBookMappers() {
@@ -783,7 +777,6 @@ final class RealmDomainMappingTests: XCTestCase {
             server: server,
             key: "updated-key",
             name: "Original Lib", // name must match to preserve primaryKey of managed object
-            autoUpdate: false,
             discoverable: true,
             hidden: true,
             lastModified: Date(),
@@ -836,7 +829,7 @@ final class RealmDomainMappingTests: XCTestCase {
             if let libraryRealm = realm.objects(CalibreLibraryRealm.self).first {
                 libraryRealm.applyDomain(library)
                 XCTAssertEqual(libraryRealm.name, "Original Lib") // name should not change because of self.realm != nil guard
-                XCTAssertFalse(libraryRealm.autoUpdate)
+                XCTAssertTrue(libraryRealm.hidden)
             }
             
             if let bookRealm = realm.objects(CalibreBookRealm.self).first {

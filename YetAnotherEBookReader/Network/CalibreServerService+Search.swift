@@ -21,7 +21,7 @@ extension CalibreServerService {
            let publicUrl = URL(string: library.server.publicUrl) {
             serverUrls.append(publicUrl)
         }
-        if library.autoUpdate || library.server.isLocal {
+        if library.server.isLocal {
             serverUrls.append(URL(fileURLWithPath: "/realm"))
         }
         

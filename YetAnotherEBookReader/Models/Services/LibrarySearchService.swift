@@ -8,12 +8,17 @@
 import Foundation
 
 actor LibrarySearchService {
+    /// Called with the books an `ajax/books` answer had null (`missing`) or an entry for (`present`).
+    typealias MetadataAnswersHandler = @Sendable (_ library: CalibreLibrary, _ missing: Set<Int32>, _ present: Set<Int32>) async -> Void
+
     private let service: CalibreServerService
     private let repository: SearchCacheRepository
+    private let onMetadataAnswers: MetadataAnswersHandler?
 
-    init(service: CalibreServerService, repository: SearchCacheRepository) {
+    init(service: CalibreServerService, repository: SearchCacheRepository, onMetadataAnswers: MetadataAnswersHandler? = nil) {
         self.service = service
         self.repository = repository
+        self.onMetadataAnswers = onMetadataAnswers
     }
 
     func getTargetSource(for library: CalibreLibrary) -> String {
@@ -268,6 +273,20 @@ actor LibrarySearchService {
             entries: entries,
             json: completedTask.booksMetadataJSON
         )
+
+        if let onMetadataAnswers {
+            var missing = Set<Int32>()
+            var present = Set<Int32>()
+            for (key, entry) in entries {
+                guard let bookId = Int32(key) else { continue }
+                if entry == nil {
+                    missing.insert(bookId)
+                } else {
+                    present.insert(bookId)
+                }
+            }
+            await onMetadataAnswers(library, missing, present)
+        }
 
         return try repository.fetchBooks(library: library, bookIds: bookIds)
     }

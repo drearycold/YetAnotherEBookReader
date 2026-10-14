@@ -31,7 +31,6 @@ class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     
     @Persisted var customColumnsData: Data?
     
-    @Persisted var autoUpdate = true
     @Persisted var discoverable = true
     @Persisted var hidden = false
     @Persisted var lastModified = Date(timeIntervalSince1970: 0)

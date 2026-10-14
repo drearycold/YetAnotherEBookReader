@@ -98,23 +98,11 @@ extension CalibreServerService {
     }
 
     func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {
-        guard let serverUrl = self.librarySyncStatus[library.id]?.isError == true
-            ? URL(fileURLWithPath: "/realm")
-            : (
-                getServerUrlByReachability(server: library.server) ?? (
-                    (library.autoUpdate || library.server.isLocal)
-                    ? URL(fileURLWithPath: "/realm")
-                    : nil
-                )
-            ) else {
-            return nil
-        }
-
-        var probeUrlComponents = URLComponents()
-        probeUrlComponents.path = "ajax/search/\(library.key)"
-        probeUrlComponents.queryItems = [URLQueryItem(name: "num", value: "0")]
-
-        guard let probeUrl = probeUrlComponents.url(relativeTo: serverUrl) else {
+        guard let probeUrl = try? makeEndpointURL(
+            server: library.server,
+            path: "/ajax/search/\(library.key)",
+            queryItems: [URLQueryItem(name: "num", value: "0")]
+        ) else {
             return nil
         }
 

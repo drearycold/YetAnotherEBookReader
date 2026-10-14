@@ -55,8 +55,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             server: mockServer,
             isPublic: false,
             updateLibrary: false,
-            autoUpdateOnly: false,
-            incremental: false
+            autoUpdateOnly: false
         )
         let serverInfo = CalibreServerInfo(
             server: mockServer,

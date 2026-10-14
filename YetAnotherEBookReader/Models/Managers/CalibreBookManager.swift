@@ -759,11 +759,9 @@ class CalibreBookManager {
 
         let booksHandled = task.booksUpdated.union(task.booksError).union(task.booksDeleted)
 
-        container?.librarySyncStatus[task.library.id]?.upd.subtract(booksHandled)
+        recordMetadataAnswers(library: task.library, missing: task.booksDeleted, failed: task.booksError, present: task.booksUpdated)
 
         if task.booksError.isEmpty == false {
-            container?.librarySyncStatus[task.library.id]?.err.formUnion(task.booksError)
-            container?.librarySyncStatus[task.library.id]?.del.formUnion(task.booksDeleted)
             let booksRetry = task.books.filter { booksHandled.contains($0) == false }
 
             if booksRetry.isEmpty == false {
@@ -796,32 +794,25 @@ class CalibreBookManager {
         return bookRepository.bookExists(id: forPrimaryKey)
     }
 
-    func removeDeleteBooksFromServer(server: CalibreServer) {
-        guard let librarySyncStatus = container?.librarySyncStatus else { return }
-
-        librarySyncStatus.filter {
-             $0.value.library.server.id == server.id && $0.value.del.count > 0
-        }.forEach { lss in
-            container?.librarySyncStatus[lss.key]?.isSync = true
-            var progress = 0
-            let total = lss.value.del.count
-            DispatchQueue.global(qos: .userInitiated).async {
-                Array(lss.value.del).chunks(size: 100).forEach { chunk in
-                    self.bookRepository.deleteBooks(library: lss.value.library, ids: chunk)
-                    progress += chunk.count
-                    DispatchQueue.main.async {
-                        self.container?.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
-                    }
-                }
-
-                DispatchQueue.main.async {
-                    self.container?.librarySyncStatus[lss.key]?.del.removeAll()
-                    self.container?.librarySyncStatus[lss.key]?.isSync = false
-                    self.container?.librarySyncStatus[lss.key]?.msg = nil
-                    self.container?.serverManager.probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
-                }
-            }
-        }
+    /// Records what an `ajax/books` answer said about each book, for Settings to list:
+    /// - `missing`: its entry came back null (`BookRepository.persistMetadataEntries`), as calibre
+    ///   answers for a book it doesn't have and for one out of a restricted user's reach. Nothing
+    ///   is deleted locally, as a shelf book's files and positions are still the user's.
+    /// - `failed`: its entry couldn't be read.
+    /// - `present`: its entry was read, which clears both.
+    ///
+    /// Browsing reports its answers here too (`LibrarySearchService`).
+    @MainActor
+    func recordMetadataAnswers(library: CalibreLibrary, missing: Set<Int32>, failed: Set<Int32> = [], present: Set<Int32>) {
+        guard let container else { return }
+        var status = container.librarySyncStatus[library.id] ?? .init(library: library)
+        let previous = (status.del, status.err)
+        status.del.subtract(present)
+        status.del.formUnion(missing)
+        status.err.subtract(present)
+        status.err.formUnion(failed)
+        guard (status.del, status.err) != previous else { return }
+        container.librarySyncStatus[library.id] = status
     }
 
     // MARK: - Shelf Refresh

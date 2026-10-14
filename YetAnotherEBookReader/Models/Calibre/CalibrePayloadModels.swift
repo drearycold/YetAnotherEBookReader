@@ -40,36 +40,54 @@ struct CalibreBookFormatMetadataEntry: Codable {
     }
 }
 
-struct CalibreBookUserMetadataEntry: Codable {
-    var table: String = ""
-    var column: String = ""
-    var datatype: String = ""
-    var is_multiple: Bool? = nil
-    var kind: String = ""
-    var name: String = ""
-    var search_terms: [String] = []
-    var label: String = ""
-    var colnum: Int = 0
-    var display: [String: String?] = [:]
-    var is_custom: Bool = false
-    var is_category: Bool = false
-    var link_column: String = ""
-    var category_sort: String = ""
-    var is_csp: Bool = false
-    var is_editable: Bool = false
-    var rec_index: Int = 0
-    var value: Any? = nil   //dynamic
-    var extra: Any? = nil   //dynamic
-    //var is_multiple2: ???
-    
+/// A custom column as a book's `user_metadata` in `ajax/books` describes it. calibre lists every
+/// column of the library there, on every book, valued or not (`Cache._get_metadata`).
+/// `is_multiple` is the list separator, or null; `is_multiple2` has the separators.
+struct CalibreBookUserMetadataColumn: Decodable {
+    var label: String
+    var name: String
+    var datatype: String
+    var display: CalibreCustomColumnDisplayInfo
+    var isEditable: Bool
+    var colnum: Int
+    var isMultiple: Bool
+    var multipleSeps: [String: String]
+
     enum CodingKeys: String, CodingKey {
-        case table
+        case label
+        case name
+        case datatype
+        case display
+        case isEditable = "is_editable"
+        case colnum
+        case isMultiple = "is_multiple"
+        case multipleSeps = "is_multiple2"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decode(String.self, forKey: .label)
+        name = try container.decode(String.self, forKey: .name)
+        datatype = try container.decode(String.self, forKey: .datatype)
+        display = (try? container.decodeIfPresent(CalibreCustomColumnDisplayInfo.self, forKey: .display)) ?? .init()
+        isEditable = (try? container.decodeIfPresent(Bool.self, forKey: .isEditable)) ?? false
+        colnum = (try? container.decodeIfPresent(Int.self, forKey: .colnum)) ?? 0
+        multipleSeps = (try? container.decodeIfPresent([String: String].self, forKey: .multipleSeps)) ?? [:]
+        let separator = try? container.decodeIfPresent(String.self, forKey: .isMultiple)
+        isMultiple = separator != nil || !multipleSeps.isEmpty
     }
 }
 
+/// The part of an `ajax/books` entry that `CalibreServerService.getLibrarySummary` reads.
+struct CalibreLibrarySummaryBookEntry: Decodable {
+    var last_modified: String
+    var user_metadata: [String: CalibreBookUserMetadataColumn]
+}
+
+/// A book in `ajax/books`. Its `user_metadata` values are read from the JSON itself
+/// (`CalibreBookMetadataValue`), and the columns it describes by `CalibreBookUserMetadataColumn`.
 struct CalibreBookEntry: Codable {
 //    var author_link_map: [String: String] = [:]   //removed as of calibre 6.18
-    var user_metadata: [String: CalibreBookUserMetadataEntry] = [:]
     var tags: [String] = []
     var author_sort: String = ""
     var comments: String? = nil

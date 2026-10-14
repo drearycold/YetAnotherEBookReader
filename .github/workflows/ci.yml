@@ -169,7 +169,7 @@ jobs:
           echo "CALIBRE_BIN=$RUNNER_TEMP/calibre.app/Contents/MacOS" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/calibre.app/Contents/MacOS/calibre-server" --version
 
-      # Seeds a library and two users, and sets the TEST_RUNNER_YABR_CALIBRE_* variables.
+      # Seeds a library and three users, and sets the TEST_RUNNER_YABR_CALIBRE_* variables.
       - name: Start calibre-server
         run: .github/scripts/calibre-contract-server.sh start "$LOGS/calibre"
 

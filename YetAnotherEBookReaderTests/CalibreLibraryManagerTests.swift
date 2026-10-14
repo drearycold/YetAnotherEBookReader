@@ -95,7 +95,6 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager.hideLibrary(libraryId: libId)
         
         XCTAssertTrue(libraryManager.calibreLibraries[libId]?.hidden ?? false)
-        XCTAssertFalse(libraryManager.calibreLibraries[libId]?.autoUpdate ?? true)
         
         // Verify in repository
         let allLibs = libraryRepository.getAllLibraries()
@@ -122,7 +121,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     }
 
     func testUpdateServerLibraryInfo() throws {
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         
         let libraryMap = [
             "existingKey": "Updated Library Name",
@@ -155,7 +154,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     }
 
     func testProbeLibrarySuccess() async throws {
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
         container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
@@ -203,7 +202,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     }
 
     func testProbeLibraryFailure() async throws {
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
         container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
@@ -254,123 +253,58 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertFalse(libraryManager.librarySyncStatus[library.id]?.isSync ?? true)
     }
 
-    func testRegisterProbeLibraryLastModifiedCancellable() async throws {
-        let expectation = XCTestExpectation(description: "Probe last modified succeeds")
-        
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
-        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
-        
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.protocolClasses = [MockURLProtocol.self]
-        let mockSession = URLSession(configuration: sessionConfig)
-        for timeout in [10.0, 600.0] {
-            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
-                let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                container.calibreServerService.metadataSessions[key] = mockSession
-            }
-        }
-        
-        let jsonResponse = """
-        {
-            "result": {
-                "book_ids": [],
-                "data": {
-                    "last_modified": {
-                        "1": {"v": "2026-06-23T18:00:00Z"}
-                    }
+    /// A newer `last_modified` moves the library's generation, which the search and category caches
+    /// compare theirs with: the library is saved and published.
+    func testSyncLibraryPublishesAndSavesANewerLibrary() async throws {
+        library.lastModified = Date(timeIntervalSince1970: 0)
+        libraryManager.calibreLibraries[library.id] = library
+        try libraryRepository.saveLibrary(library)
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers())
+
+        let published = expectation(description: "the newer library is published")
+        let updates = container.calibreUpdates()
+        let observer = Task { @MainActor [libraryId = library.id] in
+            for await update in updates {
+                if case .library(let updatedLibrary) = update, updatedLibrary.id == libraryId {
+                    XCTAssertEqual(updatedLibrary.lastModified, parseLastModified(Self.newestChange))
+                    published.fulfill()
+                    return
                 }
             }
         }
-        """
-        
-        MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, jsonResponse.data(using: .utf8)!)
-        }
-        
-        var localLib = library!
-        localLib.lastModified = Date(timeIntervalSince1970: 0)
-        libraryManager.calibreLibraries[localLib.id] = localLib
-        try libraryRepository.saveLibrary(localLib)
-        
-        let task = Task { @MainActor in
-            for await update in container.calibreUpdates() {
-                if case .library(let updatedLib) = update {
-                    if updatedLib.id == localLib.id {
-                        XCTAssertTrue(updatedLib.lastModified > Date(timeIntervalSince1970: 0))
-                        expectation.fulfill()
-                        return
-                    }
-                }
-            }
-        }
-            
-        await Task.yield()
-        container.publishProbeLibraryLastModifiedRequest(.init(library: localLib, autoUpdateOnly: false, incremental: false))
-        
-        await fulfillment(of: [expectation], timeout: 5.0)
-        task.cancel()
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        await fulfillment(of: [published], timeout: 5.0)
+        observer.cancel()
+        XCTAssertEqual(requests.unexpected, [])
+        let saved = try XCTUnwrap(libraryRepository.getLibrary(id: library.id))
+        XCTAssertEqual(saved.lastModified, parseLastModified(Self.newestChange))
+        XCTAssertEqual(saved.customColumnInfos["read_progress"]?.datatype, "int")
     }
 
-    func testSyncLibraryAndSaveBookMetadata() async throws {
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
-        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
-        
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.protocolClasses = [MockURLProtocol.self]
-        let mockSession = URLSession(configuration: sessionConfig)
-        for timeout in [10.0, 600.0] {
-            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
-                let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                container.calibreServerService.metadataSessions[key] = mockSession
-            }
-        }
-        
-        MockURLProtocol.requestHandler = { request in
-            let path = request.url?.path ?? ""
-            let statusCode: Int
-            let jsonString: String
-            
-            if path.contains("custom_columns") {
-                statusCode = 200
-                jsonString = "{}"
-            } else if path.contains("categories") {
-                statusCode = 200
-                jsonString = "[]"
-            } else if path.contains("list") {
-                statusCode = 200
-                jsonString = """
-                {
-                    "book_ids": [101],
-                    "data": {
-                        "last_modified": {
-                            "101": {"v": "2026-06-23T18:00:00Z"}
-                        }
-                    }
-                }
-                """
-            } else if path.contains("books") {
-                statusCode = 200
-                jsonString = "{}"
-            } else {
-                statusCode = 404
-                jsonString = ""
-            }
-            
-            let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-            return (response, jsonString.data(using: .utf8)!)
-        }
-        
-        let syncReq = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-        await libraryManager.syncLibrary(request: syncReq)
-        
-        let syncStatus = libraryManager.librarySyncStatus[library.id]
-        XCTAssertNotNil(syncStatus)
-        XCTAssertFalse(syncStatus?.isSync ?? true)
-        XCTAssertFalse(syncStatus?.isError ?? true)
-        XCTAssertEqual(syncStatus?.msg, "Success")
+    /// A sync reads the library's summary and categories, and nothing else: no book list.
+    func testSyncLibraryReadsTheSummaryAndTheCategories() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers())
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(requests.unexpected, [])
+        XCTAssertEqual(
+            Set(requests.answered),
+            ["/ajax/search/test_lib", "/ajax/books/test_lib", "/ajax/categories/test_lib"]
+        )
+        let syncStatus = try XCTUnwrap(libraryManager.librarySyncStatus[library.id])
+        XCTAssertFalse(syncStatus.isSync)
+        XCTAssertFalse(syncStatus.isError)
+        XCTAssertEqual(syncStatus.msg, "Success")
+        XCTAssertEqual(syncStatus.cnt, 12)
+        XCTAssertEqual(syncStatus.del, [])
+
+        let columns = try XCTUnwrap(libraryManager.calibreLibraries[library.id]?.customColumnInfos)
+        XCTAssertEqual(columns["read_progress"]?.name, "Read progress")
     }
 
     func testSyncLibraryRefreshesChangedCategoriesWithUpdatedGenerationAndPrunesDeletedCategories() async throws {
@@ -403,74 +337,22 @@ final class CalibreLibraryManagerTests: XCTestCase {
             )
         )
 
-        MockURLProtocol.requestHandler = { request in
-            let path = request.url?.path ?? ""
-            let statusCode = 200
-            let jsonString: String
-
-            if path.contains("custom_columns") {
-                jsonString = "{}"
-            } else if path.contains("/ajax/categories/") {
-                jsonString = """
-                [
-                    {"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true},
-                    {"name": "Tags", "url": "/ajax/category/Tags", "icon": "tag", "is_category": true}
-                ]
-                """
-            } else if path.contains("/cdb/cmd/list") {
-                jsonString = """
-                {
-                    "book_ids": [101],
-                    "data": {
-                        "last_modified": {
-                            "101": {"v": "2026-06-23T18:00:00Z"}
-                        }
-                    }
-                }
-                """
-            } else if path.contains("/ajax/category/Authors") {
-                jsonString = """
-                {
-                    "category_name": "Authors",
-                    "base_url": "",
-                    "total_num": 1,
-                    "offset": 0,
-                    "num": 10000,
-                    "sort": "name",
-                    "sort_order": "asc",
-                    "items": [
-                        {"name": "New Author", "average_rating": 4.5, "count": 7, "url": "new-author", "has_children": false}
-                    ]
-                }
-                """
-            } else if path.contains("/ajax/category/Tags") {
-                jsonString = """
-                {
-                    "category_name": "Tags",
-                    "base_url": "",
-                    "total_num": 1,
-                    "offset": 0,
-                    "num": 10000,
-                    "sort": "name",
-                    "sort_order": "asc",
-                    "items": [
-                        {"name": "New Tag", "average_rating": 0.0, "count": 2, "url": "new-tag", "has_children": false}
-                    ]
-                }
-                """
-            } else {
-                return (
-                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
-                    Data()
-                )
-            }
-
-            let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-            return (response, jsonString.data(using: .utf8)!)
-        }
+        let requests = MockURLProtocol.answer(Self.syncAnswers(categories: """
+        [
+            {"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true},
+            {"name": "Tags", "url": "/ajax/category/Tags", "icon": "tag", "is_category": true}
+        ]
+        """, categoryItems: [
+            "/ajax/category/Authors": Self.categoryItemsJSON(name: "Authors", items: [
+                #"{"name": "New Author", "average_rating": 4.5, "count": 7, "url": "new-author", "has_children": false}"#
+            ]),
+            "/ajax/category/Tags": Self.categoryItemsJSON(name: "Tags", items: [
+                #"{"name": "New Tag", "average_rating": 0.0, "count": 2, "url": "new-tag", "has_children": false}"#
+            ])
+        ]))
 
         await libraryManager.syncLibrary(
-            request: CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
+            request: CalibreSyncLibraryRequest(library: library)
         )
 
         // The category service writes from its own actor, and the main thread's Realm
@@ -492,78 +374,141 @@ final class CalibreLibraryManagerTests: XCTestCase {
                 categoryName: "Publisher"
             )
         )
+        XCTAssertEqual(requests.unexpected, [])
     }
 
-    func testProbeLastModifiedTriggersCategoryRefresh() async throws {
+    /// A summary that didn't arrive says so, and changes nothing: no date, no count, and no book is
+    /// taken for deleted.
+    func testAFailedSummaryIsReportedAndChangesNothing() async throws {
         let oldLastModified = Date(timeIntervalSince1970: 100)
         library.lastModified = oldLastModified
-        library.autoUpdate = false
         libraryManager.calibreLibraries[library.id] = library
         try libraryRepository.saveLibrary(library)
         configureReachableMockSession()
+        var answers = Self.syncAnswers()
+        answers.removeValue(forKey: "/ajax/search/test_lib")
+        _ = MockURLProtocol.answer(answers)
 
-        MockURLProtocol.requestHandler = { request in
-            let path = request.url?.path ?? ""
-            let jsonString: String
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
 
-            if path.contains("/cdb/cmd/list") {
-                jsonString = """
-                {
-                    "result": {
-                        "book_ids": [101],
-                        "data": {
-                            "last_modified": {
-                                "101": {"v": "2026-06-23T18:00:00Z"}
-                            }
-                        }
-                    }
-                }
-                """
-            } else if path.contains("custom_columns") {
-                jsonString = "{}"
-            } else if path.contains("/ajax/categories/") {
-                jsonString = """
-                [
-                    {"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true}
-                ]
-                """
-            } else if path.contains("/ajax/category/Authors") {
-                jsonString = """
-                {
-                    "category_name": "Authors",
-                    "base_url": "",
-                    "total_num": 1,
-                    "offset": 0,
-                    "num": 10000,
-                    "sort": "name",
-                    "sort_order": "asc",
-                    "items": [
-                        {"name": "Probe Author", "average_rating": 4.0, "count": 3, "url": "probe-author", "has_children": false}
-                    ]
-                }
-                """
-            } else {
-                return (
-                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
-                    Data()
-                )
-            }
+        let syncStatus = try XCTUnwrap(libraryManager.librarySyncStatus[library.id])
+        XCTAssertFalse(syncStatus.isSync)
+        XCTAssertTrue(syncStatus.isError)
+        XCTAssertNotEqual(syncStatus.msg, "Success")
+        XCTAssertNil(syncStatus.cnt)
+        XCTAssertEqual(syncStatus.del, [])
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, oldLastModified)
+    }
 
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, jsonString.data(using: .utf8)!)
-        }
+    /// A deleted book changes no other book, so calibre's newest change stays put. A book count
+    /// that changed since the last summary moves the generation instead, once, so the search and
+    /// category caches are fetched again.
+    func testAChangedBookCountMovesTheGenerationOnce() async throws {
+        let newest = try XCTUnwrap(parseLastModified(Self.newestChange))
+        library.lastModified = newest
+        libraryManager.calibreLibraries[library.id] = library
+        try libraryRepository.saveLibrary(library)
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, cnt: 13)
+        configureReachableMockSession()
+        _ = MockURLProtocol.answer(Self.syncAnswers())
 
-        libraryManager.startProbeLibraryLastModifiedTask()
-        await Task.yield()
-        container.publishProbeLibraryLastModifiedRequest(
-            .init(library: library, autoUpdateOnly: false, incremental: false)
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        let moved = try XCTUnwrap(libraryManager.calibreLibraries[library.id]?.lastModified)
+        XCTAssertGreaterThan(moved, newest)
+        let saved = try XCTUnwrap(libraryRepository.getLibrary(id: library.id))
+        XCTAssertEqual(saved.lastModified.timeIntervalSince1970, moved.timeIntervalSince1970, accuracy: 0.0001)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.cnt, 12)
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, moved)
+    }
+
+    /// A category that couldn't be refreshed fails the sync, rather than showing it as a success.
+    func testAFailedCategoryIsReported() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers(categories: """
+        [{"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true}]
+        """))
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(requests.unexpected, ["/ajax/category/Authors"])
+        let syncStatus = try XCTUnwrap(libraryManager.librarySyncStatus[library.id])
+        XCTAssertFalse(syncStatus.isSync)
+        XCTAssertTrue(syncStatus.isError)
+        XCTAssertNotEqual(syncStatus.msg, "Success")
+        XCTAssertEqual(syncStatus.cnt, 12)
+    }
+
+    /// A library removed while its summary is read stays removed, and no categories are cached for it.
+    func testARemovedLibraryIsNotSavedOrGivenCategories() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers())
+        await libraryManager.removeLibrary(library: library)
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(Set(requests.answered), ["/ajax/search/test_lib", "/ajax/books/test_lib"])
+        XCTAssertNil(libraryManager.calibreLibraries[library.id])
+        XCTAssertNil(libraryRepository.getLibrary(id: library.id))
+    }
+
+    /// Browsing reads books with the same `ajax/books` request, and keeps the list of books
+    /// unavailable on the server as well.
+    func testBrowsingListsABookCalibreAnswersNullForAndClearsOneItHas() async throws {
+        configureReachableMockSession()
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, del: [101])
+        _ = MockURLProtocol.answer([
+            "/ajax/search/test_lib": """
+            {"total_num": 2, "sort_order": "asc", "num_books_without_search": 2, "offset": 0, "num": 2,
+             "sort": "sort", "base_url": "/ajax/search/test_lib", "query": "browse",
+             "library_id": "test_lib", "book_ids": [101, 102], "vl": ""}
+            """,
+            "/ajax/books/test_lib": #"{"101": \#(Self.bookEntryJSON(title: "Back")), "102": null}"#
+        ])
+
+        _ = try await container.librarySearchService.searchAndFetchMetadata(
+            library: library,
+            criteria: SearchCriteria(
+                searchString: "browse",
+                sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+                filterCriteriaCategory: [:]
+            ),
+            limit: 100,
+            force: true
         )
 
-        let authors = try await waitForCachedCategory(named: "Authors") { result in
-            result.items.map(\.name) == ["Probe Author"]
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [102])
+    }
+
+    /// calibre answers null for a book it no longer has. Settings lists it, but its record (here
+    /// a shelf book's) stays; once calibre has it again, it's no longer listed. A book that failed
+    /// to sync before is no longer listed as failed once it's read.
+    func testABookCalibreAnswersNullForIsListedNotRemoved() async throws {
+        configureReachableMockSession()
+        for id: Int32 in [101, 102] {
+            var book = CalibreBook(id: id, library: library)
+            book.inShelf = true
+            container.bookManager.updateBook(book: book)
         }
-        XCTAssertGreaterThan(authors.generation, oldLastModified)
-        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, authors.generation)
+        libraryManager.librarySyncStatus[library.id] = .init(library: library, err: [101])
+        var answers = ["/ajax/books/test_lib": #"{"101": \#(Self.bookEntryJSON(title: "Kept")), "102": null}"#]
+        _ = MockURLProtocol.answer(answers)
+
+        await container.bookManager.getBooksMetadata(request: .init(library: library, books: [101, 102], getAnnotations: false))
+
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [102])
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.err, [])
+        XCTAssertTrue(container.bookManager.bookExists(forPrimaryKey: CalibreBook(id: 102, library: library).inShelfId))
+
+        answers["/ajax/books/test_lib"] = #"{"102": \#(Self.bookEntryJSON(title: "Back"))}"#
+        _ = MockURLProtocol.answer(answers)
+
+        await container.bookManager.getBooksMetadata(request: .init(library: library, books: [102], getAnnotations: false))
+
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [])
     }
 
     func testPopulateLocalLibraryBooksWithFiles() throws {
@@ -595,7 +540,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     private func configureReachableMockSession() {
         URLProtocol.registerClass(MockURLProtocol.self)
 
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(
             server: server,
             isPublic: false,
@@ -618,6 +563,46 @@ final class CalibreLibraryManagerTests: XCTestCase {
                 container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
+    }
+
+    private static let newestChange = "2026-06-23T18:00:00.123456+00:00"
+
+    /// What calibre answers `syncLibrary` for the test library: 12 books, the newest book 101 with
+    /// an int column made by `calibredb add_custom_column` ("display": {}), and the categories.
+    private static func syncAnswers(categories: String = "[]", categoryItems: [String: String] = [:]) -> [String: String] {
+        [
+            "/ajax/search/test_lib": """
+            {"total_num": 12, "sort_order": "desc", "num_books_without_search": 12, "offset": 0, "num": 1,
+             "sort": "last_modified", "base_url": "/ajax/search/test_lib", "query": null,
+             "library_id": "test_lib", "book_ids": [101], "vl": ""}
+            """,
+            "/ajax/books/test_lib": """
+            {"101": {"last_modified": "\(newestChange)", "user_metadata": {"#read_progress": {
+                "table": "custom_column_1", "column": "value", "datatype": "int", "is_multiple": null,
+                "kind": "field", "name": "Read progress", "search_terms": ["#read_progress"],
+                "label": "read_progress", "colnum": 1, "display": {}, "is_custom": true,
+                "is_category": false, "link_column": "value", "category_sort": "value", "is_csp": false,
+                "is_editable": true, "rec_index": 23, "#value#": null, "#extra#": null, "is_multiple2": {}}}}}
+            """,
+            "/ajax/categories/test_lib": categories
+        ].merging(categoryItems) { $1 }
+    }
+
+    private static func categoryItemsJSON(name: String, items: [String]) -> String {
+        """
+        {"category_name": "\(name)", "base_url": "", "total_num": \(items.count), "offset": 0, "num": 10000,
+         "sort": "name", "sort_order": "asc", "items": [\(items.joined(separator: ", "))]}
+        """
+    }
+
+    private static func bookEntryJSON(title: String) -> String {
+        """
+        {"title": "\(title)", "uuid": "uuid-\(title)", "authors": ["Author"], "formats": ["epub"],
+         "user_metadata": {}, "tags": [], "author_sort": "", "title_sort": "", "thumbnail": "",
+         "timestamp": "", "user_categories": {}, "cover": "", "last_modified": "\(newestChange)",
+         "application_id": 0, "author_sort_map": {}, "identifiers": {}, "languages": [], "pubdate": "",
+         "rating": 0.0, "format_metadata": {}, "category_urls": {}}
+        """
     }
 
     private func waitForCachedCategory(
