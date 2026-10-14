@@ -5,6 +5,50 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## PDF Outline Lookup Takes 1-Based Pages (2026-10-14, branch)
+
+Branch `claude/mystifying-galileo-86577e`, based on `main` after #119.
+
+- **Bug:** `YabrEBookReaderPDFMetaSource.yabrPDFOutline(_:for:)` handed its
+  page to the 0-based `PDFDocument.page(at:)`, but every caller passes a
+  1-based `pageRef?.pageNumber`. It read the next page's text, so a chapter's
+  last page reported the next chapter and the document's last page none. That
+  reached:
+  - PDF bookmark titles (`"<outline label>, p. N"`,
+    `PDFBookmarkManager.addBookmark`);
+  - bookmark and highlight list sections and their headers
+    (`YabrPDFBookmarkList`, `YabrPDFHighlightList`,
+    `YabrPDFTableViewController`);
+  - search results (`"Page N - <outline label>"`, `YabrPDFSearchList`).
+- **Fix:** `page(at: page - 1)`, nil below 1; the `YabrPDFMetaSource`
+  protocol documents the base. Callers checked, all 1-based:
+  - bookmarks: `currentDestination.page?.pageRef?.pageNumber`;
+  - highlights: `PDFHighlight.PageLocation.page`, from
+    `selectionPage.pageRef?.pageNumber` in `PDFAnnotationManager`, read back
+    with `page - 1` in `PDFReaderSurface`;
+  - search hits: `pageRef?.pageNumber`;
+  - list section keys: an outline destination's `pageRef?.pageNumber`.
+- **Not changed:**
+  - Bookmarks saved before the fix keep their titles. On a chapter's last
+    page that is the next chapter's name. Renaming them would be a retitle: a
+    tombstone plus a new record on calibre.
+  - The lookup needs a text layer, so a scanned page has no outline and its
+    bookmark is titled `"Page N"`.
+- **Tests:** `YabrEBookReaderPDFMetaSourceTests` (new):
+  - a 7-page `UIGraphicsPDFRenderer` PDF with chapters starting on pages 1, 4
+    and 6, read back through `dataRepresentation()` and hosted in a
+    `YabrPDFView`;
+  - checks the first and last page of each chapter, the document's last page,
+    the section key (the chapter's start page), and pages 0, -1 and 8.
+
+  With the old lookup it fails 6 assertions (pages 3, 5, 7, both section keys,
+  and page 0, which read page 1).
+- **Verified** (iPhone 17): the full scheme ran 919 unit tests with 0
+  failures and 20 skipped (the 19 contract tests, no server running, and the
+  benchmark), plus the 5 UI journeys. The Mac Catalyst build succeeds.
+  `/tmp/YabrSourcePackages` was gone again, so packages and derived data were
+  in the session scratchpad.
+
 ## Unique Bookmark Titles, Merged by Title (2026-10-14, branch)
 
 Branch `claude/unique-bookmark-titles`, based on `main` after #118.
@@ -58,9 +102,10 @@ Branch `claude/unique-bookmark-titles`, based on `main` after #118.
   including all 19 contract tests, plus the 5 UI journeys. The Mac Catalyst
   build succeeds. Packages and derived data were in the session scratchpad
   (`/tmp/YabrSourcePackages` was gone).
-- **Found, filed separately:** `yabrPDFOutline(_:for:)` passes the 1-based
-  page to the 0-based `page(at:)`, so a chapter's last page reports the next
-  chapter (titles and list sections alike).
+- **Found, fixed after:** `yabrPDFOutline(_:for:)` passed the 1-based page to
+  the 0-based `page(at:)`, so a chapter's last page reported the next chapter
+  (titles and list sections alike). See "PDF Outline Lookup Takes 1-Based
+  Pages".
 - **Not changed:** bookmarks at one position are one to FolioReader
   (`removeBookmark(pos:)` removes all of them); legacy cross-format entries on
   the server (PDF bookmarks in an EPUB's list) are left alone.

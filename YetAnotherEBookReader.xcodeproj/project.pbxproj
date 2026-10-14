@@ -51,6 +51,7 @@
 		2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
 		2AC3EC3E25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */; };
 		2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */; };
+		5E1B0C0230A0A10000AA0001 /* YabrEBookReaderPDFMetaSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1B0C0130A0A10000AA0001 /* YabrEBookReaderPDFMetaSourceTests.swift */; };
 		2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */; };
 		2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */; };
 		5EAD1F0430A0A10000BB0001 /* PDFReadingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */; };
@@ -632,6 +633,7 @@
 		2AC3EC3F25BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E7F000012026071100000001 /* UITestPerformance.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = UITestPerformance.xctestplan; path = UITestPerformance.xctestplan; sourceTree = "<group>"; };
 		2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewControllerTests.swift; sourceTree = "<group>"; };
+		5E1B0C0130A0A10000AA0001 /* YabrEBookReaderPDFMetaSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderPDFMetaSourceTests.swift; sourceTree = "<group>"; };
 		2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFMarginCropTests.swift; sourceTree = "<group>"; };
 		2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageViewportFitterTests.swift; sourceTree = "<group>"; };
 		5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReadingFlowTests.swift; sourceTree = "<group>"; };
@@ -1224,6 +1226,7 @@
 				E7939151261F1A47004AB106 /* SupportInfoViewModelTests.swift */,
 				E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */,
 				2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */,
+				5E1B0C0130A0A10000AA0001 /* YabrEBookReaderPDFMetaSourceTests.swift */,
 				2AC9D74130A0A10000AA0001 /* YabrPDFMarginCropTests.swift */,
 				2AC9D74630A0A10000AA0001 /* PDFPageViewportFitterTests.swift */,
 				5EAD1F0330A0A10000BB0001 /* PDFReadingFlowTests.swift */,
@@ -2003,6 +2006,7 @@
 				A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */,
 				E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */,
 				2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */,
+				5E1B0C0230A0A10000AA0001 /* YabrEBookReaderPDFMetaSourceTests.swift in Sources */,
 				2AC9D74230A0A10000AA0001 /* YabrPDFMarginCropTests.swift in Sources */,
 				2AC9D74730A0A10000AA0001 /* PDFPageViewportFitterTests.swift in Sources */,
 				5EAD1F0430A0A10000BB0001 /* PDFReadingFlowTests.swift in Sources */,
