@@ -118,7 +118,8 @@ stores, merges and refuses what the app sends. They skip unless
 `.github/scripts/calibre-contract-server.sh start DIR` seeds an empty `DIR`:
 - a library named `Test Library 测试` (key `Test_Library_测试`) with one EPUB
   and an integer custom column `#read_progress`;
-- users `contract-writer` and the read-only `contract-reader`.
+- users `contract-writer`, the read-only `contract-reader`, and
+  `contract-restricted`, whose per-library restriction matches no book.
 
 It starts the server on port 18080 with Digest authentication and prints the
 variables to set. It uses calibre's command-line tools from
@@ -128,7 +129,7 @@ calibre app first. To run them locally:
 
 ```bash
 .github/scripts/calibre-contract-server.sh start /tmp/yabr-calibre
-TEST_RUNNER_YABR_CALIBRE_URL=http://127.0.0.1:18080 TEST_RUNNER_YABR_CALIBRE_USER=contract-writer TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass TEST_RUNNER_YABR_CALIBRE_READONLY_USER=contract-reader TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=reader-pass xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
+TEST_RUNNER_YABR_CALIBRE_URL=http://127.0.0.1:18080 TEST_RUNNER_YABR_CALIBRE_USER=contract-writer TEST_RUNNER_YABR_CALIBRE_PASSWORD=writer-pass TEST_RUNNER_YABR_CALIBRE_READONLY_USER=contract-reader TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=reader-pass TEST_RUNNER_YABR_CALIBRE_RESTRICTED_USER=contract-restricted TEST_RUNNER_YABR_CALIBRE_RESTRICTED_PASSWORD=restricted-pass xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/CalibreServerContractTests
 .github/scripts/calibre-contract-server.sh stop /tmp/yabr-calibre
 ```
 
@@ -152,21 +153,29 @@ What calibre 9.11 does, as the tests pin it:
 - **Credentials calibre rejects** end as a cancelled request in the app (the
   task delegate stops answering the challenge). The probe reports it as
   "cancelled, server may require authentication".
-- **Library sync:**
-  - The last-modified probe (`syncLegacyLibraryResult`), categories, book
-    metadata (`ajax/books`, `get/json`) and `set_metadata` work.
-  - `last_modified` carries microseconds and the server's offset after an edit;
-    `parseLastModified` reads it.
-  - Known bugs:
-    - The full sync's `/cdb/cmd/list/<key>` and `/cdb/cmd/custom_columns/<key>`
-      answer 404. calibre's only route is `/cdb/cmd/{which}/{version=0}`, with
-      `?library_id=<key>`, the same in 8.15 and 9.11.
-    - `syncLibrary(resultPrev:)` swallows that failure (no `isError`), so
-      `CalibreLibraryManager.syncLibrary` reports "Success" and marks every
-      non-shelf book of the library as deleted (`librarySyncStatus.del`), which
-      Settings' remove-deleted button would then delete locally.
-    - A custom column with `"display": {}` fails
-      `CalibreCustomColumnDisplayInfo`'s decoding.
+- **Library sync** (`CalibreLibraryManager.syncLibrary`) lists no books, and
+  uses the requests browsing makes (`getLibrarySummary`):
+  - `ajax/search`, newest change first, for the book count and the newest
+    book;
+  - `ajax/books` for that book's `last_modified`, the generation of the search
+    and category caches, and its `user_metadata`, which describes the custom
+    columns. calibre sets every column on every book, valued or not
+    (`Cache._get_metadata`), and one made with `calibredb add_custom_column`
+    has `"display": {}`;
+  - `ajax/categories`, then each category.
+
+  `last_modified` carries microseconds and the server's offset after an edit;
+  `parseLastModified` reads it.
+- **A user with a per-library restriction** gets 403 from calibre's `cdb`
+  interface ("Cannot use the command-line db interface with a user who has
+  per library restrictions"), so the sync doesn't use it. `ajax/search`
+  answers within the restriction.
+- **Deleted books** show per book: `ajax/books` answers null for a book calibre
+  doesn't have, and for one a restricted user may not see.
+  `BookRepository.persistMetadataEntries` reports it, and Settings lists it
+  (`librarySyncStatus.del`). Nothing is deleted locally.
+- **Metadata:** book metadata (`ajax/books`, `get/json`) and `set_metadata`
+  work.
 - **Downloads:** `BookDownloadManager` saves the EPUB. calibre writes current
   metadata into the file it sends, so the size can differ from
   `format_metadata`.
@@ -285,7 +294,10 @@ Use managers for app-domain coordination. Keep new business logic out of
 - `CalibreServerManager`: server list, credentials, reachability probes,
   DSReader Helper configuration.
 - `CalibreLibraryManager`: library list, local library bootstrapping, library
-  sync state, category/library probing.
+  probing, and the library sync: its summary (book count, newest change,
+  custom columns) and categories, never a book list. Books are fetched as
+  they're browsed or shelved (`LibrarySearchService`,
+  `CalibreBookManager.getBooksMetadata`).
 - `CalibreBookManager`: shelf state, book CRUD coordination, cache state,
   Goodreads shelf hooks.
 - `ReadingSessionManager`: selected reading book, reader/format preference,

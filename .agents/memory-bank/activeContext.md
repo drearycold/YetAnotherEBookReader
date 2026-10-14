@@ -5,6 +5,107 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Library Sync Without a Book List (2026-10-14, branch)
+
+Branch `claude/retire-library-sync-book-list`, based on `main` after #120. This
+carries out the decision in "Calibre Contract Coverage" below.
+
+- **`CalibreLibraryManager.syncLibrary(request:)` now** reads, with the
+  requests browsing makes:
+  - `CalibreServerService.getLibrarySummary`: `ajax/search` with
+    `sort=last_modified&sort_order=desc&num=1`, then
+    `ajax/books?ids=<newest>&category_urls=false`.
+    - The book count (`num_books_without_search`) goes to
+      `librarySyncStatus.cnt`.
+    - The newest `last_modified` is kept only if newer. The custom columns come
+      from that book's `user_metadata` (`CalibreBookUserMetadataColumn`). Both
+      are saved on the library and published as `.library`.
+  - `getLibraryCategories(library:)`, then `refreshCategoryCaches`.
+
+  A failure in either sets `isError` with its message. Nothing is inferred
+  from an answer that didn't arrive.
+- **Removed:**
+  - the book list: `syncLibraryResult` / `syncLibrary(resultPrev:)`,
+    `saveBookMetadata` (`.save`, `.updateDeleted`, `.complete`), and
+    `BookRepository.saveBookSyncRecords`, `findDeletedBookIds`,
+    `countAndNeedUpdateBooks` and `deleteBooks(library:ids:)`;
+  - `getCustomColumns*`, `getLegacyCustomColumns*` and
+    `syncLegacyLibraryResult`, so sync makes no `cdb` request at all;
+  - the types `CalibreCdbCmdListResult`, `CalibreSyncLibraryResult`,
+    `CalibreSyncLibraryBooksMetadata` and `BookMetadataSyncRecord`, and
+    `CalibreSyncStatus.upd`, which nothing filled any more;
+  - the last-modified probe stream (`publishProbeLibraryLastModifiedRequest`,
+    `startProbeLibraryLastModifiedTask`). `probeServer` ran `syncLibrary` *and*
+    a probe for each library, and `syncLibrary` now reads `last_modified`
+    itself;
+  - `incremental` on `CalibreProbeServerRequest` and
+    `probeServersReachability`, and `autoUpdateOnly` / `incremental` on
+    `CalibreSyncLibraryRequest`.
+- **Last-modified probe: replaced, not kept.** calibre's `cdb_run` answers 403
+  to a user with per-library restrictions (checked against 9.11).
+  `ajax/search` answers within the restriction.
+- **Custom columns:**
+  - `CalibreCustomColumnInfo` and `CalibreCustomColumnDisplayInfo` decode
+    leniently. Only label, name and datatype are required; a display field
+    that's missing or of another type is dropped.
+  - `normalized` is removed: nothing read it, and `ajax/books` doesn't give it.
+    Realm keeps the JSON with the `cdb` key names.
+  - `CalibreBookUserMetadataEntry` (it decodes `table` only) is unchanged.
+    Widening it would fail every book's decoding on, say,
+    `allow_half_stars: true` against `display: [String: String?]`.
+  - Checked in calibre's source (`Cache._get_metadata`) and against a library
+    of 2 books × 3 columns: every column is on every book, valued or not.
+- **Deletions are per book, and only shown.**
+  `CalibreBookManager.getBooksMetadata` now always records
+  `persistMetadataEntries`' `booksDeleted` in `librarySyncStatus.del`. Before,
+  that happened only when other books errored. A book leaves the set once
+  calibre has it again.
+  - The remove-deleted toolbar button and `removeDeleteBooksFromServer` are
+    gone: calibre also answers null for a book a restricted user may not see
+    (`ajax.books`, `allowed_book_ids`).
+- **"Available when Offline" removed:**
+  - the toggle, `LibraryViewModel.setAutoUpdate` and the play icons;
+  - `CalibreLibrary.autoUpdate` and `CalibreLibraryRealm.autoUpdate`. This is
+    **schema 146**: `CFBundleVersion` in both Info.plists and four
+    `CURRENT_PROJECT_VERSION`s;
+  - the `/realm` search source for such libraries;
+  - `buildProbeLibraryTask`'s `/realm` fallback, which now needs a reachable
+    URL, and with it the service's `librarySyncStatus` accessor.
+- **Old non-shelf `CalibreBookRealm` records stay.** Search caches point at
+  them, a stale library generation refetches every listed book, and
+  `writeMetadataEntries` creates records on demand. Removing a library deletes
+  its records.
+- **Unchanged limit:** deleting a book changes no other book's
+  `last_modified`, so the generation doesn't move. Search caches notice through
+  `total_num` (`shouldRebuildAfterIncrementalFetch`). The `cdb` probe had the
+  same limit.
+- **Tests:**
+  - **Contract: 20 (was 18).**
+    - The three full-sync tests are removed.
+    - The probe and legacy-column tests now read `getLibrarySummary`, with no
+      `XCTExpectFailure` left.
+    - New: a restricted user's summary, a restricted user's `null`, a whole
+      sync through the manager, and per-book deletion.
+    - The seed adds `contract-restricted` (`title:"=No Such Book"`), so reseed
+      from an empty DIR.
+  - **Mocks:**
+    - `MockURLProtocol.answer(_:)` answers exact paths and logs any other. The
+      library and server manager tests and the service tests use it.
+    - New: `testABookCalibreAnswersNullForIsListedNotRemoved`,
+      `testAFailedSummaryIsReportedAndChangesNothing`,
+      `testPersistMetadataEntriesReportsANullEntryAsDeleted` and
+      `testCalibreCustomColumnInfoToleratesAnEmptyOrUnexpectedDisplay`.
+- **Verified (iPhone 17):**
+  - The full scheme ran 920 unit tests with 0 failures and 21 skipped (the 20
+    contract tests, with no server running, and the benchmark). The 5 UI
+    journeys passed.
+  - The contract tests passed 20 of 20, twice, against a freshly seeded calibre
+    9.11, and calibre's access log had no 404. The only `cdb` request left is
+    `set_metadata`.
+  - The Mac Catalyst build succeeds.
+  - `/tmp/YabrSourcePackages` was gone again, so packages and derived data
+    were in the session scratchpad.
+
 ## PDF Outline Lookup Takes 1-Based Pages (2026-10-14, branch)
 
 Branch `claude/mystifying-galileo-86577e`, based on `main` after #119.
@@ -260,6 +361,8 @@ Branch `claude/highlight-uuid-ub`, not yet pushed.
     - Filed as the task "Retire the full library sync's book list". No need to
       run the tests against calibre 8.15: its `/cdb/cmd` route is the same as
       9.11's.
+    - Done on `claude/retire-library-sync-book-list` ("Library Sync Without a
+      Book List" above).
 - **Found, filed separately:** calibre merges bookmarks by `title`, the app by
   `pos`, and the PDF reader titles bookmarks by chapter, so two in one chapter
   collapse on the server ("Give each PDF bookmark a title calibre can keep").
