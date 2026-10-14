@@ -329,6 +329,27 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(runtimeResults.first?.bookId, book.bookPrefId)
     }
 
+    /// The book's bookmarks hold its PDF's too, which other devices sync in and FolioReader can't
+    /// open.
+    func testBookmarkProviderListsEPUBBookmarksOnly() {
+        let provider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
+        provider.folioReaderBookmark(FolioReader(), added: makeBookmark(bookId: folioReaderBookId, page: 6, pos: "epubcfi(/6/6)")) { error in
+            XCTAssertNil(error)
+        }
+        _ = container.annotationRepository.saveBookmark(TestFixtures.makeBookmark(
+            bookId: book.bookPrefId,
+            page: 6,
+            pos_type: BookBookmarkRealm.PDFBookmarkPosType,
+            pos: #"{"page":6,"offset":[0,0]}"#,
+            title: "Chapter 1, p. 6"
+        ))
+
+        XCTAssertEqual(container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).count, 2)
+        XCTAssertEqual(provider.folioReaderBookmark(FolioReader(), allByBookId: folioReaderBookId, andPage: nil).map(\.pos), ["epubcfi(/6/6)"])
+        XCTAssertEqual(provider.folioReaderBookmark(FolioReader(), allByBookId: folioReaderBookId, andPage: 6).map(\.pos), ["epubcfi(/6/6)"])
+        XCTAssertEqual(provider.folioReaderBookmark(FolioReader()).map(\.pos), ["epubcfi(/6/6)"])
+    }
+
     // MARK: - Regression tests for FolioReader highlight position restore fix
 
     func testBookHighlightToFolioReaderHighlightPopulatesEncodedContent() throws {

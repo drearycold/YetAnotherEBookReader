@@ -12,7 +12,11 @@ import OSLog
 protocol AnnotationRepositoryProtocol {
     // Bookmarks CRUD
     func getBookmarks(forBookId bookId: String, excludeRemoved: Bool) -> [BookBookmark]
+    /// The visible bookmark at `pos`.
     func getBookmark(byPos pos: String, bookId: String) -> BookBookmark?
+    /// Adds a bookmark, or retitles the one at its position. The title is made unique in the
+    /// book (`BookmarkMerge.uniqueTitle`). Returns 1 if added, 2 if retitled, 0 if unchanged,
+    /// and the title it had.
     func saveBookmark(_ bookmark: BookBookmark) -> (Int, String?)
     func removeBookmark(pos: String, bookId: String)
     
@@ -24,7 +28,9 @@ protocol AnnotationRepositoryProtocol {
     func updateHighlightNote(id: String, note: String?)
     
     // Remote Sync (Calibre Server Merges)
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int
+    /// Merges calibre's bookmarks of one format (see `BookmarkMerge`) and returns the ones to
+    /// upload to it.
+    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry]
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int
 }
 
@@ -128,7 +134,7 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     
     func getBookmark(byPos pos: String, bookId: String) -> BookBookmark? {
         guard let realm = getRealm() else { return nil }
-        let objects = realm.objects(BookBookmarkRealm.self).filter("bookId == %@ AND pos == %@", bookId, pos)
+        let objects = realm.objects(BookBookmarkRealm.self).filter("bookId == %@ AND pos == %@ AND removed != true", bookId, pos)
         return objects.first?.toDomain()
     }
     
@@ -139,19 +145,25 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         var oldTitle: String? = nil
         
         try? realm.write {
-            // Check if pos exists
-            let existing = realm.objects(BookBookmarkRealm.self).filter("bookId == %@ AND pos == %@ AND removed != true", bookmark.bookId, bookmark.pos)
-            if let first = existing.first {
-                oldTitle = first.title
-                if first.title != bookmark.title {
-                    first.applyDomain(bookmark)
-                    returnStatus = 2 // updated title
-                } else {
-                    returnStatus = 0 // same
-                }
+            let visible = realm.objects(BookBookmarkRealm.self).filter("bookId == %@ AND removed != true", bookmark.bookId)
+            let existing = visible.filter("pos == %@", bookmark.pos).first
+            // calibre keeps one bookmark per title.
+            let taken = Set(visible.filter { $0._id != existing?._id }.map(\.title))
+            var saved = bookmark
+            saved.title = BookmarkMerge.uniqueTitle(bookmark.title, avoiding: taken)
+            
+            if let existing {
+                oldTitle = existing.title
+                guard existing.title != saved.title else { return }
+                // To calibre a new title is a new bookmark: remove the old title, so it goes from
+                // the server and other devices too.
+                existing.removed = true
+                existing.date = Date()
+                saved.id = ObjectId.generate().stringValue
+                realm.add(saved.makeRealmObject())
+                returnStatus = 2 // updated title
             } else {
-                let bookmarkRealm = bookmark.makeRealmObject()
-                realm.add(bookmarkRealm, update: .modified)
+                realm.add(saved.makeRealmObject(), update: .modified)
                 returnStatus = 1 // added new
             }
         }
@@ -215,143 +227,53 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     }
     
     // MARK: - Remote Sync (Calibre Server Merges)
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
-        guard let realm = getRealm(forBookId: bookId) else { return 0 }
-        return syncBookmarks(entries: entries, forBookId: bookId, using: realm)
+    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry] {
+        guard let realm = getRealm(forBookId: bookId) else { return [] }
+        return syncBookmarks(entries: entries, forBookId: bookId, posType: posType, using: realm)
     }
     
-    private func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, using realm: Realm) -> Int {
+    private func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String, using realm: Realm) -> [CalibreBookAnnotationBookmarkEntry] {
         let state = AppPerformanceSignpost.begin("BookmarkMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("BookmarkMerge", state, "Entries: \(entries.count)")
         }
         
-        let bookObjects = realm.objects(BookBookmarkRealm.self).filter("bookId == %@", bookId)
-        
-        var pending = bookObjects.reduce(into: Set<String>()) { partialResult, object in
-            partialResult.insert(object.pos)
+        // A background Realm cached for this thread doesn't advance on its own.
+        if !realm.isInWriteTransaction {
+            realm.refresh()
         }
+        let local = realm.objects(BookBookmarkRealm.self).filter("bookId == %@", bookId).map { $0.toDomain() }
+        let plan = BookmarkMerge.plan(local: Array(local), remote: entries, posType: posType, bookId: bookId)
+        guard !plan.updated.isEmpty || !plan.inserted.isEmpty else { return plan.upload }
         
-        var localBookmarksByPos = [String: [BookBookmarkRealm]]()
-        for obj in bookObjects {
-            localBookmarksByPos[obj.pos, default: []].append(obj)
-        }
-        for (pos, objs) in localBookmarksByPos {
-            localBookmarksByPos[pos] = objs.sorted(by: { $0.date > $1.date })
-        }
-        
-        struct RemoteNewestBookmark {
-            let entry: CalibreBookAnnotationBookmarkEntry
-            let date: Date
-        }
-        
-        var newestRemoteByPos = [String: RemoteNewestBookmark]()
-        for entry in entries {
-            guard entry.type == "bookmark",
-                  let date = parseAnnotationDate(entry.timestamp)
-            else { continue }
-            
-            if let existing = newestRemoteByPos[entry.pos] {
-                if date > existing.date {
-                    newestRemoteByPos[entry.pos] = RemoteNewestBookmark(entry: entry, date: date)
-                }
-            } else {
-                newestRemoteByPos[entry.pos] = RemoteNewestBookmark(entry: entry, date: date)
+        let changesBlock = {
+            for bookmark in plan.updated {
+                guard let id = try? ObjectId(string: bookmark.id),
+                      let object = realm.object(ofType: BookBookmarkRealm.self, forPrimaryKey: id)
+                else { continue }
+                object.applyDomain(bookmark)
+            }
+            for bookmark in plan.inserted {
+                realm.add(bookmark.makeRealmObject())
             }
         }
         
-        struct BookmarkAction {
-            enum ActionType {
-                case remove(objects: [BookBookmarkRealm])
-                case add(pos: String, posType: String, title: String, date: Date, removed: Bool, page: Int)
-            }
-            let type: ActionType
-        }
-        
-        var actions = [BookmarkAction]()
-        
-        for (pos, newestRemote) in newestRemoteByPos {
-            let entryNewest = newestRemote.entry
-            let entryNewestDate = newestRemote.date
-            
-            let objects = localBookmarksByPos[pos] ?? []
-            var hasVisible = !objects.filter({ !$0.removed }).isEmpty
-            
-            if let objectNewest = objects.first {
-                let diff = objectNewest.date.timeIntervalSince(entryNewestDate)
-                if abs(diff) < 0.1 {
-                    // same date/approximate, ignore server
-                    pending.remove(pos)
-                } else if diff < -0.1 {
-                    // server is newer by at least 0.1s -> remove local visible
-                    let visibleObjects = objects.filter { !$0.removed }
-                    if !visibleObjects.isEmpty {
-                        actions.append(BookmarkAction(type: .remove(objects: visibleObjects)))
-                    }
-                    pending.remove(pos)
-                    hasVisible = false
-                } else {
-                    // local is newer by at least 0.1s -> ignore server, keep pos in pending
-                }
-            }
-            
-            guard !hasVisible, entryNewest.removed != true else { continue }
-            
-            // Validate CFI and parse page before transaction
-            guard entryNewest.pos_type == "epubcfi",
-                  entryNewest.pos.starts(with: "epubcfi(/") else { continue }
-            let firstStepStartIndex = entryNewest.pos.index(entryNewest.pos.startIndex, offsetBy: 9)
-            guard let firstStepEndIndex = entryNewest.pos[firstStepStartIndex..<entryNewest.pos.endIndex].firstIndex(where: { elem in
-                elem == "/" || elem == ")"
-            }) else { continue }
-            
-            guard let firstStep = Int(entryNewest.pos[firstStepStartIndex..<firstStepEndIndex]) else { continue }
-            let page = firstStep / 2
-            
-            actions.append(BookmarkAction(type: .add(
-                pos: pos,
-                posType: entryNewest.pos_type,
-                title: entryNewest.title,
-                date: entryNewestDate,
-                removed: entryNewest.removed ?? false,
-                page: page
-            )))
-        }
-        
-        if !actions.isEmpty {
-            let changesBlock = {
-                for action in actions {
-                    switch action.type {
-                    case .remove(let objects):
-                        for obj in objects {
-                            obj.date += 0.001
-                            obj.removed = true
-                        }
-                    case .add(let pos, let posType, let title, let date, let removed, let page):
-                        let object = BookBookmarkRealm()
-                        object.bookId = bookId
-                        object.pos_type = posType
-                        object.pos = pos
-                        object.title = title
-                        object.date = date
-                        object.removed = removed
-                        object.page = page
-                        
-                        realm.add(object)
-                    }
-                }
-            }
-            
-            if realm.isInWriteTransaction {
-                changesBlock()
-            } else {
-                try? realm.write {
+        if realm.isInWriteTransaction {
+            changesBlock()
+        } else {
+            do {
+                try realm.write {
                     changesBlock()
                 }
+            } catch {
+                // The upload describes the merged bookmarks: without them it would rename or
+                // remove bookmarks on the server that are unchanged here.
+                logger.error("Bookmark merge failed: \(error.localizedDescription)")
+                return []
             }
         }
         
-        return pending.count
+        return plan.upload
     }
     
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int {

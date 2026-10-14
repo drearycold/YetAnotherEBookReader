@@ -87,6 +87,15 @@ struct PDFBookmark {
     
     var title: String
     var date: Date
+    
+    /// A new bookmark's title: its chapter and page. calibre keeps one bookmark per title, so the
+    /// chapter alone isn't enough; the repository numbers any still alike.
+    static func title(outlineLabel: String?, pageNumber: Int) -> String {
+        guard let label = outlineLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty else {
+            return "Page \(pageNumber)"
+        }
+        return "\(label), p. \(pageNumber)"
+    }
 }
 
 struct PDFHighlight {

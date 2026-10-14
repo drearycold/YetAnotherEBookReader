@@ -59,7 +59,7 @@ final class BookMetadataSyncWorker {
                     
                     var pendingPositions = [CalibreBookLastReadPositionEntry]()
                     var highlightPending = 0
-                    var bookmarkPending = 0
+                    var bookmarksToUpload = [CalibreBookAnnotationBookmarkEntry]()
                     
                     let remoteHighlights = entry.annotations_map.highlight ?? []
                     let remoteBookmarks = entry.annotations_map.bookmark ?? []
@@ -74,10 +74,14 @@ final class BookMetadataSyncWorker {
                             entries: remoteHighlights,
                             forBookId: book.bookPrefId
                         )
-                        bookmarkPending = annotationRepository.syncBookmarks(
-                            entries: remoteBookmarks,
-                            forBookId: book.bookPrefId
-                        )
+                        // calibre keeps bookmarks per format; merge those of the format's reader.
+                        if let posType = format.bookmarkPosType {
+                            bookmarksToUpload = annotationRepository.syncBookmarks(
+                                entries: remoteBookmarks,
+                                forBookId: book.bookPrefId,
+                                posType: posType
+                            )
+                        }
                     }
                     
                     if job.needUpload && !pendingPositions.isEmpty {
@@ -90,16 +94,11 @@ final class BookMetadataSyncWorker {
                         )
                     }
                     
-                    if shouldMergeAnnotations && job.needUpload && (highlightPending > 0 || bookmarkPending > 0) {
+                    if shouldMergeAnnotations && job.needUpload && (highlightPending > 0 || !bookmarksToUpload.isEmpty) {
                         let highlightsToUpload = annotationRepository.getHighlights(
                             forBookId: book.bookPrefId,
                             excludeRemoved: false
                         ).compactMap { $0.toCalibreBookAnnotationHighlightEntry() }
-                        
-                        let bookmarksToUpload = annotationRepository.getBookmarks(
-                            forBookId: book.bookPrefId,
-                            excludeRemoved: true
-                        ).map { $0.toCalibreBookAnnotationBookmarkEntry() }
                         
                         outcome.annotationsToUpload.append(
                             SyncOutcome.UploadAnnotations(

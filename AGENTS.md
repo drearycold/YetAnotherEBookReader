@@ -143,7 +143,9 @@ What calibre 9.11 does, as the tests pin it:
 - **Highlights merge per `uuid`, bookmarks per `title`:** the newest
   `timestamp` wins, a removal is a newer copy marked `removed`, and an older
   copy doesn't bring it back. Two bookmarks with one title are one bookmark to
-  calibre, while the app's `syncBookmarks` tells them apart by `pos`.
+  calibre, so the app keeps a book's bookmark titles unique and merges by
+  title (`BookmarkMerge`). Two devices syncing through calibre keep each
+  bookmark, a retitle and a removal (`testTwoDevicesKeepEachBookmark`).
 - **Read-only users** can still save positions and annotations, but a
   metadata change gets 403 ("does not have permission to make changes"), which
   the app reports as `.authFailed`.

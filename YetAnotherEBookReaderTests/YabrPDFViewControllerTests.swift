@@ -16,6 +16,15 @@ final class YabrPDFViewControllerTests: XCTestCase {
         tempURLs.removeAll()
     }
 
+    /// calibre keeps one bookmark per title: a new bookmark's names its chapter and page, so two
+    /// in one chapter differ.
+    func testBookmarkTitleNamesChapterAndPage() {
+        XCTAssertEqual(PDFBookmark.title(outlineLabel: "Chapter 3", pageNumber: 42), "Chapter 3, p. 42")
+        XCTAssertEqual(PDFBookmark.title(outlineLabel: " Chapter 3\n", pageNumber: 42), "Chapter 3, p. 42")
+        XCTAssertEqual(PDFBookmark.title(outlineLabel: "  ", pageNumber: 7), "Page 7")
+        XCTAssertEqual(PDFBookmark.title(outlineLabel: nil, pageNumber: 7), "Page 7")
+    }
+
     func testOpenReturnsMinusOneWhenMetaSourceHasNoURL() {
         let controller = SpyYabrPDFViewController()
         controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: nil)

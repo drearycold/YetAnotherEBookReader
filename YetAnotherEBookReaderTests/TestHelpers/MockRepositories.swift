@@ -535,7 +535,8 @@ class MockAnnotationRepository: AnnotationRepositoryProtocol, @unchecked Sendabl
     var syncBookmarksCalled = false
     var syncBookmarksEntriesParam: [CalibreBookAnnotationBookmarkEntry]?
     var syncBookmarksBookIdParam: String?
-    var syncBookmarksReturn: Int = 0
+    var syncBookmarksPosTypeParam: String?
+    var syncBookmarksReturn: [CalibreBookAnnotationBookmarkEntry] = []
 
     var syncHighlightsCalled = false
     var syncHighlightsEntriesParam: [CalibreBookAnnotationHighlightEntry]?
@@ -597,10 +598,11 @@ class MockAnnotationRepository: AnnotationRepositoryProtocol, @unchecked Sendabl
         updateHighlightNoteTextParam = note
     }
 
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
+    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry] {
         syncBookmarksCalled = true
         syncBookmarksEntriesParam = entries
         syncBookmarksBookIdParam = bookId
+        syncBookmarksPosTypeParam = posType
         return syncBookmarksReturn
     }
 
