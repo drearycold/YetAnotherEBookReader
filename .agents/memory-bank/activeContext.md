@@ -5,7 +5,34 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
-## Calibre Contract Tests (2026-10-14, prototype on `claude/calibre-contract-tests`)
+## Branch Protection on `main` (2026-10-14)
+
+- **Ruleset "Protect main"** (id 25044670, on the default branch). AGENTS.md
+  "CI" has the rules:
+  - a pull request is required, merged with a merge commit or squashed (squash
+    added the same day; no rebase), with 0 approvals;
+  - **iOS unit tests** and **Mac Catalyst build** must pass, and the branch
+    need not be up to date with `main`;
+  - force pushes and deletion are blocked, with no bypass actors (admins
+    included).
+- **Repository settings:** auto-merge is allowed, and head branches are
+  deleted on merge.
+- **Docs-only changes skip CI** since drearycold/YetAnotherEBookReader#115
+  (merge commit `1af35ac9`). A **Detect changes** job runs
+  `.github/scripts/changed-code.sh`; when every changed path is root Markdown
+  or under `.agents/`, the three macOS jobs are skipped by their `if:`, which
+  GitHub counts as passed. When in doubt it runs everything.
+- **Not required yet:** **Calibre contract tests**. Add it to the ruleset once
+  it has proved stable. Renaming a required job also needs a ruleset update.
+- GitHub added `require_extra_approval_for_unattributed_changes: true` to the
+  pull-request rule by default. It isn't documented publicly and didn't block
+  #113. If a pull request unexpectedly needs a review, check it first.
+
+## Calibre Contract Tests (2026-10-14, merged)
+
+**Merged to `main`** in drearycold/YetAnotherEBookReader#113 (merge commit
+`61064448`, 2026-10-14). GitHub deleted the remote branch
+`claude/calibre-contract-tests` on merge.
 
 - **What:** `CalibreServerContractTests` (4 tests) run the app's own
   `CalibreServerService` against a real calibre-server. CI runs them in a new
@@ -15,8 +42,11 @@ placement (content right of center, top offset / drift after page turns).
   simulator jobs. AGENTS.md "Calibre Contract Tests" has the commands and what
   calibre does.
 - **Verified locally** (calibre 9.11, iPhone 17): all 4 pass. Without the
-  server variables all 4 skip, which the CI job treats as a failure. Not yet
-  run on CI; the full unit suite wasn't rerun locally (no app code changed).
+  server variables all 4 skip, which the CI job treats as a failure. The full
+  unit suite wasn't rerun locally (no app code changed).
+- **CI:** on the head commit `357da72b`, all three jobs passed, including the
+  first run of **Calibre contract tests** with the calibre download and
+  install.
 - **Found:**
   - calibre stamps reading positions with its own clock. #107's "newer position
     from another device" compares epochs, so a device that read earlier but
