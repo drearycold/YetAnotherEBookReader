@@ -563,6 +563,11 @@ Catalyst build succeeds; the old SPM product resolution failure (`R2Navigator`,
   in all relevant reader paths.
 - Realm threading mistakes usually appear only under background sync, search,
   shelf updates, or test concurrency.
+- `CalibreServerService` caches a `URLSession` per server address, username and
+  password. A newer password retires the older one's sessions. A retired session
+  is invalidated once its last `withURLSession` request ends, and creating a task
+  in an invalidated session crashes. Make requests through `validatedData` or
+  `withURLSession`, not a session kept from `urlSession(server:)`.
 - Search/category code has both legacy coordinator pieces and modern actor/value
   services. Prefer the modern services for new behavior.
 - Xcode project file drift is easy when adding Swift files. Confirm target
