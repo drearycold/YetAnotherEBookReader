@@ -411,6 +411,7 @@ protocol YabrPDFMetaSource {
     
     func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination)
 
+    /// The outline item covering `page`, which is 1-based (`pageRef?.pageNumber`).
     func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline?
     
 

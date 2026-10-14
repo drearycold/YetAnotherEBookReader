@@ -93,8 +93,9 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline? {
-        guard let pdfDocument = yabrPDFDocument(view),
-              let pdfPage = pdfDocument.page(at: page),
+        guard page >= 1,
+              let pdfDocument = yabrPDFDocument(view),
+              let pdfPage = pdfDocument.page(at: page - 1),
               let pdfPageSelection = pdfPage.selection(for: pdfPage.bounds(for: .mediaBox)),
               pdfPageSelection.selectionsByLine().isEmpty == false
         else { return nil }
