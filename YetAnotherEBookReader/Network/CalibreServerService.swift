@@ -305,31 +305,26 @@ class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {
     }
 }
 
+/// Calibre keys a highlight by its `uuid`: 16 random bytes in base64url without padding, 22
+/// characters (`short_uuid()` in calibre's viewer). The app keeps the same 16 bytes as a UUID
+/// string. Calibre merges highlights by exact `uuid`, so the output must stay byte-for-byte the same.
 func uuidFolioToCalibre(_ identifier: String) -> String? {
-    guard let tempUuid = NSUUID(uuidString: identifier) else {
+    guard let uuid = UUID(uuidString: identifier)?.uuid else {
         return nil
     }
-    var tempUuidBytes: UInt8 = 0
-    tempUuid.getBytes(&tempUuidBytes)
-    let data = Data(bytes: &tempUuidBytes, count: 16)
-    let base64 = data.base64EncodedString(options: NSData.Base64EncodingOptions())
-    return base64ToBase64URL(base64: base64)
+    let data = withUnsafeBytes(of: uuid) { Data($0) }
+    return base64ToBase64URL(base64: data.base64EncodedString())
 }
 
 func uuidCalibreToFolio(_ shortenedIdentifier: String?) -> String? {
-    // Expand an identifier out of a CBAdvertisementDataLocalNameKey or service characteristic.
-    guard let shortenedIdentifier = shortenedIdentifier else {
-        return nil
-    }
-    // Rehydrate the shortenedIdentifier
-    let shortenedIdentifierWithDoubleEquals = base64urlToBase64(base64url: shortenedIdentifier)
-    guard let data = Data(base64Encoded: shortenedIdentifierWithDoubleEquals),
-          let uuidBytes = data.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: UInt8.self) })
+    guard let shortenedIdentifier = shortenedIdentifier,
+          let data = Data(base64Encoded: base64urlToBase64(base64url: shortenedIdentifier)),
+          data.count == MemoryLayout<uuid_t>.size
     else { return nil }
-    
-    let tempUuid = NSUUID(uuidBytes: uuidBytes)
-    
-    return tempUuid.uuidString
+
+    var uuid: uuid_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    withUnsafeMutableBytes(of: &uuid) { $0.copyBytes(from: data) }
+    return UUID(uuid: uuid).uuidString
 }
 
 func base64urlToBase64(base64url: String) -> String {

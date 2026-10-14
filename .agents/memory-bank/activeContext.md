@@ -5,6 +5,39 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Highlight UUID Conversion Without UB (2026-10-14, branch)
+
+Branch `claude/highlight-uuid-ub`, not yet pushed.
+
+- **What:** `uuidFolioToCalibre` / `uuidCalibreToFolio`
+  (`Network/CalibreServerService.swift`) no longer touch memory they don't
+  own. The first wrote 16 bytes into a 1-byte `UInt8`; the second used
+  `withUnsafeBytes`'s pointer after the closure returned. Both now go through
+  `UUID.uuid` (`uuid_t`) and keep the pointer inside the closure.
+- **Calibre's format** (checked in calibre's source and 9.11's `viewer.js`):
+  a new highlight's `uuid` is `short_uuid()`, 16 random bytes (not a version-4
+  UUID) in base64url without padding, 22 characters. The server merges
+  highlights by exact `uuid` string (`merge_field_map` in
+  `db/annotations.py`) and never validates it, so a changed encoding would
+  duplicate highlights rather than fail.
+- **Same output:** the known vectors in `CalibreHighlightUUIDTests` were
+  computed with the old code (-Onone and -O) and match Python's
+  `urlsafe_b64encode(uuid.bytes)` and calibre's own encoder. Old and new also
+  agreed on 200k random UUIDs and 200k random 22-character calibre ids.
+- **Changed:** a calibre `uuid` that doesn't decode to exactly 16 bytes now
+  gives `nil`, and the sync skips that entry. Before, the code read past the
+  buffer and returned a garbage, run-dependent id, which the sync stored.
+- **Tests:** `CalibreHighlightUUIDTests` (8): known vectors both ways,
+  lowercase input, 10k random round trips each way, invalid UUID strings,
+  non-base64 and non-16-byte calibre ids.
+- **Verified** (iPhone 17): full unit suite, 883 tests, 0 failures, 5 skipped
+  (4 contract tests without a server, the benchmark). Mac Catalyst build
+  succeeds.
+- **Local build note:** most files under `/tmp/YabrSourcePackages` had been
+  removed (directories left, mtimes 2026-10-14 00:00), so `xcodebuild` failed
+  with "Could not resolve package dependencies … Package.swift doesn't exist".
+  The run above used a fresh `-clonedSourcePackagesDirPath` and derived data.
+
 ## Branch Protection on `main` (2026-10-14)
 
 - **Ruleset "Protect main"** (id 25044670, on the default branch). AGENTS.md
@@ -56,7 +89,8 @@ placement (content right of center, top offset / drift after page turns).
     the password: a changed password keeps the old one until relaunch. Filed as
     a separate task.
   - `uuidFolioToCalibre` / `uuidCalibreToFolio` read and write memory they
-    don't own (UB that happens to work). Filed as a separate task.
+    don't own (UB that happens to work). Fixed on `claude/highlight-uuid-ub`
+    ("Highlight UUID Conversion Without UB" above).
   - Positions need a calibre user: anonymously, uploads fail with HTTP 500.
 - **Next:** DSReader Helper (`calibre-customize`), bookmarks, metadata
   (`cdb/cmd`), downloads, an oldest-supported calibre.
