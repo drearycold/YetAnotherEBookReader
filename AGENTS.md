@@ -84,6 +84,22 @@ hand, on `macos-26` with the Xcode the project is developed with
   `CODE_SIGNING_ALLOWED=NO`.
 - On failure the raw logs and the `.xcresult` are uploaded as an artifact.
 
+`main` is protected by the repository ruleset **Protect main** (Settings >
+Rules):
+
+- Changes reach `main` only through a pull request, merged with a merge
+  commit. No approval is required.
+- The **iOS unit tests** and **Mac Catalyst build** checks must pass; the
+  branch need not be up to date with `main`. **Calibre contract tests** isn't
+  required yet.
+- Force pushes and deleting `main` are blocked. Nobody can bypass the rules,
+  admins included.
+- A required check is matched by its job `name:`. Renaming that job, or adding
+  one that should be required, means updating the ruleset as well, or every
+  pull request waits for a check that never reports.
+- Auto-merge is allowed (`gh pr merge --auto`), and GitHub deletes a pull
+  request's branch when it merges.
+
 ### Calibre Contract Tests
 
 `CalibreServerContractTests` run the app's own `CalibreServerService` against a
