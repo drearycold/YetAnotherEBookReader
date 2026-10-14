@@ -144,10 +144,8 @@ final class CalibreServerContractTests: XCTestCase {
     }
 
     /// calibre tells bookmarks apart by title, not position: two with one title are one bookmark
-    /// to the server, and only the newer is kept. The app tells them apart by position
-    /// (`syncBookmarks` merges by `pos`), so every bookmark needs a title of its own. The PDF
-    /// reader titles a bookmark with its page's outline label, which two bookmarks in one chapter
-    /// share.
+    /// to the server, and only the newer is kept. So the app gives each of a book's bookmarks a
+    /// title of its own, and merges calibre's by title (`BookmarkMerge`).
     func testBookmarksWithOneTitleAreOneBookmark() async throws {
         let title = "Chapter \(UUID().uuidString)"
         let now = Date()
@@ -157,6 +155,48 @@ final class CalibreServerContractTests: XCTestCase {
 
         let stored = try await storedBookmarks(title: title)
         XCTAssertEqual(stored.map(\.pos), ["epubcfi(/6/8)"])
+    }
+
+    /// Two devices keep each bookmark through calibre, syncing as `BookMetadataSyncWorker` does:
+    /// - two bookmarks a device titles alike get numbers, and both reach the other device;
+    /// - a retitled bookmark's old title is removed, so it isn't a second bookmark there;
+    /// - a removal reaches the other device and stays removed.
+    /// Once they agree, neither uploads anything.
+    func testTwoDevicesKeepEachBookmark() async throws {
+        let chapter = "Chapter \(UUID().uuidString)"
+        let deviceA = makeBookmarkDevice(), deviceB = makeBookmarkDevice()
+        for pos in ["epubcfi(/6/4)", "epubcfi(/6/8)"] {
+            _ = deviceA.saveBookmark(bookmark(title: chapter, pos: pos, date: Date()))
+        }
+
+        var uploaded = try await syncBookmarks(deviceA, titled: chapter)
+        XCTAssertEqual(uploaded.map(\.title), [chapter, "\(chapter) #2"])
+        _ = try await syncBookmarks(deviceB, titled: chapter)
+        XCTAssertEqual(visibleBookmarks(deviceB, titled: chapter), ["epubcfi(/6/4)": chapter, "epubcfi(/6/8)": "\(chapter) #2"])
+        uploaded = try await syncBookmarks(deviceA, titled: chapter)
+        XCTAssertTrue(uploaded.isEmpty, "\(uploaded.map(\.title))")
+
+        var retitled = try XCTUnwrap(deviceA.getBookmark(byPos: "epubcfi(/6/8)", bookId: book.bookPrefId))
+        retitled.title = "\(chapter) storm"
+        retitled.date = Date()
+        XCTAssertEqual(deviceA.saveBookmark(retitled).0, 2)
+        uploaded = try await syncBookmarks(deviceA, titled: chapter)
+        XCTAssertEqual(uploaded.map(\.title), ["\(chapter) #2", "\(chapter) storm"])
+        _ = try await syncBookmarks(deviceB, titled: chapter)
+        XCTAssertEqual(visibleBookmarks(deviceB, titled: chapter), ["epubcfi(/6/4)": chapter, "epubcfi(/6/8)": "\(chapter) storm"])
+
+        deviceB.removeBookmark(pos: "epubcfi(/6/4)", bookId: book.bookPrefId)
+        uploaded = try await syncBookmarks(deviceB, titled: chapter)
+        XCTAssertEqual(uploaded.map(\.removed), [true])
+        _ = try await syncBookmarks(deviceA, titled: chapter)
+        XCTAssertEqual(visibleBookmarks(deviceA, titled: chapter), ["epubcfi(/6/8)": "\(chapter) storm"])
+
+        for device in [deviceA, deviceB] {
+            uploaded = try await syncBookmarks(device, titled: chapter)
+            XCTAssertTrue(uploaded.isEmpty, "\(uploaded.map(\.title))")
+        }
+        let stored = (try await fetchAnnotations().annotations_map.bookmark ?? []).filter { $0.title.hasPrefix(chapter) }
+        XCTAssertEqual(stored.filter { $0.removed != true }.map(\.title), ["\(chapter) storm"])
     }
 
     /// Positions and annotations are the user's own data: calibre lets a read-only account
@@ -456,6 +496,32 @@ final class CalibreServerContractTests: XCTestCase {
         let result = await service.getAnnotations(task: task)
         if let error = result.error { throw error }
         return try XCTUnwrap(result.booksAnnotationsEntry?["\(book.id):\(Format.EPUB.rawValue)"])
+    }
+
+    /// A device's bookmarks: its own in-memory database.
+    private func makeBookmarkDevice() -> RealmAnnotationRepository {
+        let databaseService = DatabaseService()
+        databaseService.setup(conf: MockDatabaseService.inMemoryConfiguration())
+        return RealmAnnotationRepository(databaseService: databaseService)
+    }
+
+    /// Syncs a device's bookmarks as `BookMetadataSyncWorker` does: merges the server's and
+    /// uploads what the merge returns. The server keeps earlier runs' bookmarks, so only those
+    /// whose title starts with `prefix` take part. Returns the upload.
+    private func syncBookmarks(_ device: RealmAnnotationRepository, titled prefix: String) async throws -> [CalibreBookAnnotationBookmarkEntry] {
+        let remote = (try await fetchAnnotations().annotations_map.bookmark ?? []).filter { $0.title.hasPrefix(prefix) }
+        let upload = device.syncBookmarks(entries: remote, forBookId: book.bookPrefId, posType: "epubcfi")
+        if !upload.isEmpty {
+            let task = try service.buildUpdateAnnotationsTask(library: library, bookId: book.id, format: .EPUB, highlights: [], bookmarks: upload)
+            let result = await service.updateAnnotationByTask(task: task)
+            if let error = result.error { throw error }
+        }
+        return upload
+    }
+
+    private func visibleBookmarks(_ device: RealmAnnotationRepository, titled prefix: String) -> [String: String] {
+        let bookmarks = device.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).filter { $0.title.hasPrefix(prefix) }
+        return Dictionary(bookmarks.map { ($0.pos, $0.title) }) { [$0, $1].sorted().joined(separator: " + ") }
     }
 
     private func storedHighlights(id: String) async throws -> [CalibreBookAnnotationHighlightEntry] {

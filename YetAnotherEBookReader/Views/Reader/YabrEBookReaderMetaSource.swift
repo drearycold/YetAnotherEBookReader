@@ -130,10 +130,12 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
-        else { return }
-        
-        AppContainer.shared?.annotationRepository.removeBookmark(pos: bookBookmark.pos, bookId: book.bookPrefId)
+        guard let repository = AppContainer.shared?.annotationRepository else { return }
+        // Match the location, not its encoding: a bookmark from another device may encode it
+        // differently.
+        repository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true)
+            .filter { $0.toPDFBookmark()?.pos == bookmark.pos }
+            .forEach { repository.removeBookmark(pos: $0.pos, bookId: book.bookPrefId) }
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight] {

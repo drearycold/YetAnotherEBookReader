@@ -95,7 +95,9 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 
     func testHighlightPendingDoesNotBlockBookmarkSync() async {
         annotationRepo.syncHighlightsReturn = 1
-        annotationRepo.syncBookmarksReturn = 1
+        annotationRepo.syncBookmarksReturn = [
+            TestFixtures.makeBookmark(bookId: book.bookPrefId, pos: "epubcfi(/4/2/4)", title: "bookmark").toCalibreBookAnnotationBookmarkEntry()
+        ]
 
         let entry = CalibreBookAnnotationsResult(
             last_read_positions: [],
@@ -159,12 +161,11 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 
     func testEmptyRemoteAnnotationsStillDiscoverPendingLocalUploads() async {
         annotationRepo.syncHighlightsReturn = 1
-        annotationRepo.syncBookmarksReturn = 1
+        annotationRepo.syncBookmarksReturn = [
+            TestFixtures.makeBookmark(bookId: book.bookPrefId, pos: "epubcfi(/4/2/4)", title: "bookmark").toCalibreBookAnnotationBookmarkEntry()
+        ]
         annotationRepo.getHighlightsReturn = [
             TestFixtures.makeHighlight(bookId: book.bookPrefId, content: "text")
-        ]
-        annotationRepo.getBookmarksReturn = [
-            TestFixtures.makeBookmark(bookId: book.bookPrefId, pos: "epubcfi(/4/2/4)", title: "bookmark")
         ]
 
         let entry = CalibreBookAnnotationsResult(
@@ -186,9 +187,10 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 
         XCTAssertTrue(annotationRepo.syncHighlightsCalled)
         XCTAssertTrue(annotationRepo.syncBookmarksCalled)
+        XCTAssertEqual(annotationRepo.syncBookmarksPosTypeParam, "epubcfi")
         XCTAssertEqual(outcome.annotationsToUpload.count, 1)
         XCTAssertEqual(outcome.annotationsToUpload.first?.highlights.count, 1)
-        XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.count, 1)
+        XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.map(\.title), ["bookmark"])
     }
 
     func testPendingChangesIncludeUploadTasks() async {
@@ -201,7 +203,7 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 
         readingPositionRepo.syncPositionsReturn = [posEntry]
         annotationRepo.syncHighlightsReturn = 1
-        annotationRepo.syncBookmarksReturn = 0
+        annotationRepo.syncBookmarksReturn = []
         annotationRepo.getBookmarksReturn = [
             BookBookmark(
                 id: "bookmark-id",
@@ -242,7 +244,28 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
         XCTAssertEqual(outcome.positionsToUpload.count, 1)
         XCTAssertEqual(outcome.positionsToUpload.first?.entries.count, 1)
         XCTAssertEqual(outcome.annotationsToUpload.count, 1)
-        XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.count, 1)
+        // calibre merges an upload into what it has: bookmarks the server already matches stay home.
+        XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.count, 0)
+    }
+
+    /// calibre keeps each format's bookmarks apart: a PDF merges YabrPDF's, a CBZ has none to merge.
+    func testBookmarksMergeWithTheFormatsReader() async {
+        let entry = CalibreBookAnnotationsResult(
+            last_read_positions: [],
+            annotations_map: CalibreBookAnnotationsMap(bookmark: [], highlight: [])
+        )
+
+        _ = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(book: book, format: .PDF, entry: entry, needUpload: true)
+        ])
+        XCTAssertEqual(annotationRepo.syncBookmarksPosTypeParam, BookBookmarkRealm.PDFBookmarkPosType)
+
+        annotationRepo.syncBookmarksCalled = false
+        _ = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(book: book, format: .CBZ, entry: entry, needUpload: true)
+        ])
+        XCTAssertFalse(annotationRepo.syncBookmarksCalled)
+        XCTAssertTrue(annotationRepo.syncHighlightsCalled)
     }
 
     func testEmptyJobsResumesContinuation() async {
@@ -355,8 +378,8 @@ final class ThreadCheckAnnotationRepository: MockAnnotationRepository, @unchecke
         return super.syncHighlights(entries: entries, forBookId: bookId)
     }
 
-    override func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
+    override func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry] {
         wasSyncBookmarksCalledOnBackgroundThread = !Thread.isMainThread
-        return super.syncBookmarks(entries: entries, forBookId: bookId)
+        return super.syncBookmarks(entries: entries, forBookId: bookId, posType: posType)
     }
 }

@@ -765,11 +765,17 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
 
     public func folioReaderBookmark(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderBookmark] {
         guard bookIdentity.accepts(bookId) else { return [] }
-        return (AppContainer.shared?.annotationRepository.getBookmarks(forBookId: bookIdentity.canonicalBookId, excludeRemoved: true) ?? []).filter { page == nil || $0.page == page?.intValue }.map { $0.toFolioReaderBookmark() }
+        return epubBookmarks().filter { page == nil || $0.page == page?.intValue }.map { $0.toFolioReaderBookmark() }
     }
 
     public func folioReaderBookmark(_ folioReader: FolioReader) -> [FolioReaderBookmark] {
-        return (AppContainer.shared?.annotationRepository.getBookmarks(forBookId: bookIdentity.canonicalBookId, excludeRemoved: true) ?? []).map { $0.toFolioReaderBookmark() }
+        return epubBookmarks().map { $0.toFolioReaderBookmark() }
+    }
+
+    /// The book's bookmarks also hold its PDF's, which other devices sync in too.
+    private func epubBookmarks() -> [BookBookmark] {
+        (AppContainer.shared?.annotationRepository.getBookmarks(forBookId: bookIdentity.canonicalBookId, excludeRemoved: true) ?? [])
+            .filter { $0.pos_type == Format.EPUB.bookmarkPosType }
     }
 }
 

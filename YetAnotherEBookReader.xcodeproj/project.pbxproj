@@ -263,6 +263,8 @@
 		E71F34F72FDE3060007AB0B1 /* LibraryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */; };
 		E71F34F92FDEC359007AB0B1 /* BookBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */; };
 		E71F34FA2FDEC359007AB0B1 /* BookBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */; };
+		73E1AB92306F62EC2B022302 /* BookmarkMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0DB3E0737D7CDD9630CD53 /* BookmarkMerge.swift */; };
+		1D824155BF1AB014BDA56AF4 /* BookmarkMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0DB3E0737D7CDD9630CD53 /* BookmarkMerge.swift */; };
 		E71F34FC2FDEC35B007AB0B1 /* BookHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */; };
 		E71F34FD2FDEC35B007AB0B1 /* BookHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */; };
 		E71F34FF2FDEC37A007AB0B1 /* AnnotationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */; };
@@ -715,6 +717,7 @@
 		E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRepository.swift; sourceTree = "<group>"; };
 		E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryRepository.swift; sourceTree = "<group>"; };
 		E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookBookmark.swift; sourceTree = "<group>"; };
+		DB0DB3E0737D7CDD9630CD53 /* BookmarkMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkMerge.swift; sourceTree = "<group>"; };
 		E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookHighlight.swift; sourceTree = "<group>"; };
 		E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationRepository.swift; sourceTree = "<group>"; };
 		E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionRepository.swift; sourceTree = "<group>"; };
@@ -1499,6 +1502,7 @@
 			children = (
 				A073100130D3000100000001 /* ActivityLogWriteEvent.swift */,
 				E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */,
+				DB0DB3E0737D7CDD9630CD53 /* BookmarkMerge.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */,
 				E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
@@ -1763,6 +1767,7 @@
 				E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */,
 				E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */,
 				E71F34FA2FDEC359007AB0B1 /* BookBookmark.swift in Sources */,
+				1D824155BF1AB014BDA56AF4 /* BookmarkMerge.swift in Sources */,
 				2AF8589D2712825400FA87AD /* ReaderOptionsFormatHelpView.swift in Sources */,
 				2A47581B27BE250600642AD1 /* AddModServerView.swift in Sources */,
 				E71F358C2FE8D035007AB0B1 /* LibraryInfoBookContextMenu.swift in Sources */,
@@ -2073,6 +2078,7 @@
 				E732E3F52A3F03350075D1AC /* CalibreSearchCache.swift in Sources */,
 				E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */,
 				E71F34F92FDEC359007AB0B1 /* BookBookmark.swift in Sources */,
+				73E1AB92306F62EC2B022302 /* BookmarkMerge.swift in Sources */,
 				A04D200130C0000100000008 /* CalibreServerService+Search.swift in Sources */,
 				E71F358B2FE8D035007AB0B1 /* LibraryInfoBookContextMenu.swift in Sources */,
 				6E7B80D428FBA7AD008B075C /* ActivityList.swift in Sources */,

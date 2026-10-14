@@ -32,7 +32,10 @@ class PDFBookmarkManager {
             pdfView,
             update: PDFBookmark(
                 pos: PDFBookmark.Location(page: pageNumber, offset: destination.point),
-                title: yabrPDFMetaSource?.yabrPDFOutline(pdfView, for: pageNumber)?.label ?? "Page \(pageNumber)",
+                title: PDFBookmark.title(
+                    outlineLabel: yabrPDFMetaSource?.yabrPDFOutline(pdfView, for: pageNumber)?.label,
+                    pageNumber: pageNumber
+                ),
                 date: Date()
             )
         )
