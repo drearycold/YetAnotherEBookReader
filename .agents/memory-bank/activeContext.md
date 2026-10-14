@@ -17,6 +17,11 @@ placement (content right of center, top offset / drift after page turns).
     included).
 - **Repository settings:** auto-merge is allowed, and head branches are
   deleted on merge.
+- **Docs-only changes skip CI** since drearycold/YetAnotherEBookReader#115
+  (merge commit `1af35ac9`). A **Detect changes** job runs
+  `.github/scripts/changed-code.sh`; when every changed path is root Markdown
+  or under `.agents/`, the three macOS jobs are skipped by their `if:`, which
+  GitHub counts as passed. When in doubt it runs everything.
 - **Not required yet:** **Calibre contract tests**. Add it to the ruleset once
   it has proved stable. Renaming a required job also needs a ruleset update.
 - GitHub added `require_extra_approval_for_unattributed_changes: true` to the
