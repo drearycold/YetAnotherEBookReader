@@ -36,8 +36,7 @@ class BookDetailViewModelTests: XCTestCase {
             server: server,
             isPublic: false,
             updateLibrary: false,
-            autoUpdateOnly: false,
-            incremental: false
+            autoUpdateOnly: false
         )
         let serverInfo = CalibreServerInfo(
             server: server,
@@ -1064,14 +1063,12 @@ class LibraryViewModelTests: XCTestCase {
 
         var updatedLibrary = library
         updatedLibrary.discoverable = true
-        updatedLibrary.autoUpdate = true
         repository.sendObservedLibrary(updatedLibrary)
-        for _ in 0..<50 where !viewModel.discoverable || !viewModel.autoUpdate {
+        for _ in 0..<50 where !viewModel.discoverable {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
         XCTAssertTrue(viewModel.discoverable)
-        XCTAssertTrue(viewModel.autoUpdate)
     }
 
     func testFlagMutationsCallUpdateLibraryFlags() throws {

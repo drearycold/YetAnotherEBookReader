@@ -3,12 +3,14 @@
 //  YetAnotherEBookReader
 //
 //  Split from CalibreData.swift on 2026/6/18.
-//  Zero-behavior-change move: custom-column, category, probe/sync value types
-//  and the cdb cmd list result.
+//  Custom-column, category and probe/sync value types.
 //
 
 import Foundation
 
+/// A custom column's definition, keyed by its label in `CalibreLibrary.customColumnInfos`.
+/// `CalibreLibraryManager.syncLibrary` reads it from `ajax/books` (`init(userMetadata:)`); Realm keeps
+/// it encoded with these keys, which are those of calibre's `cdb` interface that read it before.
 struct CalibreCustomColumnInfo: Codable, Hashable {
     var label: String
     var name: String
@@ -17,7 +19,6 @@ struct CalibreCustomColumnInfo: Codable, Hashable {
     
     var display: CalibreCustomColumnDisplayInfo
     
-    var normalized: Bool
     var num: Int
     var isMultiple: Bool
     var multipleSeps: [String: String]
@@ -28,15 +29,46 @@ struct CalibreCustomColumnInfo: Codable, Hashable {
         case datatype
         case editable
         case display
-        case normalized
         case num
         case isMultiple = "is_multiple"
         case multipleSeps = "multiple_seps"
     }
 }
 
+extension CalibreCustomColumnInfo {
+    /// Only the label, name and type are required: a missing or unexpected value elsewhere takes its
+    /// default rather than losing the column.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decode(String.self, forKey: .label)
+        name = try container.decode(String.self, forKey: .name)
+        datatype = try container.decode(String.self, forKey: .datatype)
+        editable = (try? container.decodeIfPresent(Bool.self, forKey: .editable)) ?? false
+        display = (try? container.decodeIfPresent(CalibreCustomColumnDisplayInfo.self, forKey: .display)) ?? .init()
+        num = (try? container.decodeIfPresent(Int.self, forKey: .num)) ?? 0
+        isMultiple = (try? container.decodeIfPresent(Bool.self, forKey: .isMultiple)) ?? false
+        multipleSeps = (try? container.decodeIfPresent([String: String].self, forKey: .multipleSeps)) ?? [:]
+    }
+
+    init(userMetadata column: CalibreBookUserMetadataColumn) {
+        self.init(
+            label: column.label,
+            name: column.name,
+            datatype: column.datatype,
+            editable: column.isEditable,
+            display: column.display,
+            num: column.colnum,
+            isMultiple: column.isMultiple,
+            multipleSeps: column.multipleSeps
+        )
+    }
+}
+
+/// How calibre shows a column. calibre stores only what was set: a column made with
+/// `calibredb add_custom_column` has `"display": {}`, so every field is optional, and one of an
+/// unexpected type is dropped rather than failing the column.
 struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
-    var description: String
+    var description: String = ""
     
     //type text
     var isNames: Bool?
@@ -78,6 +110,23 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     }
 }
 
+extension CalibreCustomColumnDisplayInfo {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        description = (try? container.decodeIfPresent(String.self, forKey: .description)) ?? ""
+        isNames = try? container.decodeIfPresent(Bool.self, forKey: .isNames)
+        compositeTemplate = try? container.decodeIfPresent(String.self, forKey: .compositeTemplate)
+        compositeSort = try? container.decodeIfPresent(String.self, forKey: .compositeSort)
+        useDecorations = try? container.decodeIfPresent(Int.self, forKey: .useDecorations)
+        makeCategory = try? container.decodeIfPresent(Bool.self, forKey: .makeCategory)
+        containsHtml = try? container.decodeIfPresent(Bool.self, forKey: .containsHtml)
+        numberFormat = try? container.decodeIfPresent(String.self, forKey: .numberFormat)
+        headingPosition = try? container.decodeIfPresent(String.self, forKey: .headingPosition)
+        interpretAs = try? container.decodeIfPresent(String.self, forKey: .interpretAs)
+        allowHalfStars = try? container.decodeIfPresent(Bool.self, forKey: .allowHalfStars)
+    }
+}
+
 struct CalibreLibraryCategoryKey: Hashable {
     let libraryId: String
     let categoryName: String
@@ -103,9 +152,11 @@ struct CalibreProbeServerRequest: Identifiable {
     let server: CalibreServer
     let isPublic: Bool
     
+    /// Add the server's new libraries and sync each one (`CalibreLibraryManager.syncLibrary`).
     let updateLibrary: Bool
+    /// An automatic probe: with `updateLibrary`, it doesn't also fetch the DSReader Helper
+    /// configuration, as a probe the user asks for does.
     let autoUpdateOnly: Bool
-    let incremental: Bool
 }
 
 struct CalibreProbeLibraryRequest: Identifiable {
@@ -118,29 +169,17 @@ struct CalibreProbeLibraryRequest: Identifiable {
 
 struct CalibreSyncLibraryRequest {
     let library: CalibreLibrary
-    let autoUpdateOnly: Bool
-    let incremental: Bool
 }
 
-struct CalibreSyncLibraryResult {
-    let request: CalibreSyncLibraryRequest
-    var isIncremental: Bool = true
-    var result: [String: [String:CalibreCustomColumnInfo]]
-    var errmsg = ""
-    var categories: [CalibreLibraryCategory] = []
-    var list = CalibreCdbCmdListResult()
-    
-    //parsed
-    var isError = false
-    var bookCount = 0
-    var bookNeedUpdateCount = 0
-    var bookDeleted = [Int32]()
+/// What `CalibreServerService.getLibrarySummary` reads about a library.
+struct CalibreLibrarySummary: Equatable {
+    /// The books the user may see.
+    var bookCount: Int
+    /// The newest change to any of them; nil for an empty library.
     var lastModified: Date? = nil
-}
-
-struct BookMetadataSyncRecord {
-    let id: Int32
-    let lastModified: Date
+    /// The library's custom columns by label; nil for an empty library, which has no book to
+    /// describe them.
+    var customColumnInfos: [String: CalibreCustomColumnInfo]? = nil
 }
 
 struct BookMetadataPersistenceResult {
@@ -150,48 +189,9 @@ struct BookMetadataPersistenceResult {
     var booksAnnotation = [CalibreBook]()
 }
 
-struct CalibreSyncLibraryBooksMetadata {
-    enum Action {
-        case save([BookMetadataSyncRecord])
-        case updateDeleted([String: CalibreCdbCmdListResult.DateValue])
-        case complete(Date?, [String: CalibreCustomColumnInfo])
-    }
-    
-    let library: CalibreLibrary
-    let action: Action
-    let preMsg: String
-    let postMsg: String
-    
-    //parsed
-    var bookCount = 0
-    var bookNeedUpdateCount = 0
-    var bookToUpdate = [Int32]()
-    var bookDeleted = [Int32]()
-}
-
 struct CalibreLibraryCategory: Codable {
     var name: String
     var url: String
     var icon: String
     var is_category: Bool
-}
-
-struct CalibreCdbCmdListResult: Codable, Hashable {
-    struct DateValue: Codable, Hashable {
-        var v: String
-    }
-    struct Data: Codable, Hashable {
-        var last_modified: [String: DateValue] = [:]
-//        var title: [String: String] = [:]
-//        var authors: [String: [String]] = [:]
-//        var formats: [String: Set<String>] = [:]
-//        var series: [String: String?] = [:]
-//        var series_index: [String: Double] = [:]
-//        var identifiers: [String: [String: String]] = [:]
-//        var timestamp: [String: DateValue] = [:]
-//        var pubdate: [String: DateValue] = [:]
-    }
-    
-    var book_ids = [Int32]()
-    var data = Data()
 }

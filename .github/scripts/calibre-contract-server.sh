@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A calibre-server for CalibreServerContractTests. The library holds one EPUB and an integer
 # custom column, #read_progress, and is named with a space and non-ASCII characters (its key is
-# "Test_Library_测试"). It has two users: contract-writer and the read-only contract-reader.
+# "Test_Library_测试"). It has three users: contract-writer, the read-only contract-reader, and
+# contract-restricted, whose per-library restriction matches no book.
 # Authentication is calibre's default (Digest over HTTP). A DIR seeded before a change to seed()
 # keeps its old library: start from an empty DIR.
 #
@@ -19,6 +20,8 @@ WRITER=contract-writer
 WRITER_PASSWORD=writer-pass
 READER=contract-reader
 READER_PASSWORD=reader-pass
+RESTRICTED=contract-restricted
+RESTRICTED_PASSWORD=restricted-pass
 
 seed() {
   local dir=$1 library=$2
@@ -31,6 +34,10 @@ seed() {
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$WRITER" "$WRITER_PASSWORD"
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$READER" "$READER_PASSWORD"
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- readonly "$READER" set
+  # calibre's cdb interface refuses a user with a per-library restriction; the app's requests don't.
+  "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$RESTRICTED" "$RESTRICTED_PASSWORD"
+  "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- libraries --action per-library \
+    "$RESTRICTED" "$(basename "$library")" 'title:"=No Such Book"'
 }
 
 start() {
@@ -60,7 +67,9 @@ start() {
 TEST_RUNNER_YABR_CALIBRE_USER=$WRITER
 TEST_RUNNER_YABR_CALIBRE_PASSWORD=$WRITER_PASSWORD
 TEST_RUNNER_YABR_CALIBRE_READONLY_USER=$READER
-TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=$READER_PASSWORD"
+TEST_RUNNER_YABR_CALIBRE_READONLY_PASSWORD=$READER_PASSWORD
+TEST_RUNNER_YABR_CALIBRE_RESTRICTED_USER=$RESTRICTED
+TEST_RUNNER_YABR_CALIBRE_RESTRICTED_PASSWORD=$RESTRICTED_PASSWORD"
   echo "$variables"
   if [ -n "${GITHUB_ENV:-}" ]; then
     echo "$variables" >> "$GITHUB_ENV"

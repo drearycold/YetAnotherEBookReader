@@ -159,17 +159,17 @@ class CalibreServerManager {
         }
     }
     
-    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
+    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true) {
         calibreServers.filter {
             $0.value.isLocal == false
             && (serverIds.isEmpty || serverIds.contains($0.value.id))
         }.forEach { serverId, server in
             Task {
-                await self.probeServer(request: .init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+                await self.probeServer(request: .init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly))
             }
             if server.hasPublicUrl {
                 Task {
-                    await self.probeServer(request: .init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+                    await self.probeServer(request: .init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly))
                 }
             }
         }
@@ -231,30 +231,17 @@ class CalibreServerManager {
                 requestServerHelperConfigSync(serverId: serverInfo.server.id)
             }
             
-            // TODO: replace sync library with library search
             container?.calibreLibraries.filter {
                 $0.value.server.id == serverInfo.server.id
             }.forEach { id, library in
                 Task {
-                    await container?.libraryManager.syncLibrary(
-                        request: .init(
-                            library: library,
-                            autoUpdateOnly: serverInfo.request.autoUpdateOnly,
-                            incremental: serverInfo.request.incremental
-                        )
-                    )
+                    await container?.libraryManager.syncLibrary(request: .init(library: library))
                 }
             }
             
             if serverInfo.reachable {
                 Task { @MainActor in
                     container?.publishCalibreUpdate(.server(serverInfo.server))
-                }
-                
-                container?.calibreLibraries.filter {
-                    $0.value.server.id == serverInfo.server.id
-                }.forEach { id, library in
-                    container?.publishProbeLibraryLastModifiedRequest(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
         }

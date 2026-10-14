@@ -24,7 +24,7 @@ final class CalibreServerServiceTests: XCTestCase {
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
 
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
         container.calibreServerInfoStaging = [server.uuid.uuidString: info]
 
@@ -103,7 +103,78 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testGetLegacyCustomColumnsReturnsServerBodyAsErrmsg() async throws {
+    /// A summary asks `ajax/search` for the newest change, then `ajax/books` for that book, and
+    /// reads the columns from its `user_metadata`, shaped as calibre 9.11 sends them: a column made
+    /// with `calibredb add_custom_column` has `"display": {}`, and `is_multiple` is a separator.
+    func testGetLibrarySummaryReadsTheCountTheNewestChangeAndTheColumns() async throws {
+        var requested = [String]()
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            requested.append(url.path)
+            let json: String
+            switch (url.path, Dictionary(uniqueKeysWithValues: query.map { ($0.name, $0.value ?? "") })) {
+            case ("/ajax/search/lib1", ["sort": "last_modified", "sort_order": "desc", "num": "1"]):
+                json = Self.searchJSON(bookIds: [7], count: 12)
+            case ("/ajax/books/lib1", ["ids": "7", "category_urls": "false"]):
+                json = Self.booksJSON
+            default:
+                return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+
+        let summary = try await service.getLibrarySummary(library: library)
+
+        XCTAssertEqual(requested, ["/ajax/search/lib1", "/ajax/books/lib1"])
+        XCTAssertEqual(summary.bookCount, 12)
+        XCTAssertEqual(summary.lastModified, parseLastModified("2026-10-14T09:46:20.123456+00:00"))
+        let columns = try XCTUnwrap(summary.customColumnInfos)
+        XCTAssertEqual(Set(columns.keys), ["read_progress", "genre", "stars"])
+        XCTAssertEqual(columns["read_progress"]?.name, "Read progress")
+        XCTAssertEqual(columns["read_progress"]?.datatype, "int")
+        XCTAssertEqual(columns["read_progress"]?.display.description, "")
+        XCTAssertEqual(columns["read_progress"]?.isMultiple, false)
+        XCTAssertEqual(columns["genre"]?.isMultiple, true)
+        XCTAssertEqual(columns["genre"]?.multipleSeps["ui_to_list"], ",")
+        XCTAssertEqual(columns["stars"]?.datatype, "rating")
+        XCTAssertEqual(columns["stars"]?.display.description, "How good")
+        XCTAssertEqual(columns["stars"]?.display.allowHalfStars, true)
+        XCTAssertEqual(columns["stars"]?.num, 3)
+    }
+
+    /// An empty library has no book to describe its columns or date its last change.
+    func testGetLibrarySummaryOfAnEmptyLibrary() async throws {
+        var requested = [String]()
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            requested.append(url.path)
+            guard url.path == "/ajax/search/lib1" else {
+                return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(Self.searchJSON(bookIds: [], count: 0).utf8))
+        }
+
+        let summary = try await service.getLibrarySummary(library: library)
+
+        XCTAssertEqual(requested, ["/ajax/search/lib1"])
+        XCTAssertEqual(summary, CalibreLibrarySummary(bookCount: 0))
+    }
+
+    /// The newest book can be deleted between the two requests: calibre answers null for it.
+    func testGetLibrarySummaryWhenTheNewestBookIsGone() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let json = url.path == "/ajax/search/lib1" ? Self.searchJSON(bookIds: [7], count: 1) : #"{"7": null}"#
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+
+        let summary = try await service.getLibrarySummary(library: library)
+
+        XCTAssertEqual(summary, CalibreLibrarySummary(bookCount: 1))
+    }
+
+    func testGetLibrarySummaryFailureThrowsTheServersAnswer() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -111,50 +182,44 @@ final class CalibreServerServiceTests: XCTestCase {
                 httpVersion: nil,
                 headerFields: ["Content-Type": "text/plain"]
             )!
-            return (response, Data("bad custom columns request".utf8))
+            return (response, Data("bad search request".utf8))
         }
 
-        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-
-        let received = await service.getLegacyCustomColumns(request: request)
-        XCTAssertEqual(received.errmsg, "bad custom columns request")
-    }
-
-    func testGetCustomColumnsAsyncSuccess() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            let json = """
-            {
-                "result": {
-                    "#pages": {
-                        "name": "Pages",
-                        "datatype": "int",
-                        "label": "pages",
-                        "editable": true,
-                        "display": {
-                            "description": "",
-                            "number_format": "{0}"
-                        },
-                        "normalized": false,
-                        "num": 1,
-                        "is_multiple": false,
-                        "multiple_seps": {}
-                    }
-                }
-            }
-            """
-            return (response, Data(json.utf8))
+        do {
+            _ = try await service.getLibrarySummary(library: library)
+            XCTFail("Expected failure, but received value")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "bad search request")
         }
-
-        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-        let result = try await service.getCustomColumnsResult(request: request)
-        XCTAssertEqual(result.result["result"]?["#pages"]?.name, "Pages")
     }
+
+    private static func searchJSON(bookIds: [Int32], count: Int) -> String {
+        """
+        {"total_num": \(count), "sort_order": "desc", "num_books_without_search": \(count), "offset": 0,
+         "num": \(bookIds.count), "sort": "last_modified", "base_url": "/ajax/search/lib1", "query": null,
+         "library_id": "lib1", "book_ids": \(bookIds), "vl": ""}
+        """
+    }
+
+    private static let booksJSON = """
+    {"7": {"title": "Seven", "last_modified": "2026-10-14T09:46:20.123456+00:00", "user_metadata": {
+        "#read_progress": {"table": "custom_column_1", "column": "value", "datatype": "int", "is_multiple": null,
+            "kind": "field", "name": "Read progress", "search_terms": ["#read_progress"], "label": "read_progress",
+            "colnum": 1, "display": {}, "is_custom": true, "is_category": false, "link_column": "value",
+            "category_sort": "value", "is_csp": false, "is_editable": true, "rec_index": 23,
+            "#value#": 42, "#extra#": null, "is_multiple2": {}},
+        "#genre": {"table": "custom_column_2", "column": "value", "datatype": "text", "is_multiple": "|",
+            "kind": "field", "name": "Genre", "search_terms": ["#genre"], "label": "genre", "colnum": 2,
+            "display": {}, "is_custom": true, "is_category": true, "link_column": "value", "category_sort": "value",
+            "is_csp": false, "is_editable": true, "rec_index": 24, "#value#": ["Fantasy", "SF"], "#extra#": null,
+            "is_multiple2": {"cache_to_list": "|", "ui_to_list": ",", "list_to_ui": ", "}},
+        "#stars": {"table": "custom_column_3", "column": "value", "datatype": "rating", "is_multiple": null,
+            "kind": "field", "name": "Stars", "search_terms": ["#stars"], "label": "stars", "colnum": 3,
+            "display": {"description": "How good", "allow_half_stars": true}, "is_custom": true,
+            "is_category": true, "link_column": "value", "category_sort": "value", "is_csp": false,
+            "is_editable": true, "rec_index": 25, "#value#": null, "#extra#": null, "is_multiple2": {}}
+    }}}
+    """
 
     func testGetMetadataSuccess() async throws {
         let task = CalibreBookTask(
@@ -939,28 +1004,6 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testSyncLegacyLibraryFailure() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
-                statusCode: 401,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            return (response, Data())
-        }
-
-        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-        let resultPrev = CalibreSyncLibraryResult(request: request, result: [:])
-
-        do {
-            _ = try await service.syncLegacyLibraryResult(resultPrev: resultPrev)
-            XCTFail("Expected failure, but received value")
-        } catch {
-            // expected
-        }
-    }
-
     func testGetLibraryCategoriesAsyncFailure() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
@@ -972,11 +1015,8 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data())
         }
 
-        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-        let resultPrev = CalibreSyncLibraryResult(request: request, result: [:])
-
         do {
-            _ = try await service.getLibraryCategoriesResult(resultPrev: resultPrev)
+            _ = try await service.getLibraryCategories(library: library)
             XCTFail("Expected failure, but received value")
         } catch {
             // expected
@@ -1040,7 +1080,7 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, json.data(using: .utf8)!)
         }
 
-        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: probeRequest)
 
         let result = await service.probeServerReachability(serverInfo: info)
@@ -1081,40 +1121,14 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(resultTask.probeResult?.total_num, 10)
     }
 
-    func testSyncLibrarySuccess() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            let json = """
-            {
-                "book_ids": [1, 2],
-                "data": {
-                    "last_modified": {
-                        "1": {"v": "2023-07-25T03:11:04+00:00"},
-                        "2": {"v": "2023-07-25T03:11:04+00:00"}
-                    }
-                }
-            }
-            """
-            return (response, json.data(using: .utf8)!)
-        }
-
-        let syncReq = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: true)
-        let resultPrev = CalibreSyncLibraryResult(request: syncReq, result: [:])
-
-        let result = await service.syncLibrary(resultPrev: resultPrev)
-        XCTAssertEqual(result.list.book_ids, [1, 2])
-        XCTAssertEqual(result.errmsg, "")
-    }
-
     func testGetLibraryCategoriesSuccess() async throws {
         MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            guard url.path == "/ajax/categories/lib1" else {
+                return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
             let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
+                url: url,
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
@@ -1127,13 +1141,9 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, json.data(using: .utf8)!)
         }
 
-        let syncReq = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
-        let resultPrev = CalibreSyncLibraryResult(request: syncReq, result: [:])
-
-        let result = await service.getLibraryCategories(resultPrev: resultPrev)
-        XCTAssertEqual(result.categories.count, 1)
-        XCTAssertEqual(result.categories.first?.name, "Authors")
-        XCTAssertEqual(result.errmsg, "")
+        let categories = try await service.getLibraryCategories(library: library)
+        XCTAssertEqual(categories.count, 1)
+        XCTAssertEqual(categories.first?.name, "Authors")
     }
 
     func testValidatedDataAsyncSuccess() async throws {
@@ -1229,7 +1239,7 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data(json.utf8))
         }
 
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
         let result = await service.probeServerReachability(serverInfo: info)
         XCTAssertTrue(result.reachable)
@@ -1249,7 +1259,7 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data(#"{"default_library":null,"library_map":{}}"#.utf8))
         }
 
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
         let result = await service.probeServerReachability(serverInfo: info)
         XCTAssertFalse(result.reachable)
@@ -1270,7 +1280,7 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("server down".utf8))
         }
 
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
         let result = await service.probeServerReachability(serverInfo: info)
         XCTAssertFalse(result.reachable)

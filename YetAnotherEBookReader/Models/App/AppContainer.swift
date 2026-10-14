@@ -345,8 +345,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
-    private let probeLibraryLastModifiedBroadcaster = ManagerAsyncBroadcaster<CalibreSyncLibraryRequest>()
-
     /// inShelfId for single book
     /// empty string for full update
     private let calibreUpdateBroadcaster = ManagerAsyncBroadcaster<calibreUpdatedSignal>()
@@ -377,7 +375,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         dismissAllBroadcaster.finish()
         readerOpenRequestBroadcaster.finish()
         readerPresentationTransferBroadcaster.finish()
-        probeLibraryLastModifiedBroadcaster.finish()
         probeTimerTask?.cancel()
     }
 
@@ -552,14 +549,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         calibreUpdateBroadcaster.stream()
     }
 
-    func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest) {
-        probeLibraryLastModifiedBroadcaster.send(request)
-    }
-
-    func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest> {
-        probeLibraryLastModifiedBroadcaster.stream()
-    }
-
     init(
         mock: Bool = false,
         testRealmEnvironment: TestRealmEnvironment? = nil
@@ -584,7 +573,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         }
 
         setupCoverCache()
-        wireCrossManagerSubscriptions()
 
         if mock {
             // In the test path the in-memory main Realm is already
@@ -732,11 +720,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
         downloadManager.container = self
         fontsManager.reloadCustomFonts()
-    }
-
-    /// Wire subscriptions that cross manager boundaries.
-    private func wireCrossManagerSubscriptions() {
-        libraryManager.startProbeLibraryLastModifiedTask()
     }
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {

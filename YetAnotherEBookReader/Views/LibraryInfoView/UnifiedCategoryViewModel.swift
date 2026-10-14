@@ -193,7 +193,7 @@ class UnifiedCategoryViewModel: ObservableObject {
             try? repository.invalidateCategoryCache(libraryId: library.id, categoryName: categoryName)
 
             Task {
-                await container.libraryManager.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
+                await container.libraryManager.syncLibrary(request: .init(library: library))
             }
         }
     }

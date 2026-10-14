@@ -67,6 +67,50 @@ struct CalibreBookUserMetadataEntry: Codable {
     }
 }
 
+/// A custom column as a book's `user_metadata` in `ajax/books` describes it. calibre lists every
+/// column of the library there, on every book, valued or not (`Cache._get_metadata`).
+/// `is_multiple` is the list separator, or null; `is_multiple2` has the separators.
+struct CalibreBookUserMetadataColumn: Decodable {
+    var label: String
+    var name: String
+    var datatype: String
+    var display: CalibreCustomColumnDisplayInfo
+    var isEditable: Bool
+    var colnum: Int
+    var isMultiple: Bool
+    var multipleSeps: [String: String]
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case name
+        case datatype
+        case display
+        case isEditable = "is_editable"
+        case colnum
+        case isMultiple = "is_multiple"
+        case multipleSeps = "is_multiple2"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decode(String.self, forKey: .label)
+        name = try container.decode(String.self, forKey: .name)
+        datatype = try container.decode(String.self, forKey: .datatype)
+        display = (try? container.decodeIfPresent(CalibreCustomColumnDisplayInfo.self, forKey: .display)) ?? .init()
+        isEditable = (try? container.decodeIfPresent(Bool.self, forKey: .isEditable)) ?? false
+        colnum = (try? container.decodeIfPresent(Int.self, forKey: .colnum)) ?? 0
+        multipleSeps = (try? container.decodeIfPresent([String: String].self, forKey: .multipleSeps)) ?? [:]
+        let separator = try? container.decodeIfPresent(String.self, forKey: .isMultiple)
+        isMultiple = separator != nil || !multipleSeps.isEmpty
+    }
+}
+
+/// The part of an `ajax/books` entry that `CalibreServerService.getLibrarySummary` reads.
+struct CalibreLibrarySummaryBookEntry: Decodable {
+    var last_modified: String
+    var user_metadata: [String: CalibreBookUserMetadataColumn]
+}
+
 struct CalibreBookEntry: Codable {
 //    var author_link_map: [String: String] = [:]   //removed as of calibre 6.18
     var user_metadata: [String: CalibreBookUserMetadataEntry] = [:]

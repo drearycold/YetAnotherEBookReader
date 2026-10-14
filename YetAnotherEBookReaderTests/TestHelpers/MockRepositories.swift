@@ -142,7 +142,6 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
     var updateLibraryFlagsCalled = false
     var updateLibraryFlagsIdParam: String?
     var updateLibraryFlagsDiscoverableParam: Bool?
-    var updateLibraryFlagsAutoUpdateParam: Bool?
     var updateLibraryFlagsError: Error?
 
     func getAllLibraries() -> [CalibreLibrary] {
@@ -189,11 +188,10 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
         observeLibraryBroadcaster.send(library)
     }
 
-    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws {
+    func updateLibraryFlags(id: String, discoverable: Bool) throws {
         updateLibraryFlagsCalled = true
         updateLibraryFlagsIdParam = id
         updateLibraryFlagsDiscoverableParam = discoverable
-        updateLibraryFlagsAutoUpdateParam = autoUpdate
         if let error = updateLibraryFlagsError {
             throw error
         }
@@ -217,9 +215,6 @@ class MockBookRepository: BookRepositoryProtocol {
     var deleteBookCalled = false
     var deleteBookIdParam: String?
 
-    var deleteBooksCalled = false
-    var deleteBooksLibraryParam: CalibreLibrary?
-    var deleteBooksIdsParam: [Int32]?
 
     var getAllBooksInShelfCalled = false
     var getAllBooksInShelfReturn: [CalibreBook] = []
@@ -228,23 +223,10 @@ class MockBookRepository: BookRepositoryProtocol {
     var bookExistsIdParam: String?
     var bookExistsReturn: Bool = false
 
-    var saveBookSyncRecordsCalled = false
-    var saveBookSyncRecordsParam: [BookMetadataSyncRecord]?
-    var saveBookSyncRecordsLibraryParam: CalibreLibrary?
-
     var persistMetadataEntriesCalled = false
     var persistMetadataEntriesLibraryParam: CalibreLibrary?
     var persistMetadataEntriesBookIdsParam: [Int32]?
     var persistMetadataEntriesReturn = BookMetadataPersistenceResult()
-
-    var findDeletedBookIdsCalled = false
-    var findDeletedBookIdsLibraryParam: CalibreLibrary?
-    var findDeletedBookIdsActiveIdsParam: [String: CalibreCdbCmdListResult.DateValue]?
-    var findDeletedBookIdsReturn: [Int32] = []
-
-    var countAndNeedUpdateBooksCalled = false
-    var countAndNeedUpdateBooksLibraryParam: CalibreLibrary?
-    var countAndNeedUpdateBooksReturn: (count: Int, needUpdateIds: [Int32]) = (0, [])
 
     var observeBookCalled = false
     var observeBookIdParam: String?
@@ -300,12 +282,6 @@ class MockBookRepository: BookRepositoryProtocol {
         deleteBookIdParam = id
     }
 
-    func deleteBooks(library: CalibreLibrary, ids: [Int32]) {
-        deleteBooksCalled = true
-        deleteBooksLibraryParam = library
-        deleteBooksIdsParam = ids
-    }
-
     func getAllBooksInShelf() -> [CalibreBook] {
         getAllBooksInShelfCalled = true
         return getAllBooksInShelfReturn
@@ -315,12 +291,6 @@ class MockBookRepository: BookRepositoryProtocol {
         bookExistsCalled = true
         bookExistsIdParam = id
         return bookExistsReturn
-    }
-
-    func saveBookSyncRecords(_ records: [BookMetadataSyncRecord], library: CalibreLibrary) {
-        saveBookSyncRecordsCalled = true
-        saveBookSyncRecordsParam = records
-        saveBookSyncRecordsLibraryParam = library
     }
 
     func persistMetadataEntries(
@@ -334,19 +304,6 @@ class MockBookRepository: BookRepositoryProtocol {
         persistMetadataEntriesLibraryParam = library
         persistMetadataEntriesBookIdsParam = bookIds
         return persistMetadataEntriesReturn
-    }
-
-    func findDeletedBookIds(library: CalibreLibrary, activeIds: [String: CalibreCdbCmdListResult.DateValue]) -> [Int32] {
-        findDeletedBookIdsCalled = true
-        findDeletedBookIdsLibraryParam = library
-        findDeletedBookIdsActiveIdsParam = activeIds
-        return findDeletedBookIdsReturn
-    }
-
-    func countAndNeedUpdateBooks(library: CalibreLibrary) -> (count: Int, needUpdateIds: [Int32]) {
-        countAndNeedUpdateBooksCalled = true
-        countAndNeedUpdateBooksLibraryParam = library
-        return countAndNeedUpdateBooksReturn
     }
 
     #if DEBUG

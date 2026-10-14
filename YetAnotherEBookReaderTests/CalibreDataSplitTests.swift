@@ -223,6 +223,27 @@ final class CalibreDataSplitTests: XCTestCase {
         XCTAssertEqual(info.display.allowHalfStars, true)
     }
 
+    /// calibre stores only the display settings that were set: a column made with
+    /// `calibredb add_custom_column` has `"display": {}`. A setting of an unexpected type is
+    /// dropped, not the column.
+    func testCalibreCustomColumnInfoToleratesAnEmptyOrUnexpectedDisplay() throws {
+        let json = """
+        {
+            "read_progress": {"label": "read_progress", "name": "Read progress", "datatype": "int", "display": {}},
+            "pages": {"label": "pages", "name": "Pages", "datatype": "int",
+                      "display": {"description": "Page count", "use_decorations": true, "number_format": null}}
+        }
+        """.data(using: .utf8)!
+
+        let columns = try JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: json)
+
+        XCTAssertEqual(columns["read_progress"]?.display, CalibreCustomColumnDisplayInfo())
+        XCTAssertEqual(columns["read_progress"]?.isMultiple, false)
+        XCTAssertEqual(columns["pages"]?.display.description, "Page count")
+        XCTAssertNil(columns["pages"]?.display.useDecorations)
+        XCTAssertNil(columns["pages"]?.display.numberFormat)
+    }
+
     // MARK: - Array.chunks helper
 
     func testArrayChunksPreservesAllElements() {

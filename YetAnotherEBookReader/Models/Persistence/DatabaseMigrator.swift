@@ -67,6 +67,11 @@ final class DatabaseMigrator {
                     // Added optional FolioReaderPreferenceRealm.currentLandscapeSpread. Existing
                     // profiles read nil, no choice: FolioReaderKit's configured layout.
                 }
+                if oldSchemaVersion < 146 {
+                    // Removed CalibreLibraryRealm.autoUpdate ("Available when Offline") with the
+                    // full library sync's book list. Realm drops the column. The book records that
+                    // sync left (CalibreBookRealm, not on the shelf) stay: browsing refreshes them.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

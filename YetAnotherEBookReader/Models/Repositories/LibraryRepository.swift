@@ -17,7 +17,7 @@ protocol LibraryRepositoryProtocol {
     func getLibrary(id: String) -> CalibreLibrary?
     func observeLibrary(id: String) -> AsyncStream<CalibreLibrary?>
     func saveLibrary(_ library: CalibreLibrary) throws
-    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws
+    func updateLibraryFlags(id: String, discoverable: Bool) throws
     func deleteLibrary(serverUUID: String, name: String) throws
     func countBooks(for library: CalibreLibrary) -> Int
 }
@@ -104,14 +104,13 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
         }
     }
 
-    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws {
+    func updateLibraryFlags(id: String, discoverable: Bool) throws {
         guard let realm = getRealm(),
               let libraryRealm = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: id)
         else { return }
 
         try realm.write {
             libraryRealm.discoverable = discoverable
-            libraryRealm.autoUpdate = autoUpdate
         }
     }
     

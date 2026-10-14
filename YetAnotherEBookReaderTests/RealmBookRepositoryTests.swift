@@ -126,59 +126,6 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertTrue(repository.bookExists(id: book.inShelfId))
     }
     
-    func testSaveBookSyncRecords() throws {
-        let server = TestFixtures.makeServer()
-        let library = TestFixtures.makeLibrary(server: server, name: "Bulk Library")
-        resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
-        
-        let book1 = TestFixtures.makeBook(id: 10, library: library)
-        let book2 = TestFixtures.makeBook(id: 20, library: library)
-        
-        repository.saveBook(book1)
-        repository.saveBook(book2)
-        
-        let now = Date()
-        let records = [
-            BookMetadataSyncRecord(id: book1.id, lastModified: now),
-            BookMetadataSyncRecord(id: book2.id, lastModified: now.addingTimeInterval(10))
-        ]
-        
-        repository.saveBookSyncRecords(records, library: library)
-        
-        let fetchedBook1 = try XCTUnwrap(repository.getBook(id: book1.inShelfId))
-        let fetchedBook2 = try XCTUnwrap(repository.getBook(id: book2.inShelfId))
-        XCTAssertEqual(fetchedBook1.lastModified.timeIntervalSince1970, now.timeIntervalSince1970, accuracy: 0.001)
-        XCTAssertEqual(fetchedBook2.lastModified.timeIntervalSince1970, now.addingTimeInterval(10).timeIntervalSince1970, accuracy: 0.001)
-    }
-    
-    func testFindDeletedBookIds() throws {
-        let server = TestFixtures.makeServer()
-        let library = TestFixtures.makeLibrary(server: server, name: "Delete Ids Library")
-        resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
-        
-        var book1 = TestFixtures.makeBook(id: 101, library: library)
-        book1.inShelf = false
-        
-        var book2 = TestFixtures.makeBook(id: 102, library: library)
-        book2.inShelf = false
-        
-        var book3 = TestFixtures.makeBook(id: 103, library: library)
-        book3.inShelf = true
-        
-        repository.saveBook(book1)
-        repository.saveBook(book2)
-        repository.saveBook(book3)
-        
-        let activeIds: [String: Any] = ["101": true]
-        
-        let deletedIds = repository.findDeletedBookIds(
-            library: library,
-            activeIds: activeIds.mapValues { _ in CalibreCdbCmdListResult.DateValue(v: "2026-01-01T00:00:00+00:00") }
-        )
-        
-        XCTAssertEqual(deletedIds, [102])
-    }
-
     func testPersistMetadataEntriesUpdatesExistingBookAndReturnsShelfBook() throws {
         let server = TestFixtures.makeServer()
         let library = TestFixtures.makeLibrary(server: server, name: "Metadata Library")
@@ -227,36 +174,34 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertEqual(repository.getBook(id: book.inShelfId)?.publisher, "Metadata Publisher")
     }
     
-    func testCountAndNeedUpdateBooks() throws {
+    /// calibre answers null for a book it no longer has: the book is reported deleted, kept, and
+    /// marked synced so it isn't asked for again until it changes.
+    func testPersistMetadataEntriesReportsANullEntryAsDeleted() throws {
         let server = TestFixtures.makeServer()
-        let library = TestFixtures.makeLibrary(server: server, name: "Update Check Library")
+        let library = TestFixtures.makeLibrary(server: server, name: "Deleted Library")
         resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
-        
-        let now = Date()
-        
-        var book1 = TestFixtures.makeBook(id: 201, library: library)
-        book1.lastModified = now.addingTimeInterval(-100)
-        book1.lastSynced = now
-        repository.saveBook(book1)
-        
-        var book2 = TestFixtures.makeBook(id: 202, library: library)
-        book2.lastModified = now.addingTimeInterval(-50)
-        book2.lastSynced = now.addingTimeInterval(-200)
-        repository.saveBook(book2)
-        
-        var book3 = TestFixtures.makeBook(id: 203, library: library)
-        book3.lastModified = now
-        book3.lastSynced = now.addingTimeInterval(-200)
-        repository.saveBook(book3)
-        
-        let result = repository.countAndNeedUpdateBooks(
-            library: library
+
+        var book = TestFixtures.makeBook(id: 302, library: library)
+        book.inShelf = true
+        book.lastModified = Date(timeIntervalSince1970: 1_000)
+        book.lastSynced = Date(timeIntervalSince1970: 0)
+        repository.saveBook(book)
+
+        let result = repository.persistMetadataEntries(
+            library: library,
+            bookIds: [book.id],
+            entries: [book.id.description: nil],
+            json: [:],
+            includeAnnotationBooks: false
         )
-        
-        XCTAssertEqual(result.count, 3)
-        XCTAssertEqual(result.needUpdateIds, [203, 202])
+
+        XCTAssertEqual(result.booksDeleted, [book.id])
+        XCTAssertEqual(result.booksUpdated, [])
+        let kept = try XCTUnwrap(repository.getBook(id: book.inShelfId))
+        XCTAssertTrue(kept.inShelf)
+        XCTAssertFalse(kept.needsMetadataRefresh)
     }
-    
+
     func testResetBooks() throws {
         let server = TestFixtures.makeServer()
         let library = TestFixtures.makeLibrary(server: server, name: "Reset Library")

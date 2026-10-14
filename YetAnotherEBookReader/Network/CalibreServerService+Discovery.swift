@@ -98,15 +98,7 @@ extension CalibreServerService {
     }
 
     func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {
-        guard let serverUrl = self.librarySyncStatus[library.id]?.isError == true
-            ? URL(fileURLWithPath: "/realm")
-            : (
-                getServerUrlByReachability(server: library.server) ?? (
-                    (library.autoUpdate || library.server.isLocal)
-                    ? URL(fileURLWithPath: "/realm")
-                    : nil
-                )
-            ) else {
+        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
 

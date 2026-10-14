@@ -950,8 +950,7 @@ final class V2MigrationDependencyTests: XCTestCase {
             server: reachableServer,
             isPublic: false,
             updateLibrary: false,
-            autoUpdateOnly: false,
-            incremental: false
+            autoUpdateOnly: false
         )
         let reachableInfo = CalibreServerInfo(
             server: reachableServer,

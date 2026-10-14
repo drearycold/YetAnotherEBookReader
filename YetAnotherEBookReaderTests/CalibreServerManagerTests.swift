@@ -132,7 +132,7 @@ final class CalibreServerManagerTests: XCTestCase {
             errorMsg: "",
             defaultLibrary: "",
             libraryMap: [:],
-            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         )
         serverManager.calibreServerInfoStaging[infoProbing.id] = infoProbing
         
@@ -150,7 +150,7 @@ final class CalibreServerManagerTests: XCTestCase {
             errorMsg: "",
             defaultLibrary: "",
             libraryMap: [:],
-            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         )
         serverManager.calibreServerInfoStaging[infoReachable.id] = infoReachable
         
@@ -192,49 +192,30 @@ final class CalibreServerManagerTests: XCTestCase {
             }
         }
         
-        MockURLProtocol.requestHandler = { request in
-            let path = request.url?.path ?? ""
-            let statusCode: Int
-            let jsonString: String
-            
-            if path.contains("library-info") {
-                statusCode = 200
-                jsonString = """
-                {
-                    "default_library": "lib_default",
-                    "library_map": {
-                        "lib_default": "Default Library",
-                        "lib_other": "Other Library"
-                    }
+        // library-info keeps the server URL's path; makeEndpointURL's relative paths drop it.
+        let emptyLibrarySearch = """
+        {"total_num": 0, "sort_order": "desc", "num_books_without_search": 0, "offset": 0, "num": 0,
+         "sort": "last_modified", "base_url": "", "query": null, "library_id": "", "book_ids": [], "vl": ""}
+        """
+        let answers = [
+            "/probe_success/ajax/library-info": """
+            {
+                "default_library": "lib_default",
+                "library_map": {
+                    "lib_default": "Default Library",
+                    "lib_other": "Other Library"
                 }
-                """
-            } else if path.contains("custom_columns") {
-                statusCode = 200
-                jsonString = "{}"
-            } else if path.contains("categories") {
-                statusCode = 200
-                jsonString = "[]"
-            } else if path.contains("list") {
-                statusCode = 200
-                jsonString = """
-                {
-                    "book_ids": [],
-                    "data": {
-                        "last_modified": [:]
-                    }
-                }
-                """
-            } else {
-                statusCode = 404
-                jsonString = ""
             }
-            
-            let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-            return (response, jsonString.data(using: .utf8)!)
-        }
+            """,
+            "/ajax/search/lib_default": emptyLibrarySearch,
+            "/ajax/search/lib_other": emptyLibrarySearch,
+            "/ajax/categories/lib_default": "[]",
+            "/ajax/categories/lib_other": "[]"
+        ]
+        let requests = MockURLProtocol.answer(answers)
         
         // Call probeServer (updateLibrary: true)
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: true, autoUpdateOnly: true, incremental: true)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: true, autoUpdateOnly: true)
         let infoResult = await serverManager.probeServer(request: request)
         
         XCTAssertNotNil(infoResult)
@@ -252,6 +233,21 @@ final class CalibreServerManagerTests: XCTestCase {
         let autoLibId = CalibreLibrary(server: server, key: "lib_other", name: "Other Library").id
         XCTAssertNotNil(container.libraryManager.calibreLibraries[autoLibId])
         XCTAssertNotNil(container.libraryRepository.getAllLibraries().first { $0.id == autoLibId })
+
+        // Each library is synced: its summary and categories, nothing else.
+        let libraryIds = ["lib_default": "Default Library", "lib_other": "Other Library"].map {
+            CalibreLibrary(server: server, key: $0.key, name: $0.value).id
+        }
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline,
+              !libraryIds.allSatisfy({ container.libraryManager.librarySyncStatus[$0]?.msg == "Success" }) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        for libraryId in libraryIds {
+            XCTAssertEqual(container.libraryManager.librarySyncStatus[libraryId]?.msg, "Success", libraryId)
+            XCTAssertEqual(container.libraryManager.librarySyncStatus[libraryId]?.cnt, 0, libraryId)
+        }
+        XCTAssertEqual(requests.unexpected, [])
     }
 
     func testProbeServerFailure() async throws {
@@ -273,7 +269,7 @@ final class CalibreServerManagerTests: XCTestCase {
             return (response, Data())
         }
         
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
         let infoResult = await serverManager.probeServer(request: request)
         
         XCTAssertNotNil(infoResult)
@@ -298,9 +294,9 @@ final class CalibreServerManagerTests: XCTestCase {
         // Yield to allow async Tasks to schedule and run
         try await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
         
-        let req1 = CalibreProbeServerRequest(server: server1, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
-        let req2 = CalibreProbeServerRequest(server: server2, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
-        let req2Pub = CalibreProbeServerRequest(server: server2, isPublic: true, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let req1 = CalibreProbeServerRequest(server: server1, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
+        let req2 = CalibreProbeServerRequest(server: server2, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
+        let req2Pub = CalibreProbeServerRequest(server: server2, isPublic: true, updateLibrary: false, autoUpdateOnly: false)
         
         XCTAssertNotNil(serverManager.calibreServerInfoStaging[req1.id])
         XCTAssertNotNil(serverManager.calibreServerInfoStaging[req2.id])
@@ -417,7 +413,7 @@ final class CalibreServerManagerTests: XCTestCase {
         try serverRepository.saveServer(server)
         serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: CalibreServerDSReaderHelper(port: 8080))
 
-        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         let info = CalibreServerInfo(
             server: server,
             isPublic: false,

@@ -16,10 +16,8 @@ protocol BookRepositoryProtocol {
     func observeBook(id: String) -> AsyncStream<CalibreBook?>
     func saveBook(_ book: CalibreBook)
     func deleteBook(id: String)
-    func deleteBooks(library: CalibreLibrary, ids: [Int32])
     func getAllBooksInShelf() -> [CalibreBook]
     func bookExists(id: String) -> Bool
-    func saveBookSyncRecords(_ records: [BookMetadataSyncRecord], library: CalibreLibrary)
     func persistMetadataEntries(
         library: CalibreLibrary,
         bookIds: [Int32],
@@ -27,8 +25,6 @@ protocol BookRepositoryProtocol {
         json: NSDictionary,
         includeAnnotationBooks: Bool
     ) -> BookMetadataPersistenceResult
-    func findDeletedBookIds(library: CalibreLibrary, activeIds: [String: CalibreCdbCmdListResult.DateValue]) -> [Int32]
-    func countAndNeedUpdateBooks(library: CalibreLibrary) -> (count: Int, needUpdateIds: [Int32])
     #if DEBUG
     func resetBooks(serverUUID: String, libraryName: String)
     #endif
@@ -138,18 +134,6 @@ class RealmBookRepository: BookRepositoryProtocol {
         }
     }
 
-    func deleteBooks(library: CalibreLibrary, ids: [Int32]) {
-        guard let realm = getRealm() else { return }
-        let keys = ids.map { primaryKey(library: library, bookId: $0) }
-        try? realm.write {
-            keys.compactMap {
-                realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: $0)
-            }.forEach {
-                realm.delete($0)
-            }
-        }
-    }
-    
     func getAllBooksInShelf() -> [CalibreBook] {
         guard let realm = getRealm() else { return [] }
         let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter("inShelf = true")
@@ -166,28 +150,10 @@ class RealmBookRepository: BookRepositoryProtocol {
         guard let realm = getRealm() else { return false }
         return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id) != nil
     }
-    
-    func saveBookSyncRecords(_ records: [BookMetadataSyncRecord], library: CalibreLibrary) {
-        guard let realm = getRealm() else { return }
-        let serverUUID = library.server.uuid.uuidString
-        let libraryName = library.name
-        try? realm.write {
-            records.forEach { record in
-                realm.create(
-                    CalibreBookRealm.self,
-                    value: [
-                        "primaryKey": primaryKey(library: library, bookId: record.id),
-                        "serverUUID": serverUUID,
-                        "libraryName": libraryName,
-                        "lastModified": record.lastModified,
-                        "idInLib": record.id
-                    ],
-                    update: .modified
-                )
-            }
-        }
-    }
 
+    /// Applies an `ajax/books` answer to the books already recorded. One whose entry is null is
+    /// reported in `booksDeleted` (calibre answers null for a book it no longer has, or one a
+    /// restricted user may not see) and isn't asked for again until it changes.
     func persistMetadataEntries(
         library: CalibreLibrary,
         bookIds: [Int32],
@@ -225,33 +191,6 @@ class RealmBookRepository: BookRepositoryProtocol {
         return result
     }
     
-    func findDeletedBookIds(library: CalibreLibrary, activeIds: [String: CalibreCdbCmdListResult.DateValue]) -> [Int32] {
-        guard let realm = getRealm() else { return [] }
-        let objects = realm.objects(CalibreBookRealm.self).filter(
-            "serverUUID == %@ AND libraryName == %@",
-            library.server.uuid.uuidString,
-            library.name
-        )
-        return objects
-            .filter { $0.inShelf == false && activeIds[$0.idInLib.description] == nil }
-            .map { $0.idInLib }
-    }
-    
-    func countAndNeedUpdateBooks(library: CalibreLibrary) -> (count: Int, needUpdateIds: [Int32]) {
-        guard let realm = getRealm() else { return (0, []) }
-        let objects = realm.objects(CalibreBookRealm.self).filter(
-            "serverUUID == %@ AND libraryName == %@",
-            library.server.uuid.uuidString,
-            library.name
-        )
-        let count = objects.count
-        let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
-        let needUpdateIds = objectsNeedUpdate
-            .sorted(byKeyPath: "lastModified", ascending: false)
-            .map { $0.idInLib }
-        return (count, Array(needUpdateIds))
-    }
-
     #if DEBUG
     func resetBooks(serverUUID: String, libraryName: String) {
         guard let realm = getRealm() else { return }

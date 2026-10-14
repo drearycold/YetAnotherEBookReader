@@ -106,7 +106,6 @@ struct CalibreLibrary: Hashable, Identifiable {
     var key: String
     var name: String
     
-    var autoUpdate = false
     var discoverable = true
     var hidden = false
     var lastModified = Date(timeIntervalSince1970: 0)
@@ -381,8 +380,9 @@ struct CalibreSyncStatus {
     var isUpd = false
     var isError = false
     var msg: String? = nil
+    /// The books the user may see, from `CalibreLibraryManager.syncLibrary`.
     var cnt: Int? = nil
-    var upd = Set<Int32>()  //ongoing requests
+    /// Books whose metadata calibre answered null: deleted, or out of a restricted user's reach.
     var del = Set<Int32>()
     var err = Set<Int32>()
 }
