@@ -5,10 +5,91 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
-## Library Sync Without a Book List (2026-10-14, branch)
+## Browse: Failures, Metadata Batches, Category Fields (2026-10-16, branch)
 
-Branch `claude/retire-library-sync-book-list`, based on `main` after #120. This
-carries out the decision in "Calibre Contract Coverage" below.
+Branch `claude/browse-failures-offline-cache`, based on `main` after #121. Three
+Browse fixes found on 2026-10-14, one commit each.
+
+- **The bug:** a library whose search failed never got merge offsets in "all
+  libraries" mode, and `getLibraryLoadingCount` counted a library without
+  offsets as loading. So with a server down, Browse said "Loading books..." /
+  "Still searching N libraries" forever. No view read `LibrarySearchStatus.error`.
+- **Loading comes from the status now.** A library is loading while its status
+  says so; offsets are only the fallback when it has no status.
+- **A failed library shows its search cache** (`UnifiedSearchService`):
+  - `ActiveSearch.libraryResults` keeps each library's books with their source:
+    this search's answer, or the cache until it arrives and when it fails.
+  - `cachedResult(for:key:)` reads the cache under the URL the server is
+    reached by, else the newest other source. An unreachable server is looked
+    up by its base URL, though its books may have been read through its public
+    one.
+  - The status says `fromCache`, and the merge treats the failed library as
+    complete (`totalNumber = books.count`), so it doesn't stop the merge for the
+    other libraries.
+- **The cache shows before the server answers:** `triggerSearch` merges and
+  emits the cached books with the statuses loading, then searches. A refresh no
+  longer blanks the list.
+- **Superseded searches:** `ActiveSearch.searchId` drops a replaced search's
+  results and its `finishSearch`, which used to clear the newer search's loading
+  flags. `triggerSearch` and `handleLibrarySearchResult` do their awaits first,
+  then read, change and store the search without suspending.
+- **UI:** the empty list says "Couldn't search <library>: <error>"; the footer
+  adds ", N failed" or "Couldn't search N libraries"; the Libraries popover
+  shows each library's error, or "Showing saved results".
+- **Tests:** four in `UnifiedSearchServiceTests` (a failed library's cache
+  doesn't hold others back; no cache, all-libraries mode, isn't loading; an
+  unreachable server's other-URL cache; the cache before the answer). Each
+  fails against the old code (checked by reverting the fix).
+- **Verified (iPhone 17):** full scheme, 928 unit tests, 0 failures, 21 skipped;
+  the 5 UI journeys pass; the Mac Catalyst build succeeds.
+- **Category filters search calibre's field (2026-10-16, same branch).** They
+  used the category's name, lowercased, as the field. calibre names categories
+  in the server's language: with `CALIBRE_OVERRIDE_LANG=zh_CN`, `作者:"=Test
+  Author"` finds 0 books (HTTP 200), `authors:` finds 1.
+  - `CalibreLibraryCategory.field` decodes the field from the category's URL
+    (`/ajax/category/617574686f7273/…` is `authors`; `#col`, `@usercat` and
+    `search` too).
+  - `CalibreLibrary.categoryFields` (name → field) is filled by the sync's
+    categories step (`applyCategoryFields`) and persisted as
+    `CalibreLibraryRealm.categoryFieldsData`: **schema 147**. Until a library's
+    next sync it's empty, and filters fall back to the old rule.
+  - `CalibreLibrary.searchField(forCategory:)`: calibre's field, else a custom
+    column's, else the name lowercased, which suits the app's own English keys
+    ("Authors", "Tags", "Series" from Discover, the context menu and the book
+    list). `isRatingField` replaces the `"Rating"` name check.
+  - The category sort rule (series by index, authors and publisher by date)
+    goes by field (`CalibreLibraryManager.searchField(forCategory:)`).
+  - Filters stay keyed by the category's name: one name merges across
+    libraries, and two servers in different languages give two filters.
+  - Tests: field decoding and lookup (`CalibreDataSplitTests`), the query
+    (`CalibreServerServiceTests`), the sync keeping the map
+    (`CalibreLibraryManagerTests`), the Realm round trip, the sort rule, and
+    contract test `testACategoryFilterFindsTheCategorysBooks`, which passes
+    against a zh_CN server and fails there with the old rule (0 vs 1 books).
+- **Verified after all three (iPhone 17):** full scheme, 937 unit tests, 0
+  failures, 22 skipped; 5 UI journeys pass; contract tests 21 of 21 against an
+  English calibre 9.11, no 404; Mac Catalyst builds.
+- **Metadata in batches (2026-10-16, same branch).** calibre refuses a request
+  line over 8 KB (`max_header_line_size`): 1,300 five-digit ids in one
+  `ajax/books` URL pass, 1,500 get 400. Browsing put every loaded id in one
+  request, ignored the failure and saved the cache with the new generation.
+  - `CalibreServerService.booksMetadataBatchSize` (200).
+    `LibrarySearchService.refreshMetadata` reads in batches, one after
+    another. When a request doesn't arrive, the cache keeps the generation it
+    had, so the next search reads the books again; an answer that can't be
+    decoded doesn't count, as rereading won't help.
+  - `CalibreBookManager.getBooksMetadata(request:)` splits a longer list (a
+    large shelf's) into batches. Its annotations request lists each book and
+    format in the path, so it has the same limit.
+  - Tests: `testLibrarySearchReadsMetadataInBatches`,
+    `testAFailedMetadataBatchLeavesTheBooksToBeReadAgain`,
+    `testALargeShelfIsReadInBatches`.
+
+## Library Sync Without a Book List (2026-10-14, #121)
+
+Branch `claude/retire-library-sync-book-list`, based on `main` after #120,
+merged as #121. This carries out the decision in "Calibre Contract Coverage"
+below.
 
 - **`CalibreLibraryManager.syncLibrary(request:)` now** reads, with the
   requests browsing makes:

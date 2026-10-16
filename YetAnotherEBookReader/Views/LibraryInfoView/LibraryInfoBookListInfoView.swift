@@ -18,50 +18,48 @@ struct LibraryInfoBookListInfoView: View {
         NavigationView {
             List {
                 if let result = viewModel.unifiedSearchResult {
-                    ForEach(
-                        result.unifiedOffsets
-                            .sorted(by: { $0.key < $1.key })
-                            .map({ unifiedOffset in
-                                (
-                                    unifiedOffset,
-                                    container.libraryManager.calibreLibraries[unifiedOffset.key]
-                                )
-                            }), id: \.0.key) { searchResult in
-                                if let library = searchResult.1 {
-                                    let unifiedOffset = searchResult.0.value
-                                    Section {
-                                        HStack {
-                                            Text("Offset")
-                                            Spacer()
-                                            Text("\(unifiedOffset.offset)")
-                                        }
-                                        #if DEBUG
-                                        HStack {
-                                            Text(unifiedOffset.searchObjectSource)
-                                        }
-                                        HStack {
-                                            Text(unifiedOffset.generation.description)
-                                            Spacer()
-                                            Text(library.lastModified.description)
-                                        }
-                                        HStack {
-                                            Text(unifiedOffset.offset.description)
-                                            Text("/")
-                                            Text(unifiedOffset.beenConsumed.description)
-                                            Text("/")
-                                            Text(unifiedOffset.beenCutOff.description)
-                                        }
-                                        #endif
-                                    } header: {
-                                        HStack {
-                                            Text(library.name)
-                                            Spacer()
-                                            Text(library.server.name)
-                                        }
-                                    }
-                                } else {
-                                    Text("Error \(searchResult.0.key)")
+                    ForEach(listedLibraryIds(result), id: \.self) { libraryId in
+                        if let library = container.libraryManager.calibreLibraries[libraryId] {
+                            let status = viewModel.libraryStatuses[libraryId]
+                            Section {
+                                if let failure = status?.failure {
+                                    Text(status?.fromCache == true ? "Showing saved results. \(failure.message)" : failure.message)
+                                        .foregroundColor(.secondary)
                                 }
+                                if let unifiedOffset = result.unifiedOffsets[libraryId] {
+                                    HStack {
+                                        Text("Offset")
+                                        Spacer()
+                                        Text("\(unifiedOffset.offset)")
+                                    }
+                                    #if DEBUG
+                                    HStack {
+                                        Text(unifiedOffset.searchObjectSource)
+                                    }
+                                    HStack {
+                                        Text(unifiedOffset.generation.description)
+                                        Spacer()
+                                        Text(library.lastModified.description)
+                                    }
+                                    HStack {
+                                        Text(unifiedOffset.offset.description)
+                                        Text("/")
+                                        Text(unifiedOffset.beenConsumed.description)
+                                        Text("/")
+                                        Text(unifiedOffset.beenCutOff.description)
+                                    }
+                                    #endif
+                                }
+                            } header: {
+                                HStack {
+                                    Text(library.name)
+                                    Spacer()
+                                    Text(library.server.name)
+                                }
+                            }
+                        } else {
+                            Text("Error \(libraryId)")
+                        }
                     }
                 } else {
                     Text("No Search Result")
@@ -88,6 +86,12 @@ struct LibraryInfoBookListInfoView: View {
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    /// The libraries in the merged result, and those whose search failed without a cache to show.
+    private func listedLibraryIds(_ result: UnifiedSearchResult) -> [String] {
+        let failedLibraryIds = viewModel.libraryStatuses.filter { $0.value.failure != nil }.keys
+        return Set(result.unifiedOffsets.keys).union(failedLibraryIds).sorted()
     }
 }
 

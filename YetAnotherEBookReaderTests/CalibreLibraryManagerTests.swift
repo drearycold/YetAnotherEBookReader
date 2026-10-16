@@ -425,6 +425,28 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, moved)
     }
 
+    /// calibre names categories in the server's language. The sync keeps the field each one is
+    /// searched by, from its URL, and saves it with the library.
+    func testSyncLibraryKeepsTheFieldEachCategoryIsSearchedBy() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers(categories: """
+        [
+            {"name": "全部书籍", "url": "/ajax/category/616c6c626f6f6b73/test_lib", "icon": "book.png", "is_category": false},
+            {"name": "作者", "url": "/ajax/category/617574686f7273/test_lib", "icon": "user_profile.png", "is_category": true}
+        ]
+        """, categoryItems: [
+            "/ajax/category/617574686f7273/test_lib": Self.categoryItemsJSON(name: "作者", items: [])
+        ]))
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(requests.unexpected, [])
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.categoryFields, ["作者": "authors"])
+        XCTAssertEqual(libraryRepository.getLibrary(id: library.id)?.categoryFields, ["作者": "authors"])
+        XCTAssertEqual(libraryManager.searchField(forCategory: "作者"), "authors")
+        XCTAssertEqual(libraryManager.searchField(forCategory: "Tags"), "tags")
+    }
+
     /// A category that couldn't be refreshed fails the sync, rather than showing it as a success.
     func testAFailedCategoryIsReported() async throws {
         configureReachableMockSession()
@@ -509,6 +531,51 @@ final class CalibreLibraryManagerTests: XCTestCase {
         await container.bookManager.getBooksMetadata(request: .init(library: library, books: [102], getAnnotations: false))
 
         XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [])
+    }
+
+    /// A shelf larger than a batch is read in batches: calibre refuses a long request line.
+    func testALargeShelfIsReadInBatches() async throws {
+        configureReachableMockSession()
+        let ids = (1...250).map(Int32.init)
+        for id in ids {
+            var book = CalibreBook(id: id, library: library)
+            book.inShelf = true
+            container.bookManager.updateBook(book: book)
+        }
+        let entries = Dictionary(uniqueKeysWithValues: ids.map { ($0, Self.bookEntryJSON(title: "Book \($0)")) })
+        let batchSizes = BatchSizes()
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url, url.path == "/ajax/books/test_lib" else { throw URLError(.fileDoesNotExist) }
+            let requested = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "ids" })?.value?
+                .split(separator: ",")
+                .compactMap { Int32(String($0)) } ?? []
+            batchSizes.append(requested.count)
+            let body = "{" + requested.map { "\"\($0)\": \(entries[$0] ?? "null")" }.joined(separator: ", ") + "}"
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+        }
+
+        await container.bookManager.getBooksMetadata(request: .init(library: library, books: ids, getAnnotations: false))
+
+        XCTAssertEqual(batchSizes.values, [200, 50])
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del ?? [], [])
+    }
+
+    private final class BatchSizes: @unchecked Sendable {
+        private let lock = NSLock()
+        private var sizes = [Int]()
+
+        func append(_ size: Int) {
+            lock.lock()
+            sizes.append(size)
+            lock.unlock()
+        }
+
+        var values: [Int] {
+            lock.lock()
+            defer { lock.unlock() }
+            return sizes
+        }
     }
 
     func testPopulateLocalLibraryBooksWithFiles() throws {

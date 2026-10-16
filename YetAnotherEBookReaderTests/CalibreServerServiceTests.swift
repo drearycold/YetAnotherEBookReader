@@ -80,6 +80,28 @@ final class CalibreServerServiceTests: XCTestCase {
         )
     }
 
+    /// calibre names categories in the server's language. A filter keyed by such a name searches
+    /// the field calibre gave for it, not the name.
+    func testBuildLibrarySearchTasksSearchesTheFieldCalibreNamedForACategory() throws {
+        var library: CalibreLibrary = library
+        library.categoryFields = ["作者": "authors", "评分": "rating"]
+        let criteria = SearchCriteria(
+            searchString: "",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: ["作者": Set(["Test Author"]), "评分": Set(["★★★★"])]
+        )
+
+        let tasks = service.buildLibrarySearchTasks(library: library, searchCriteria: criteria, parameters: [:])
+
+        let task = try XCTUnwrap(tasks.first { $0.booksListUrl.scheme != "file" })
+        let query = try XCTUnwrap(
+            URLComponents(url: task.booksListUrl, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "query" }?.value
+        )
+        XCTAssertTrue(query.contains("authors:\"=Test Author\""), query)
+        XCTAssertTrue(query.contains("rating:4"), query)
+        XCTAssertFalse(query.contains("作者"), query)
+    }
+
     func testValidatedDataMapsUnauthorizedToAuthFailed() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(

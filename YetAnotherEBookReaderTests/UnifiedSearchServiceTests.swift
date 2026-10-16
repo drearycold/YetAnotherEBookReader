@@ -1643,6 +1643,212 @@ class UnifiedSearchServiceTests: XCTestCase {
         XCTAssertNotNil(finalResult)
         XCTAssertEqual(finalResult?.books.count, 0)
     }
+
+    // MARK: - Metadata in batches
+
+    /// Answers `ajax/search` with `bookIds`, and `ajax/books` with each requested book, recording
+    /// the ids of each request; `failing` gets HTTP 400 for a request that asks for it.
+    private func answerSearch(bookIds: [Int32], query: String, recorder: MetadataRequestRecorder, failing: Int32? = nil) {
+        let searchJSON = Self.makeSearchResultJSON(total: bookIds.count, offset: 0, num: bookIds.count, bookIds: bookIds, query: query)
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            if url.path.contains("ajax/search/lib1") {
+                return (ok, searchJSON.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let ids = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                    .first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                recorder.append(ids: ids)
+                if let failing, ids.contains(failing) {
+                    return (HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil)!, Data())
+                }
+                return (ok, Self.makeMetadataJSON(bookIds: ids).data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+    }
+
+    /// Browsing reads books' metadata in batches: calibre refuses a request line over 8 KB, which
+    /// about 1,300 ids reach.
+    func testLibrarySearchReadsMetadataInBatches() async throws {
+        let criteria = SearchCriteria(searchString: "batches", sortCriteria: LibrarySearchSort(by: .Title, ascending: true), filterCriteriaCategory: [:])
+        let recorder = MetadataRequestRecorder()
+        answerSearch(bookIds: (1...450).map(Int32.init), query: criteria.searchString, recorder: recorder)
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(library: mockLibrary1, criteria: criteria, limit: 450, force: true)
+
+        XCTAssertEqual(recorder.snapshot().map(\.count), [200, 200, 50])
+        XCTAssertEqual(try XCTUnwrap(result.sources["http://localhost/1"]).books.count, 450)
+    }
+
+    /// A batch that doesn't arrive leaves the cache's generation as it was, so the next search reads
+    /// the books again rather than taking them for up to date.
+    func testAFailedMetadataBatchLeavesTheBooksToBeReadAgain() async throws {
+        let criteria = SearchCriteria(searchString: "failed-batch", sortCriteria: LibrarySearchSort(by: .Title, ascending: true), filterCriteriaCategory: [:])
+        var library: CalibreLibrary = mockLibrary1
+        library.lastModified = Date(timeIntervalSince1970: 1_000)
+        let recorder = MetadataRequestRecorder()
+        answerSearch(bookIds: (1...250).map(Int32.init), query: criteria.searchString, recorder: recorder, failing: 201)
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(library: library, criteria: criteria, limit: 250, force: true)
+
+        XCTAssertEqual(recorder.snapshot().map(\.count), [200, 50])
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+        XCTAssertEqual(source.books.count, 200)
+        XCTAssertLessThan(source.generation, library.lastModified)
+    }
+
+    // MARK: - Failures and the search cache
+
+    private var offlineCriteria: SearchCriteria {
+        SearchCriteria(
+            searchString: "offline",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+    }
+
+    private func cacheBooks(_ ids: [Int32], total: Int, of library: CalibreLibrary, source: String) throws {
+        try repository.saveLibrarySourceResult(
+            libraryId: library.id,
+            search: offlineCriteria.searchString,
+            sortBy: offlineCriteria.sortCriteria.by,
+            sortAsc: offlineCriteria.sortCriteria.ascending,
+            filters: offlineCriteria.filterCriteriaCategory,
+            sourceUrl: source,
+            result: LibrarySourceSearchResult(
+                generation: library.lastModified,
+                totalNumber: total,
+                bookIds: ids,
+                books: ids.map { createMockBook(id: $0, title: "Cached \($0)", library: library) }
+            )
+        )
+    }
+
+    private func collectUpdates(
+        for key: SearchCriteriaMergedKey,
+        timeout: TimeInterval = 5.0,
+        until predicate: @escaping (SearchUpdate) -> Bool
+    ) async -> [SearchUpdate] {
+        let expectation = expectation(description: "Unified search stream emitted expected update")
+        var updates: [SearchUpdate] = []
+        var fulfilled = false
+        let stream = await manager.search(key: key)
+        let task = Task { @MainActor in
+            for await update in stream {
+                guard !Task.isCancelled else { break }
+                updates.append(update)
+                if predicate(update), !fulfilled {
+                    fulfilled = true
+                    expectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        await fulfillment(of: [expectation], timeout: timeout)
+        task.cancel()
+        return updates
+    }
+
+    /// A library whose search fails shows what its search cache had and says why. It has no more
+    /// to give, so the books it had don't hold back another library's that sort after them.
+    func testAFailedLibraryShowsItsCacheWithoutHoldingBackTheOthers() async throws {
+        try cacheBooks([1, 2], total: 5, of: mockLibrary1, source: "http://localhost/1")
+        let searchJSON = Self.makeSearchResultJSON(total: 1, offset: 0, num: 1, bookIds: [7], query: "offline")
+        let metadataJSON = Self.makeMetadataJSON(bookIds: [7], titles: [7: "Zebra"])
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path.contains("/lib1") {
+                throw URLError(.cannotConnectToHost)
+            }
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            if url.path.contains("ajax/search/lib2") {
+                return (response, searchJSON.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib2") {
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id, mockLibrary2.id], criteria: offlineCriteria)
+
+        let updates = await collectUpdates(for: key) { update in
+            update.statuses.values.allSatisfy { !$0.loading }
+        }
+
+        let last = try XCTUnwrap(updates.last)
+        let status = try XCTUnwrap(last.statuses[mockLibrary1.id])
+        XCTAssertNotNil(status.failure)
+        XCTAssertTrue(status.fromCache)
+        XCTAssertNil(last.statuses[mockLibrary2.id]?.error)
+        XCTAssertEqual(last.result.books.map(\.title), ["Cached 1", "Cached 2", "Zebra"])
+        XCTAssertEqual(last.result.totalNumber, 3)
+    }
+
+    /// A library whose search fails with nothing cached isn't left loading: Browse says why. This
+    /// searches all libraries, as Browse does, where the merge has no offsets for such a library.
+    func testAFailedLibraryWithoutACacheSaysWhyInsteadOfLoading() async throws {
+        MockURLProtocol.requestHandler = { _ in throw URLError(.cannotConnectToHost) }
+        libraryProvider.libraries = [mockLibrary1.id: mockLibrary1]
+        container.libraryManager.calibreLibraries = [mockLibrary1.id: mockLibrary1]
+        let key = SearchCriteriaMergedKey(libraryIds: [], criteria: offlineCriteria)
+
+        let libraryId = mockLibrary1.id
+        let updates = await collectUpdates(for: key) { update in
+            update.statuses[libraryId]?.failure != nil
+        }
+
+        let last = try XCTUnwrap(updates.last)
+        XCTAssertEqual(last.statuses[mockLibrary1.id]?.fromCache, false)
+        XCTAssertTrue(last.result.books.isEmpty)
+        let viewModel = LibraryInfoView.ViewModel()
+        XCTAssertEqual(viewModel.getLibraryLoadingCount(container: container, searchResult: last.result, libraryStatuses: last.statuses), 0)
+        XCTAssertEqual(viewModel.getLibrarySearchingText(container: container, searchResult: last.result, libraryStatuses: last.statuses), "Couldn't search 1 library")
+        let failureText = try XCTUnwrap(viewModel.getLibrarySearchFailureText(container: container, searchResult: last.result, libraryStatuses: last.statuses))
+        XCTAssertTrue(failureText.hasPrefix("Couldn't search Library 1: "), failureText)
+    }
+
+    /// A server that can't be reached is looked up by its base URL. Books read through its public
+    /// URL are still shown.
+    func testAnUnreachableServerShowsWhatWasReadThroughItsOtherURL() async throws {
+        let server = CalibreServer(uuid: UUID(), name: "Server3", baseUrl: "http://localhost/3", hasPublicUrl: true, publicUrl: "http://public.example/3", hasAuth: false, username: "", password: "")
+        let library = CalibreLibrary(server: server, key: "lib3", name: "Library 3")
+        libraryProvider.libraries[library.id] = library
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+            serverService.metadataSessions[CalibreServerURLSessionKey(server: server, timeout: 600, qos: qos)] = mockSession
+        }
+        try cacheBooks([4], total: 1, of: library, source: "http://public_example/3")
+        MockURLProtocol.requestHandler = { _ in throw URLError(.cannotConnectToHost) }
+        let key = SearchCriteriaMergedKey(libraryIds: [library.id], criteria: offlineCriteria)
+
+        let updates = await collectUpdates(for: key) { update in
+            update.statuses[library.id]?.failure != nil
+        }
+
+        let last = try XCTUnwrap(updates.last)
+        XCTAssertEqual(last.statuses[library.id]?.fromCache, true)
+        XCTAssertEqual(last.result.books.map(\.title), ["Cached 4"])
+        XCTAssertEqual(last.result.unifiedOffsets[library.id]?.searchObjectSource, "http://public_example/3")
+    }
+
+    /// What the search cache has is shown before the server answers.
+    func testTheCacheIsShownBeforeTheServerAnswers() async throws {
+        try cacheBooks([1, 2], total: 2, of: mockLibrary1, source: "http://localhost/1")
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: offlineCriteria)
+
+        let updates = await collectUpdates(for: key) { _ in true }
+
+        let first = try XCTUnwrap(updates.first)
+        XCTAssertEqual(first.statuses[mockLibrary1.id]?.loading, true)
+        XCTAssertEqual(first.result.books.map(\.title), ["Cached 1", "Cached 2"])
+    }
 }
 
 // Concrete Mock Repository for testing

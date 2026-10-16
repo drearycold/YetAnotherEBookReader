@@ -26,7 +26,7 @@ struct LibraryInfoBookListContent: View {
                 #endif
                 
                 if books.isEmpty {
-                    Text(libraryInfoViewModel.getLibraryLoadingCount(container: container, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
+                    Text(emptyListText())
                         .accessibilityIdentifier("browse.no-results")
                 } else {
                     let sections = listViewModel.buildSections(books: books, sectionedBy: libraryInfoViewModel.sectionedBy)
@@ -207,6 +207,16 @@ struct LibraryInfoBookListContent: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(browseBookAccessibilityIdentifier(for: book))
+    }
+
+    private func emptyListText() -> String {
+        let result = viewModel.unifiedSearchResult
+        let statuses = viewModel.libraryStatuses
+        if libraryInfoViewModel.getLibraryLoadingCount(container: container, searchResult: result, libraryStatuses: statuses) > 0 {
+            return "Loading books..."
+        }
+        return libraryInfoViewModel.getLibrarySearchFailureText(container: container, searchResult: result, libraryStatuses: statuses)
+            ?? "Found no books."
     }
 
     private func browseBookAccessibilityIdentifier(for book: CalibreBook) -> String {

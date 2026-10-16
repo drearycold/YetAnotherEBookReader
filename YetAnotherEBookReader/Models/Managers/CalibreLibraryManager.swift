@@ -376,6 +376,7 @@ class CalibreLibraryManager {
         var categoryError: String?
         do {
             let categories = try await calibreServerService.getLibraryCategories(library: library)
+            library = applyCategoryFields(of: categories, to: library)
             categoryError = await refreshCategoryCaches(
                 container: container,
                 library: library,
@@ -394,6 +395,37 @@ class CalibreLibraryManager {
             self.librarySyncStatus[libraryId]?.isError = true
             self.librarySyncStatus[libraryId]?.msg = categoryError
         }
+    }
+
+    /// Keeps the field calibre searches each category by (`CalibreLibrary.categoryFields`): a
+    /// category's name is in the server's language, and isn't one.
+    @MainActor
+    private func applyCategoryFields(of categories: [CalibreLibraryCategory], to library: CalibreLibrary) -> CalibreLibrary {
+        let categoryFields = categories
+            .filter(\.is_category)
+            .reduce(into: [String: String]()) { fields, category in
+                fields[category.name] = category.field
+            }
+        // A library removed meanwhile stays removed.
+        guard var updated = calibreLibraries[library.id],
+              updated.categoryFields != categoryFields else {
+            return library
+        }
+
+        updated.categoryFields = categoryFields
+        calibreLibraries[library.id] = updated
+        do {
+            try libraryRepository.saveLibrary(updated)
+        } catch {
+            logger.error("Failed to save the category fields of \(updated.name): \(error.localizedDescription)")
+        }
+        return updated
+    }
+
+    /// The field calibre searches a category by, from any library calibre named it for, for a
+    /// filter that spans libraries (`CalibreLibrary.searchField(forCategory:)`).
+    func searchField(forCategory name: String) -> String {
+        calibreLibraries.values.lazy.compactMap { $0.categoryFields[name] }.first ?? name.lowercased()
     }
 
     /// Keeps the newer `lastModified` and the custom columns, when the library has a book to

@@ -294,6 +294,35 @@ final class CalibreServerContractTests: XCTestCase {
         let categories = try await service.getLibraryCategories(library: library)
 
         XCTAssertTrue(categories.contains { $0.name == "Authors" && $0.is_category }, "\(categories.map(\.name))")
+        // The URL names the field the category is searched by (`CalibreLibraryCategory.field`).
+        XCTAssertEqual(categories.first { $0.name == "Authors" }?.field, "authors")
+    }
+
+    /// A filter keyed by a category's name, as calibre gives it, finds the category's books: the
+    /// query uses the field the category's URL names. calibre names categories in the server's
+    /// language, so the name isn't a field: run in Chinese (`CALIBRE_OVERRIDE_LANG=zh_CN`), it
+    /// calls Authors "作者", and `作者:"=…"` finds nothing.
+    func testACategoryFilterFindsTheCategorysBooks() async throws {
+        let categories = try await service.getLibraryCategories(library: library)
+        var library: CalibreLibrary = library
+        library.categoryFields = categories.filter(\.is_category).reduce(into: [:]) { $0[$1.name] = $1.field }
+        let authors = try XCTUnwrap(categories.first { $0.field == "authors" })
+        let authorItems = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: authors)
+        let author = try XCTUnwrap(authorItems.items.first)
+
+        let criteria = SearchCriteria(
+            searchString: "",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [authors.name: [author.name]]
+        )
+        let task = try XCTUnwrap(
+            service.buildLibrarySearchTasks(library: library, searchCriteria: criteria, parameters: [:]).first { $0.booksListUrl.isHTTP }
+        )
+        let (data, _) = try await service.validatedData(from: task.booksListUrl, server: library.server)
+        let result = try service.decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: data)
+
+        XCTAssertGreaterThan(author.count, 0)
+        XCTAssertEqual(result.total_num, author.count, "\(task.booksListUrl)")
     }
 
     /// A whole sync through the manager: the summary and categories, and no book taken for deleted.

@@ -72,6 +72,11 @@ final class DatabaseMigrator {
                     // full library sync's book list. Realm drops the column. The book records that
                     // sync left (CalibreBookRealm, not on the shelf) stay: browsing refreshes them.
                 }
+                if oldSchemaVersion < 147 {
+                    // Added CalibreLibraryRealm.categoryFieldsData, the field calibre searches each
+                    // category by. It's empty until the next library sync, and a filter falls back
+                    // to the category's name, lowercased, as before.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

@@ -30,6 +30,8 @@ class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     }
     
     @Persisted var customColumnsData: Data?
+    /// `CalibreLibrary.categoryFields`, as JSON.
+    @Persisted var categoryFieldsData: Data?
     
     @Persisted var discoverable = true
     @Persisted var hidden = false

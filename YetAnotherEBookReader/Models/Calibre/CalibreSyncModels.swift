@@ -183,3 +183,27 @@ struct CalibreLibraryCategory: Codable {
     var icon: String
     var is_category: Bool
 }
+
+extension CalibreLibraryCategory {
+    /// The field calibre searches this category by: `authors`, `#read_progress`, `@Favourites`.
+    /// `name` is in the calibre server's language, but the URL names the field, hex-encoded:
+    /// `/ajax/category/617574686f7273/<library>` is `authors`.
+    var field: String? {
+        guard let path = URLComponents(string: url)?.path else { return nil }
+        let components = path.split(separator: "/")
+        guard let index = components.firstIndex(of: "category"),
+              components.index(after: index) < components.endIndex else { return nil }
+        let hex = Array(components[components.index(after: index)].utf8)
+        guard hex.isEmpty == false, hex.count.isMultiple(of: 2) else { return nil }
+
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(hex.count / 2)
+        for offset in stride(from: 0, to: hex.count, by: 2) {
+            guard let byte = UInt8(String(decoding: hex[offset ..< offset + 2], as: UTF8.self), radix: 16) else {
+                return nil
+            }
+            bytes.append(byte)
+        }
+        return String(bytes: bytes, encoding: .utf8)
+    }
+}

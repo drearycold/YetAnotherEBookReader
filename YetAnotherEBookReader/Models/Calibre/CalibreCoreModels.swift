@@ -111,7 +111,32 @@ struct CalibreLibrary: Hashable, Identifiable {
     var lastModified = Date(timeIntervalSince1970: 0)
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
-    
+
+    /// The field calibre searches each category by, keyed by the category's name as calibre gives
+    /// it, which is in the server's language (`CalibreLibraryCategory.field`). Read by the sync.
+    var categoryFields = [String: String]()
+
+    /// The field to search a category by, for a filter keyed by the category's name: the one
+    /// calibre gave for that name, a custom column's, or else the name lowercased, which suits the
+    /// app's own English names ("Authors", "Tags", "Series").
+    func searchField(forCategory name: String) -> String {
+        if let field = categoryFields[name] {
+            return field
+        }
+        if let column = customColumnInfos.first(where: { $0.value.name == name }) {
+            return "#\(column.key)"
+        }
+        return name.lowercased()
+    }
+
+    /// Whether a search field holds ratings, which calibre searches by star count.
+    func isRatingField(_ field: String) -> Bool {
+        if field == "rating" {
+            return true
+        }
+        return field.hasPrefix("#") && customColumnInfos[String(field.dropFirst())]?.datatype == "rating"
+    }
+
     func pluginDSReaderHelperOptions(
         configuration: CalibreDSReaderHelperConfiguration?
     ) -> CalibreDSReaderHelperPrefs.Options {

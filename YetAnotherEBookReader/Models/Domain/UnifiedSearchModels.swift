@@ -90,15 +90,34 @@ enum SearchError: Error, Equatable, Sendable {
     case database(String)
     case invalidState(String)
     case cancelled
+
+    var message: String {
+        switch self {
+        case .network(let error):
+            return error.localizedDescription
+        case .database(let message), .invalidState(let message):
+            return message
+        case .cancelled:
+            return "Cancelled"
+        }
+    }
 }
 
 struct LibrarySearchStatus: Equatable, Sendable {
     var loading: Bool
     var error: SearchError?
-    
-    init(loading: Bool = false, error: SearchError? = nil) {
+    /// The search failed, and the library's books shown are those its search cache had.
+    var fromCache: Bool
+
+    init(loading: Bool = false, error: SearchError? = nil, fromCache: Bool = false) {
         self.loading = loading
         self.error = error
+        self.fromCache = fromCache
+    }
+
+    /// The error to show: a search cancelled because another replaced it didn't fail.
+    var failure: SearchError? {
+        error == .cancelled ? nil : error
     }
 }
 

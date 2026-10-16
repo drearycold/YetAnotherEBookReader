@@ -8,6 +8,11 @@
 import Foundation
 
 extension CalibreServerService {
+    /// How many books one `ajax/books` request asks for. calibre refuses a request line over 8 KB
+    /// (`max_header_line_size`), which about 1,300 five-digit ids reach; the annotations request
+    /// also lists each book and format in its path.
+    static let booksMetadataBatchSize = 200
+
     /// What the app keeps about a library besides its books, read with the requests browsing makes:
     /// - `ajax/search`, newest change first, for the number of books and the most recently
     ///   changed one;

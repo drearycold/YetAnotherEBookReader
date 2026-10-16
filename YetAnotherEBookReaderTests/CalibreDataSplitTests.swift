@@ -247,6 +247,40 @@ final class CalibreDataSplitTests: XCTestCase {
         XCTAssertEqual(displays["unchecked"]?.useDecorations, false)
     }
 
+    // MARK: - Category search fields
+
+    /// A category's URL names the field calibre searches it by, hex-encoded.
+    func testACategoryURLNamesItsSearchField() {
+        func field(_ url: String) -> String? {
+            CalibreLibraryCategory(name: "name", url: url, icon: "", is_category: true).field
+        }
+        XCTAssertEqual(field("/ajax/category/617574686f7273/Test_Library_%E6%B5%8B%E8%AF%95"), "authors")
+        XCTAssertEqual(field("/ajax/category/23726561645f70726f6772657373/lib"), "#read_progress")
+        XCTAssertEqual(field("/calibre/ajax/category/4046617665/lib"), "@Fave")
+        XCTAssertEqual(field("/ajax/category/e4bd9ce88085/lib"), "作者")
+        XCTAssertNil(field("/ajax/category/zz/lib"))
+        XCTAssertNil(field("/ajax/category/617/lib"))
+        XCTAssertNil(field("/ajax/categories/lib"))
+    }
+
+    /// A library searches a category by the field calibre named for it, a custom column's, or the
+    /// name lowercased, which suits the app's own English names.
+    func testALibrarySearchesACategoryByItsField() {
+        let server = CalibreServer(uuid: UUID(), name: "S", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        var library = CalibreLibrary(server: server, key: "lib", name: "Lib")
+        library.categoryFields = ["作者": "authors", "评分": "rating"]
+        library.customColumnInfos = [
+            "stars": CalibreCustomColumnInfo(label: "stars", name: "Stars", datatype: "rating", editable: true, display: .init(), num: 2, isMultiple: false, multipleSeps: [:])
+        ]
+
+        XCTAssertEqual(library.searchField(forCategory: "作者"), "authors")
+        XCTAssertEqual(library.searchField(forCategory: "Authors"), "authors")
+        XCTAssertEqual(library.searchField(forCategory: "Stars"), "#stars")
+        XCTAssertTrue(library.isRatingField(library.searchField(forCategory: "评分")))
+        XCTAssertTrue(library.isRatingField("#stars"))
+        XCTAssertFalse(library.isRatingField("authors"))
+    }
+
     // MARK: - Array.chunks helper
 
     func testArrayChunksPreservesAllElements() {
