@@ -613,6 +613,14 @@ class CalibreBookManager {
 
     @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
+        // A long list, such as a large shelf's, goes in batches: calibre refuses a long request line.
+        if request.books.count > CalibreServerService.booksMetadataBatchSize {
+            for batch in request.books.chunks(size: CalibreServerService.booksMetadataBatchSize) {
+                await getBooksMetadata(request: .init(library: request.library, books: batch, getAnnotations: request.getAnnotations))
+            }
+            return
+        }
+
         container?.librarySyncStatus[request.library.id]?.isUpd = true
 
         let books = request.books.map { bookId -> CalibreBook in

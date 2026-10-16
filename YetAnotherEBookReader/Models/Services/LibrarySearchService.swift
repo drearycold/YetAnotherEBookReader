@@ -145,11 +145,13 @@ actor LibrarySearchService {
 
         try Task.checkCancellation()
 
+        var metadataComplete = true
         if !toFetchIDs.isEmpty {
-            let fetchedBooks = try await refreshMetadata(library: library, bookIds: toFetchIDs)
-            for (bookId, book) in fetchedBooks {
+            let refreshed = try await refreshMetadata(library: library, bookIds: toFetchIDs)
+            for (bookId, book) in refreshed.books {
                 booksById[bookId] = book
             }
+            metadataComplete = refreshed.complete
         }
 
         try Task.checkCancellation()
@@ -157,7 +159,9 @@ actor LibrarySearchService {
         let currentBooks = currentBookIds.compactMap { booksById[$0] }
 
         let updatedSourceResult = LibrarySourceSearchResult(
-            generation: library.lastModified,
+            // Until the books' metadata is all read, the cache keeps the generation it had, so the
+            // next search reads it again.
+            generation: metadataComplete ? library.lastModified : (sourceObj?.generation ?? Date(timeIntervalSince1970: 0)),
             totalNumber: searchResult.total_num,
             bookIds: currentBookIds,
             books: currentBooks
@@ -250,45 +254,59 @@ actor LibrarySearchService {
         }
     }
 
+    /// Reads the books' metadata from calibre, in batches (`booksMetadataBatchSize`). `complete` is
+    /// false when a request failed, so the caller doesn't take the books for up to date.
     private func refreshMetadata(
         library: CalibreLibrary,
         bookIds: [Int32]
-    ) async throws -> [Int32: CalibreBook] {
-        guard !bookIds.isEmpty else { return [:] }
+    ) async throws -> (books: [Int32: CalibreBook], complete: Bool) {
+        guard !bookIds.isEmpty else { return ([:], true) }
 
-        let metadataTask = service.buildBooksMetadataTask(
-            library: library,
-            books: bookIds.map { CalibreBook(id: $0, library: library) },
-            getAnnotations: false
-        )
-        guard let metadataTask else { return [:] }
-
-        let completedTask = await service.getBooksMetadata(task: metadataTask)
-
-        try Task.checkCancellation()
-
-        guard let entries = completedTask.booksMetadataEntry else { return [:] }
-        try repository.writeMetadataEntries(
-            library: library,
-            entries: entries,
-            json: completedTask.booksMetadataJSON
-        )
-
-        if let onMetadataAnswers {
-            var missing = Set<Int32>()
-            var present = Set<Int32>()
-            for (key, entry) in entries {
-                guard let bookId = Int32(key) else { continue }
-                if entry == nil {
-                    missing.insert(bookId)
-                } else {
-                    present.insert(bookId)
-                }
+        var complete = true
+        for batch in bookIds.chunks(size: CalibreServerService.booksMetadataBatchSize) {
+            guard let metadataTask = service.buildBooksMetadataTask(
+                library: library,
+                books: batch.map { CalibreBook(id: $0, library: library) },
+                getAnnotations: false
+            ) else {
+                complete = false
+                continue
             }
-            await onMetadataAnswers(library, missing, present)
+
+            let completedTask = await service.getBooksMetadata(task: metadataTask)
+
+            try Task.checkCancellation()
+
+            guard let entries = completedTask.booksMetadataEntry else {
+                // An answer that couldn't be read won't read better next time; one that didn't
+                // arrive might.
+                if completedTask.data == nil {
+                    complete = false
+                }
+                continue
+            }
+            try repository.writeMetadataEntries(
+                library: library,
+                entries: entries,
+                json: completedTask.booksMetadataJSON
+            )
+
+            if let onMetadataAnswers {
+                var missing = Set<Int32>()
+                var present = Set<Int32>()
+                for (key, entry) in entries {
+                    guard let bookId = Int32(key) else { continue }
+                    if entry == nil {
+                        missing.insert(bookId)
+                    } else {
+                        present.insert(bookId)
+                    }
+                }
+                await onMetadataAnswers(library, missing, present)
+            }
         }
 
-        return try repository.fetchBooks(library: library, bookIds: bookIds)
+        return (try repository.fetchBooks(library: library, bookIds: bookIds), complete)
     }
 
     private func performLocalSearch(task: CalibreLibrarySearchTask) throws -> CalibreLibrarySearchTask {

@@ -48,11 +48,21 @@ first of three Browse fixes found after #121; the other two are below.
     server's language: with `CALIBRE_OVERRIDE_LANG=zh_CN`, `作者:"=Test Author"`
     finds 0 books (HTTP 200), `authors:` finds 1. The field name is the hex in
     the category URL (`/ajax/category/617574686f7273/…` is `authors`).
-  - `LibrarySearchService.refreshMetadata` puts every id in one `ajax/books`
-    URL. calibre refuses a request line over 8 KB (`max_header_line_size`):
-    1,300 five-digit ids pass, 1,500 get 400. The failure is ignored and the
-    cache is saved with the new generation. Batch the ids, and don't stamp the
-    generation when the refresh failed.
+- **Metadata in batches (2026-10-16, same branch).** calibre refuses a request
+  line over 8 KB (`max_header_line_size`): 1,300 five-digit ids in one
+  `ajax/books` URL pass, 1,500 get 400. Browsing put every loaded id in one
+  request, ignored the failure and saved the cache with the new generation.
+  - `CalibreServerService.booksMetadataBatchSize` (200).
+    `LibrarySearchService.refreshMetadata` reads in batches, one after
+    another. When a request doesn't arrive, the cache keeps the generation it
+    had, so the next search reads the books again; an answer that can't be
+    decoded doesn't count, as rereading won't help.
+  - `CalibreBookManager.getBooksMetadata(request:)` splits a longer list (a
+    large shelf's) into batches. Its annotations request lists each book and
+    format in the path, so it has the same limit.
+  - Tests: `testLibrarySearchReadsMetadataInBatches`,
+    `testAFailedMetadataBatchLeavesTheBooksToBeReadAgain`,
+    `testALargeShelfIsReadInBatches`.
 
 ## Library Sync Without a Book List (2026-10-14, #121)
 

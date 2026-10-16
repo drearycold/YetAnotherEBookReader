@@ -1644,6 +1644,64 @@ class UnifiedSearchServiceTests: XCTestCase {
         XCTAssertEqual(finalResult?.books.count, 0)
     }
 
+    // MARK: - Metadata in batches
+
+    /// Answers `ajax/search` with `bookIds`, and `ajax/books` with each requested book, recording
+    /// the ids of each request; `failing` gets HTTP 400 for a request that asks for it.
+    private func answerSearch(bookIds: [Int32], query: String, recorder: MetadataRequestRecorder, failing: Int32? = nil) {
+        let searchJSON = Self.makeSearchResultJSON(total: bookIds.count, offset: 0, num: bookIds.count, bookIds: bookIds, query: query)
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            if url.path.contains("ajax/search/lib1") {
+                return (ok, searchJSON.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let ids = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                    .first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                recorder.append(ids: ids)
+                if let failing, ids.contains(failing) {
+                    return (HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil)!, Data())
+                }
+                return (ok, Self.makeMetadataJSON(bookIds: ids).data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+    }
+
+    /// Browsing reads books' metadata in batches: calibre refuses a request line over 8 KB, which
+    /// about 1,300 ids reach.
+    func testLibrarySearchReadsMetadataInBatches() async throws {
+        let criteria = SearchCriteria(searchString: "batches", sortCriteria: LibrarySearchSort(by: .Title, ascending: true), filterCriteriaCategory: [:])
+        let recorder = MetadataRequestRecorder()
+        answerSearch(bookIds: (1...450).map(Int32.init), query: criteria.searchString, recorder: recorder)
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(library: mockLibrary1, criteria: criteria, limit: 450, force: true)
+
+        XCTAssertEqual(recorder.snapshot().map(\.count), [200, 200, 50])
+        XCTAssertEqual(try XCTUnwrap(result.sources["http://localhost/1"]).books.count, 450)
+    }
+
+    /// A batch that doesn't arrive leaves the cache's generation as it was, so the next search reads
+    /// the books again rather than taking them for up to date.
+    func testAFailedMetadataBatchLeavesTheBooksToBeReadAgain() async throws {
+        let criteria = SearchCriteria(searchString: "failed-batch", sortCriteria: LibrarySearchSort(by: .Title, ascending: true), filterCriteriaCategory: [:])
+        var library: CalibreLibrary = mockLibrary1
+        library.lastModified = Date(timeIntervalSince1970: 1_000)
+        let recorder = MetadataRequestRecorder()
+        answerSearch(bookIds: (1...250).map(Int32.init), query: criteria.searchString, recorder: recorder, failing: 201)
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(library: library, criteria: criteria, limit: 250, force: true)
+
+        XCTAssertEqual(recorder.snapshot().map(\.count), [200, 50])
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+        XCTAssertEqual(source.books.count, 200)
+        XCTAssertLessThan(source.generation, library.lastModified)
+    }
+
     // MARK: - Failures and the search cache
 
     private var offlineCriteria: SearchCriteria {

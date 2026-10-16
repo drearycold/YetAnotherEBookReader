@@ -511,6 +511,51 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del, [])
     }
 
+    /// A shelf larger than a batch is read in batches: calibre refuses a long request line.
+    func testALargeShelfIsReadInBatches() async throws {
+        configureReachableMockSession()
+        let ids = (1...250).map(Int32.init)
+        for id in ids {
+            var book = CalibreBook(id: id, library: library)
+            book.inShelf = true
+            container.bookManager.updateBook(book: book)
+        }
+        let entries = Dictionary(uniqueKeysWithValues: ids.map { ($0, Self.bookEntryJSON(title: "Book \($0)")) })
+        let batchSizes = BatchSizes()
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url, url.path == "/ajax/books/test_lib" else { throw URLError(.fileDoesNotExist) }
+            let requested = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "ids" })?.value?
+                .split(separator: ",")
+                .compactMap { Int32(String($0)) } ?? []
+            batchSizes.append(requested.count)
+            let body = "{" + requested.map { "\"\($0)\": \(entries[$0] ?? "null")" }.joined(separator: ", ") + "}"
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+        }
+
+        await container.bookManager.getBooksMetadata(request: .init(library: library, books: ids, getAnnotations: false))
+
+        XCTAssertEqual(batchSizes.values, [200, 50])
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.del ?? [], [])
+    }
+
+    private final class BatchSizes: @unchecked Sendable {
+        private let lock = NSLock()
+        private var sizes = [Int]()
+
+        func append(_ size: Int) {
+            lock.lock()
+            sizes.append(size)
+            lock.unlock()
+        }
+
+        var values: [Int] {
+            lock.lock()
+            defer { lock.unlock() }
+            return sizes
+        }
+    }
+
     func testPopulateLocalLibraryBooksWithFiles() throws {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
             XCTFail("Failed to get document directory")
