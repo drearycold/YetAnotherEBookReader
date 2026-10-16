@@ -5,10 +5,10 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
-## Browse: Failed Libraries and the Search Cache (2026-10-14, branch)
+## Browse: Failures, Metadata Batches, Category Fields (2026-10-16, branch)
 
-Branch `claude/browse-failures-offline-cache`, based on `main` after #121. The
-first of three Browse fixes found after #121; the other two are below.
+Branch `claude/browse-failures-offline-cache`, based on `main` after #121. Three
+Browse fixes found on 2026-10-14, one commit each.
 
 - **The bug:** a library whose search failed never got merge offsets in "all
   libraries" mode, and `getLibraryLoadingCount` counted a library without
@@ -42,12 +42,33 @@ first of three Browse fixes found after #121; the other two are below.
   fails against the old code (checked by reverting the fix).
 - **Verified (iPhone 17):** full scheme, 928 unit tests, 0 failures, 21 skipped;
   the 5 UI journeys pass; the Mac Catalyst build succeeds.
-- **Next (found 2026-10-14, not started):**
-  - Category filters use the category's display name as the search field
-    (`CalibreServerService+Search.swift`). calibre names categories in the
-    server's language: with `CALIBRE_OVERRIDE_LANG=zh_CN`, `作者:"=Test Author"`
-    finds 0 books (HTTP 200), `authors:` finds 1. The field name is the hex in
-    the category URL (`/ajax/category/617574686f7273/…` is `authors`).
+- **Category filters search calibre's field (2026-10-16, same branch).** They
+  used the category's name, lowercased, as the field. calibre names categories
+  in the server's language: with `CALIBRE_OVERRIDE_LANG=zh_CN`, `作者:"=Test
+  Author"` finds 0 books (HTTP 200), `authors:` finds 1.
+  - `CalibreLibraryCategory.field` decodes the field from the category's URL
+    (`/ajax/category/617574686f7273/…` is `authors`; `#col`, `@usercat` and
+    `search` too).
+  - `CalibreLibrary.categoryFields` (name → field) is filled by the sync's
+    categories step (`applyCategoryFields`) and persisted as
+    `CalibreLibraryRealm.categoryFieldsData`: **schema 147**. Until a library's
+    next sync it's empty, and filters fall back to the old rule.
+  - `CalibreLibrary.searchField(forCategory:)`: calibre's field, else a custom
+    column's, else the name lowercased, which suits the app's own English keys
+    ("Authors", "Tags", "Series" from Discover, the context menu and the book
+    list). `isRatingField` replaces the `"Rating"` name check.
+  - The category sort rule (series by index, authors and publisher by date)
+    goes by field (`CalibreLibraryManager.searchField(forCategory:)`).
+  - Filters stay keyed by the category's name: one name merges across
+    libraries, and two servers in different languages give two filters.
+  - Tests: field decoding and lookup (`CalibreDataSplitTests`), the query
+    (`CalibreServerServiceTests`), the sync keeping the map
+    (`CalibreLibraryManagerTests`), the Realm round trip, the sort rule, and
+    contract test `testACategoryFilterFindsTheCategorysBooks`, which passes
+    against a zh_CN server and fails there with the old rule (0 vs 1 books).
+- **Verified after all three (iPhone 17):** full scheme, 937 unit tests, 0
+  failures, 22 skipped; 5 UI journeys pass; contract tests 21 of 21 against an
+  English calibre 9.11, no 404; Mac Catalyst builds.
 - **Metadata in batches (2026-10-16, same branch).** calibre refuses a request
   line over 8 KB (`max_header_line_size`): 1,300 five-digit ids in one
   `ajax/books` URL pass, 1,500 get 400. Browsing put every loaded id in one

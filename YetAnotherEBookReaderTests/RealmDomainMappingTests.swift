@@ -560,7 +560,8 @@ final class RealmDomainMappingTests: XCTestCase {
             discoverable: false,
             hidden: true,
             lastModified: Date(timeIntervalSince1970: 123456789),
-            customColumnInfos: [:]
+            customColumnInfos: [:],
+            categoryFields: ["作者": "authors"]
         )
         
         let realmObj = library.makeRealmObject()
@@ -573,6 +574,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(mappedLibrary.key, library.key)
         XCTAssertEqual(mappedLibrary.name, library.name)
         XCTAssertEqual(mappedLibrary.discoverable, library.discoverable)
+        XCTAssertEqual(mappedLibrary.categoryFields, ["作者": "authors"])
     }
     
     func testNewCalibreBookMappers() {

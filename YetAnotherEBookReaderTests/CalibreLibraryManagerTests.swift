@@ -425,6 +425,28 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, moved)
     }
 
+    /// calibre names categories in the server's language. The sync keeps the field each one is
+    /// searched by, from its URL, and saves it with the library.
+    func testSyncLibraryKeepsTheFieldEachCategoryIsSearchedBy() async throws {
+        configureReachableMockSession()
+        let requests = MockURLProtocol.answer(Self.syncAnswers(categories: """
+        [
+            {"name": "全部书籍", "url": "/ajax/category/616c6c626f6f6b73/test_lib", "icon": "book.png", "is_category": false},
+            {"name": "作者", "url": "/ajax/category/617574686f7273/test_lib", "icon": "user_profile.png", "is_category": true}
+        ]
+        """, categoryItems: [
+            "/ajax/category/617574686f7273/test_lib": Self.categoryItemsJSON(name: "作者", items: [])
+        ]))
+
+        await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
+
+        XCTAssertEqual(requests.unexpected, [])
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.categoryFields, ["作者": "authors"])
+        XCTAssertEqual(libraryRepository.getLibrary(id: library.id)?.categoryFields, ["作者": "authors"])
+        XCTAssertEqual(libraryManager.searchField(forCategory: "作者"), "authors")
+        XCTAssertEqual(libraryManager.searchField(forCategory: "Tags"), "tags")
+    }
+
     /// A category that couldn't be refreshed fails the sync, rather than showing it as a success.
     func testAFailedCategoryIsReported() async throws {
         configureReachableMockSession()

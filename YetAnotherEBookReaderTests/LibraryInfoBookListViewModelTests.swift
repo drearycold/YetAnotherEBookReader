@@ -395,6 +395,15 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertFalse(libraryInfoViewModel.sortCriteria.ascending)
     }
 
+    /// The sort rule follows the category's field: calibre names categories in the server's
+    /// language, so the series category may be "系列".
+    func testCategorySortRulesFollowTheField() {
+        libraryInfoViewModel.sortCriteria = LibrarySearchSort(by: .Title, ascending: true)
+        libraryInfoViewModel.applyCategoryItemSelection(categoryName: "系列", itemName: "Foundation", categoryField: "series")
+        XCTAssertEqual(libraryInfoViewModel.sortCriteria.by, .SeriesIndex)
+        XCTAssertTrue(libraryInfoViewModel.sortCriteria.ascending)
+    }
+
     func testVisibleFilterItemsIncludesCurrentCategorySelection() {
         libraryInfoViewModel.categoriesSelected = "Authors"
         libraryInfoViewModel.categoryItemSelected = "Author A"

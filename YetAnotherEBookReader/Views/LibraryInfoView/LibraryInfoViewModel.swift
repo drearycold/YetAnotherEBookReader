@@ -299,9 +299,12 @@ extension LibraryInfoView {
             }
         }
 
+        /// `categoryField` is the field calibre searches the category by
+        /// (`CalibreLibraryManager.searchField(forCategory:)`); the name, lowercased, if not given.
         func applyCategoryItemSelection(
             categoryName: String,
             itemName: String,
+            categoryField: String? = nil,
             preservingLibraryScope: Bool = false
         ) {
             replaceFilterCategory(
@@ -310,12 +313,13 @@ extension LibraryInfoView {
                 preservingLibraryScope: preservingLibraryScope
             )
 
-            applySortRule(forCategoryName: categoryName)
+            applySortRule(forField: categoryField ?? categoryName.lowercased())
         }
 
         func applyCategoryValuesSelection(
             categoryName: String,
             itemNames: Set<String>,
+            categoryField: String? = nil,
             preservingLibraryScope: Bool = false
         ) {
             setFilterCategoryValues(
@@ -325,19 +329,21 @@ extension LibraryInfoView {
             )
 
             if !itemNames.isEmpty {
-                applySortRule(forCategoryName: categoryName)
+                applySortRule(forField: categoryField ?? categoryName.lowercased())
             }
         }
 
-        private func applySortRule(forCategoryName categoryName: String) {
-            if categoryName == "Series" {
+        /// Sorts by what suits the category: a series in order, an author's or publisher's books
+        /// newest first. By field, as the category's name is in the calibre server's language.
+        private func applySortRule(forField field: String) {
+            if field == "series" {
                 if sortCriteria.by != .SeriesIndex {
                     lastSortCriteria.append(sortCriteria)
                 }
 
                 sortCriteria.by = .SeriesIndex
                 sortCriteria.ascending = true
-            } else if categoryName == "Publisher" || categoryName == "Authors" {
+            } else if field == "publisher" || field == "authors" {
                 if sortCriteria.by != .Publication {
                     lastSortCriteria.append(sortCriteria)
                 }

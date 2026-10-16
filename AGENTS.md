@@ -174,6 +174,12 @@ What calibre 9.11 does, as the tests pin it:
   unavailable on the server (`librarySyncStatus.del`, kept by
   `CalibreBookManager.recordMetadataAnswers` from shelf and Book Detail
   refreshes and from browsing). Nothing is deleted locally.
+- **Categories are named in the server's language,** and searched by the
+  field their URL names, hex-encoded (`/ajax/category/617574686f7273/…` is
+  `authors`; `CalibreLibraryCategory.field`). The sync keeps each library's
+  name-to-field map (`CalibreLibrary.categoryFields`), and a filter keyed by a
+  category's name searches its field
+  (`testACategoryFilterFindsTheCategorysBooks`).
 - **Metadata:** book metadata (`ajax/books`, `get/json`) and `set_metadata`
   work.
 - **Downloads:** `BookDownloadManager` saves the EPUB. calibre writes current
@@ -187,6 +193,13 @@ Checked by hand, not pinned:
   required for sync"); the positions in `book-get-annotations` stay empty.
 - **Annotations are per user**, anonymous ones included. Uploading some
   highlights leaves the others.
+- **A calibre server running in another language** (`CALIBRE_OVERRIDE_LANG=zh_CN`
+  when starting the seed script) names Authors "作者", and `作者:"=…"` finds
+  nothing, with HTTP 200. The filter test passes against it;
+  `testTheCategoriesAreRead` expects the English name.
+- **A request line over 8 KB** (`max_header_line_size`) gets 400: about 1,300
+  five-digit ids in one `ajax/books` URL. The app asks for 200 books at a time
+  (`CalibreServerService.booksMetadataBatchSize`).
 - **The `cdb` interface refuses a user with a per-library restriction** with 403
   ("Cannot use the command-line db interface with a user who has per library
   restrictions"), so the library sync doesn't use it.

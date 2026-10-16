@@ -54,6 +54,10 @@ extension CalibreLibraryRealm {
             guard let data = self.customColumnsData else { return [:] }
             return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
         }()
+        let categoryFields: [String: String] = {
+            guard let data = self.categoryFieldsData else { return [:] }
+            return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        }()
         return CalibreLibrary(
             server: server,
             key: self.key ?? name,
@@ -61,7 +65,8 @@ extension CalibreLibraryRealm {
             discoverable: self.discoverable,
             hidden: self.hidden,
             lastModified: self.lastModified,
-            customColumnInfos: customColumnInfos
+            customColumnInfos: customColumnInfos,
+            categoryFields: categoryFields
         )
     }
 
@@ -72,6 +77,7 @@ extension CalibreLibraryRealm {
             self.serverUUID = library.server.uuid.uuidString
         }
         self.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
+        self.categoryFieldsData = try? JSONEncoder().encode(library.categoryFields)
         self.discoverable = library.discoverable
         self.hidden = library.hidden
         self.lastModified = library.lastModified

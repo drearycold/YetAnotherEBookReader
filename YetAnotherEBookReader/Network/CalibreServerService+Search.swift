@@ -40,14 +40,9 @@ extension CalibreServerService {
         }
         
         searchCriteria.filterCriteriaCategory.forEach { entry in
-            var queryKey = entry.key.lowercased()
-            var queryIsRating = entry.key == "Rating"
-            
-            if let customColumnInfo = library.customColumnInfos.first(where: { $0.value.name == entry.key }) {
-                queryKey = "#\(customColumnInfo.key)"
-                queryIsRating = customColumnInfo.value.datatype == "rating"
-            }
-            
+            let queryKey = library.searchField(forCategory: entry.key)
+            let queryIsRating = library.isRatingField(queryKey)
+
             let query = entry.value.map {
                 "\(queryKey):" + (queryIsRating ? "\($0.count)" : "\"=\($0)\"")
             }.joined(separator: " OR ")

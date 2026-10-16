@@ -152,6 +152,7 @@ struct LibraryInfoCategoryItemsView: View {
         viewModel.applyCategoryValuesSelection(
             categoryName: categoryName,
             itemNames: draftSelectedItemNames,
+            categoryField: container.libraryManager.searchField(forCategory: categoryName),
             preservingLibraryScope: true
         )
         resetToFirstPage()
@@ -167,6 +168,7 @@ struct LibraryInfoCategoryItemsView: View {
         viewModel.applyCategoryItemSelection(
             categoryName: categoryName,
             itemName: itemName,
+            categoryField: container.libraryManager.searchField(forCategory: categoryName),
             preservingLibraryScope: false
         )
         resetToFirstPage()
