@@ -96,6 +96,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$LOGS/archive.log" | xcbeautify --renderer github-actions
 
+      # Unsigned, the archive's embedded frameworks (GoogleMobileAds, UserMessagingPlatform) keep the
+      # linker's ad hoc signature, whose identifier is "arm64-apple", not their bundle identifier.
+      # The export signs them again but keeps that identifier, and App Store Connect rejects the
+      # upload ("Invalid Signature. Code failed to satisfy specified code requirement(s)"). Signed ad
+      # hoc here, they take their bundle identifiers, as Xcode's own signing would give them.
+      # (CODE_SIGN_IDENTITY=- can't do it in the build: the iOS SDK refuses ad hoc signing.)
+      - name: Give the embedded frameworks their identifiers
+        run: |
+          for framework in "$ARCHIVE"/Products/Applications/*.app/Frameworks/*.framework; do
+            [ -e "$framework" ] || continue
+            codesign --force --sign - --timestamp=none "$framework"
+            codesign -dv "$framework" 2>&1 | grep '^Identifier='
+          done
+
       # Signs the archive for the App Store with a cloud-managed distribution certificate and
       # uploads it. manageAppVersionAndBuildNumber is off: the build number is the Realm schema
       # version and must stay what main says.

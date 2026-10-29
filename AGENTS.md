@@ -128,6 +128,13 @@ build jobs ("Detect changes").
   (`CODE_SIGNING_ALLOWED=NO`, as CI builds), and the export signs it with a
   cloud-managed distribution certificate and uploads it, authenticated with
   an App Store Connect API key.
+  - Between the two, the embedded frameworks (GoogleMobileAds,
+    UserMessagingPlatform) are signed ad hoc with `codesign`. Unsigned, they
+    keep the linker's ad hoc signature, identifier `arm64-apple`; the export
+    keeps that identifier, and App Store Connect rejects the upload ("Invalid
+    Signature. Code failed to satisfy specified code requirement(s)").
+  - `CODE_SIGN_IDENTITY=-` can't do it in the build: the iOS SDK refuses ad
+    hoc signing.
 - **Secrets** (Settings > Secrets and variables > Actions):
   - `APP_STORE_CONNECT_KEY_ID`: the key's ID;
   - `APP_STORE_CONNECT_ISSUER_ID`: the issuer ID shown above the keys;
@@ -135,15 +142,17 @@ build jobs ("Detect changes").
     `AuthKey_<ID>.p8`, its BEGIN and END lines included.
 
   Create the key in App Store Connect > Users and Access > Integrations >
-  App Store Connect API, as a team key with the Admin role: cloud signing
-  creates and uses distribution certificates, which other roles may not be
-  allowed to. Apple lets you download the `.p8` once.
+  App Store Connect API, as a team key with the Admin role. The first run's
+  key wasn't, and the export failed with "Cloud signing permission error",
+  then "No signing certificate "iOS Distribution" found". Apple lets you
+  download the `.p8` once.
 - **Logs:** the `testflight-logs` artifact keeps the archive and export logs
   and the export's distribution summary for 14 days.
-- **Not yet proven (2026-10-29):** exporting an unsigned archive with cloud
-  signing. If the first run's export can't sign it, archive with automatic
-  signing instead (`-allowProvisioningUpdates` and the key's three
-  `-authenticationKey…` flags on the archive step too).
+- **Not yet proven (2026-10-29):** a whole upload. The second run's export
+  signed and uploaded the build, and App Store Connect rejected only the
+  frameworks' signatures, which the step above now fixes. Its warnings that
+  the archive has no dSYM for GoogleMobileAds and UserMessagingPlatform,
+  Google's prebuilt binaries, don't stop the upload.
 - **By hand:** upload from Xcode's Organizer. A sandboxed agent can't reach
   the Xcode account, so its `xcodebuild -exportArchive` fails with a TLS
   error and an account of `(null)`; it can still archive.
