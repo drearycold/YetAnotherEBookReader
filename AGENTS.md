@@ -81,8 +81,9 @@ hand, on `macos-26` with the Xcode the project is developed with
 - **Mac Catalyst build** of `YetAnotherEBookReader-Catalyst`.
 - **Detect changes** runs first. When everything a pull request or push
   changes is documentation (Markdown at the repository root, or anything under
-  `.agents/`), the three jobs above are skipped, and GitHub reports a skipped
-  job as passed. Anything else, or any doubt
+  `.agents/`) or the TestFlight workflow, which no CI job uses, the three jobs
+  above are skipped, and GitHub reports a skipped job as passed. Anything else,
+  `ci.yml` and `.github/scripts/` included, or any doubt
   (`.github/scripts/changed-code.sh` failing or listing a partial set), runs
   them all.
 - All three build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
@@ -113,7 +114,8 @@ Rules):
 `.github/workflows/testflight.yml` uploads the iOS app from `main` to App
 Store Connect, which makes it a TestFlight build once it has processed it.
 Run it by hand (Actions > TestFlight > Run workflow). It refuses any other
-branch, and it isn't a required check.
+branch, and it isn't a required check. A change to it alone doesn't run CI's
+build jobs ("Detect changes").
 
 - **Bump the build number first**, in a pull request (`chore: bump build to
   N`: `CFBundleVersion` in both Info.plists and the four
