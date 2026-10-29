@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Tells CI whether an event changed anything besides documentation: Markdown at the repository
-# root and anything under .agents/. Prints code=false when every changed path is documentation,
-# else code=true. Any failure, an unknown event or a list that may be incomplete prints code=true,
-# so CI runs in full when in doubt; this script always exits 0.
+# Tells CI whether an event changed anything the build jobs depend on. Documentation (Markdown at
+# the repository root, anything under .agents/) and the TestFlight workflow, which no CI job uses,
+# don't count. Prints code=false when every changed path is one of those, else code=true.
+# ci.yml and these scripts count: they change CI itself. Any failure, an unknown event or a list
+# that may be incomplete prints code=true, so CI runs in full when in doubt; this script always
+# exits 0.
 #
 # Reads GITHUB_EVENT_NAME and GITHUB_REPOSITORY, and for a pull request PR_NUMBER and
 # PR_CHANGED_FILES, for a push BEFORE and AFTER. Needs gh with a token that can read the repository.
@@ -47,6 +49,7 @@ fi
 while IFS= read -r path; do
   case "$path" in
     .agents/*) ;;
+    .github/workflows/testflight.yml) ;;
     */*) run_all ;;
     *.md) ;;
     *) run_all ;;

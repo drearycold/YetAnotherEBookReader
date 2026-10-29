@@ -81,8 +81,9 @@ hand, on `macos-26` with the Xcode the project is developed with
 - **Mac Catalyst build** of `YetAnotherEBookReader-Catalyst`.
 - **Detect changes** runs first. When everything a pull request or push
   changes is documentation (Markdown at the repository root, or anything under
-  `.agents/`), the three jobs above are skipped, and GitHub reports a skipped
-  job as passed. Anything else, or any doubt
+  `.agents/`) or the TestFlight workflow, which no CI job uses, the three jobs
+  above are skipped, and GitHub reports a skipped job as passed. Anything else,
+  `ci.yml` and `.github/scripts/` included, or any doubt
   (`.github/scripts/changed-code.sh` failing or listing a partial set), runs
   them all.
 - All three build with `-onlyUsePackageVersionsFromResolvedFile`, so a stale
@@ -107,6 +108,45 @@ Rules):
   GitHub deletes a pull request's branch when it merges. A squashed branch
   isn't an ancestor of `main`, so `git branch -d` refuses it; check that the
   pull request merged from the branch's tip, then delete it with `-D`.
+
+### TestFlight
+
+`.github/workflows/testflight.yml` uploads the iOS app from `main` to App
+Store Connect, which makes it a TestFlight build once it has processed it.
+Run it by hand (Actions > TestFlight > Run workflow). It refuses any other
+branch, and it isn't a required check. A change to it alone doesn't run CI's
+build jobs ("Detect changes").
+
+- **Bump the build number first**, in a pull request (`chore: bump build to
+  N`: `CFBundleVersion` in both Info.plists and the four
+  `CURRENT_PROJECT_VERSION`s, as 1aa41d41 and #124 did). App Store Connect
+  refuses a build number it already has, and the build number is the
+  production Realm schema version
+  (`DatabaseService.prepareProductionConfiguration`). The workflow never
+  changes it (`manageAppVersionAndBuildNumber` is off).
+- **Signing:** the runner has no certificate. The archive is built unsigned
+  (`CODE_SIGNING_ALLOWED=NO`, as CI builds), and the export signs it with a
+  cloud-managed distribution certificate and uploads it, authenticated with
+  an App Store Connect API key.
+- **Secrets** (Settings > Secrets and variables > Actions):
+  - `APP_STORE_CONNECT_KEY_ID`: the key's ID;
+  - `APP_STORE_CONNECT_ISSUER_ID`: the issuer ID shown above the keys;
+  - `APP_STORE_CONNECT_KEY_P8`: the content of the downloaded
+    `AuthKey_<ID>.p8`, its BEGIN and END lines included.
+
+  Create the key in App Store Connect > Users and Access > Integrations >
+  App Store Connect API, as a team key with the Admin role: cloud signing
+  creates and uses distribution certificates, which other roles may not be
+  allowed to. Apple lets you download the `.p8` once.
+- **Logs:** the `testflight-logs` artifact keeps the archive and export logs
+  and the export's distribution summary for 14 days.
+- **Not yet proven (2026-10-29):** exporting an unsigned archive with cloud
+  signing. If the first run's export can't sign it, archive with automatic
+  signing instead (`-allowProvisioningUpdates` and the key's three
+  `-authenticationKey…` flags on the archive step too).
+- **By hand:** upload from Xcode's Organizer. A sandboxed agent can't reach
+  the Xcode account, so its `xcodebuild -exportArchive` fails with a TLS
+  error and an account of `(null)`; it can still archive.
 
 ### Calibre Contract Tests
 
