@@ -1,0 +1,154 @@
+name: TestFlight
+
+# Archives the iOS app from main and uploads it to App Store Connect, which makes it a TestFlight
+# build once it has processed it. Run it by hand (Actions > TestFlight > Run workflow) after the
+# build number has been bumped on main: App Store Connect refuses a build number it already has.
+# The build number is also the Realm schema version (DatabaseService), so it is never changed here.
+#
+# Signing needs no certificate on the runner. The archive is built unsigned, as CI builds, and the
+# export signs it with a cloud-managed distribution certificate, authenticated with an App Store
+# Connect API key (AGENTS.md, "TestFlight").
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+env:
+  # The Xcode the project is developed with, as in ci.yml.
+  XCODE_VERSION: "26.6"
+  PROJECT: YetAnotherEBookReader.xcodeproj
+  TEAM_ID: L8WKJ3U7UT
+
+jobs:
+  upload:
+    name: Archive and upload
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      SPM_DIR: ${{ github.workspace }}/.build/spm
+      DERIVED_DATA: ${{ github.workspace }}/.build/DerivedData
+      ARCHIVE: ${{ github.workspace }}/.build/YetAnotherEBookReader.xcarchive
+      EXPORT_DIR: ${{ github.workspace }}/.build/export
+      LOGS: ${{ github.workspace }}/.build/logs
+    steps:
+      # A TestFlight build is what main holds, not a branch on its way there.
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::TestFlight builds are made from main, not $GITHUB_REF_NAME."
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Install the App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          if [ -z "$KEY_ID" ] || [ -z "$ISSUER_ID" ] || [ -z "$KEY_P8" ]; then
+            echo "::error::Set the repository secrets APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and APP_STORE_CONNECT_KEY_P8 (AGENTS.md, \"TestFlight\")."
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$KEY_P8" > "$key_path"
+          chmod 600 "$key_path"
+          echo "KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
+          xcodebuild -version
+          mkdir -p "$LOGS"
+
+      - name: Version
+        run: |
+          version=$(grep -m1 -o 'MARKETING_VERSION = [^;]*' "$PROJECT/project.pbxproj" | sed 's/MARKETING_VERSION = //')
+          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" YetAnotherEBookReader/Info.plist)
+          echo "D.S.Reader $version ($build) from $(git rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: .build/spm
+          key: spm-${{ runner.os }}-${{ hashFiles('YetAnotherEBookReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # Unsigned, as CI builds: the runner has no certificate. The export signs it.
+      # -onlyUsePackageVersionsFromResolvedFile: build what Package.resolved records, or fail.
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme YetAnotherEBookReader \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE" \
+            -clonedSourcePackagesDirPath "$SPM_DIR" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$LOGS/archive.log" | xcbeautify --renderer github-actions
+
+      # Signs the archive for the App Store with a cloud-managed distribution certificate and
+      # uploads it. manageAppVersionAndBuildNumber is off: the build number is the Realm schema
+      # version and must stay what main says.
+      - name: Upload to App Store Connect
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>destination</key>
+              <string>upload</string>
+              <key>teamID</key>
+              <string>$TEAM_ID</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>manageAppVersionAndBuildNumber</key>
+              <false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$EXPORT_DIR" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            2>&1 | tee "$LOGS/export.log" | xcbeautify --renderer github-actions
+          echo "Uploaded. App Store Connect processes the build before it shows in TestFlight." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      # The export directory holds the distribution summary and packaging log, not the key.
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: testflight-logs
+          path: |
+            .build/logs
+            .build/export/*.plist
+            .build/export/*.log
+          if-no-files-found: ignore
+          retention-days: 14
