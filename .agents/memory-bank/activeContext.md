@@ -5,6 +5,52 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## FolioReader Reopens Chinese Books at the Chapter Start (2026-10-29, branch)
+
+Branch `claude/folioreaderkit-cfi-unicode-ids`, based on `main` after #122. It
+takes FolioReaderKit `2af77f7` (drearycold/FolioReaderKit#23) in
+`Package.resolved`.
+
+- **The bug:** an EPUB made by pandoc names sections after their headings, so a
+  Chinese book's ids are Chinese (`<section id="共通线">`). FolioReader records a
+  position as a CFI asserting them, e.g.
+  `epubcfi(/8/2/4/2[共通线]/12[id_00_common_02a-第二章]/30/2/1:35)`. On reopening,
+  `getAnchorOffset` couldn't parse it: readium-cfi-js accepts only ASCII in an
+  assertion (`[a-z] [A-Z] [0-9] - _ . %`; readium-cfi-js#73, archived, unfixed)
+  and decodes percent-encoding before parsing. It answered 0, `handleAnchor`
+  took that for the start of the chapter, and the book reopened at the top of
+  the chapter file. A table-of-contents jump worked: it goes by element id.
+  Seen on the iPad mini (A17 Pro) simulator, iOS 18.5, with
+  `Calibre-Gaming - 101.epub`; any device and book with non-ASCII ids is the same.
+- **Not the save:** the saved CFI was right (it resolves against the book's file
+  to where the reader was closed). EPUB CFI 1.1 (2.2) allows any Unicode in an
+  assertion, and HTML ids may be Chinese.
+- **Found with** FolioReader's `.htmlStyling` debug output
+  (`Views/FolioReaderView/Configuration.swift`, commented out), which prints the
+  page's JS messages, including `getAnchorOffset partialCFI … error`. FolioReader
+  logs with `print`: launch with
+  `SIMCTL_CHILD_NSUnbufferedIO=YES xcrun simctl launch --stdout=<container>/tmp/stdout.log`
+  (the simulator can't write to the session scratchpad).
+- **The fix, in FolioReaderKit #23:**
+  - `readium-cfi.umd.js`: the `character` class (`peg$c59`) also takes
+    `\u0080-\uFFFF`. A local patch of the bundled, archived library,
+    noted in its CLAUDE.md.
+  - `getAnchorOffset` answers an empty string (nil in Swift) when it can't find
+    the target, not 0, and a reopen whose CFI doesn't resolve falls back to the
+    position's recorded offset and progress (`handleAnchor`'s `onFailure`).
+  - Tests in `BridgeScrollPositionTests`; checked in the app on the book: it
+    reopens at 第三章, where it was closed.
+- **Probably the same:** highlights injected by CFI (`injectHighlight`) in such
+  books; not checked, the book had none.
+- **Alternatives looked at (2026-10-29):** foliate-js `epubcfi.js` (MIT,
+  maintained, Unicode assertions, `NodeFilter` to skip `<highlight>`, calibre
+  helpers) is the candidate to replace readium-cfi-js and its bundled jQuery
+  later; saved CFIs must resolve to the same places. epub.js's `EpubCFI` is
+  stale, and epub-cfi-resolver is AGPL.
+- **Verified with the new pin (iPhone 17):** full scheme, 937 unit tests, 0
+  failures, 22 skipped; the 5 UI journeys pass; Mac Catalyst builds. Built with
+  `-onlyUsePackageVersionsFromResolvedFile`, and no other pin moved.
+
 ## Browse: Failures, Metadata Batches, Category Fields (2026-10-16, branch)
 
 Branch `claude/browse-failures-offline-cache`, based on `main` after #121. Three
