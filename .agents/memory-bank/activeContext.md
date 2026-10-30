@@ -5,6 +5,45 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## FolioReader Chapter-Swipe Container Snap (2026-10-30, app integration)
+
+FolioReaderKit [PR #24](https://github.com/drearycold/FolioReaderKit/pull/24)
+merged to `master` as `d82f38830598af1656a4cbb31800802a9bdd0d0f`.
+App branch `codex/update-folioreaderkit-swipe-fix`, based on `main` after #126,
+takes that merge in `Package.resolved` (was `2af77f7`). Every other pin and the
+origin hash stay unchanged; resolution's incidental AEXML 4.7.1 was restored
+to the existing 4.7.0. Build the normal Xcode project with remote packages.
+
+- **Symptom:** portrait iPad mini (A17 Pro), iOS 18.5, user recording:
+  at 2.328–2.412 s content jumps back by about 251 recording pixels
+  (125.5 pt at 2x). Workspace toolbar, top edge and text layout stay fixed;
+  a later cancelled swipe returns smoothly.
+- **Confirmed through callbacks:** `pageDidLoad` for the neighbour exposed by
+  a held 125.5 pt drag reset the collection offset to zero. An unchanged-size
+  controller layout snapped intermediate offsets on both axes, before and
+  after the midpoint. The original code fails five assertions in the four
+  new `ChapterContainerLayoutTests`.
+- **Library fix:** `Center/SubViews.swift`, `updateSubviewFrames()`, realigns
+  only for a changed page size, retaining the chapter before changing geometry.
+  Indicator/scrubber frames still update on every call. Explicit navigation
+  and direction changes position the collection separately. No app Swift,
+  CSS, gesture, provider API or persistence changes.
+- **Library CI follow-up:** the first PR run passed the four new tests but
+  timed out in `TieredPagesTests.testRepeatedRotationsKeepTheScreen` waiting
+  for viewport 744×1080. `readerChapter` now hosts pages in visible windows
+  until main-actor teardown, with automatic scroll insets disabled. The
+  generic loader stays detached so its mid-test release check remains valid.
+  Timeouts, rotation counts and assertions are unchanged.
+- **Upstream verified:** [CI run #40](https://github.com/drearycold/FolioReaderKit/actions/runs/41045322582)
+  passed all 196 tests and both Example builds. The four swipe regressions
+  pass on iPhone 17 and iPad mini; the rotation and release cases each pass
+  five consecutive runs on iOS 18.5.
+- **App verified with the remote merge and `-onlyUsePackageVersionsFromResolvedFile`:**
+  normal project builds for testing and Mac Catalyst; iPhone 17 full scheme
+  runs 937 unit tests with zero failures (22 skipped: contract tests without
+  a server and the opt-in benchmark), and all five UI journeys pass.
+  Logs confirm the remote checkout is at `d82f388`, and the compiler uses it.
+
 ## FolioReader Reopens Chinese Books at the Chapter Start (2026-10-29, branch)
 
 Branch `claude/folioreaderkit-cfi-unicode-ids`, based on `main` after #122. It
