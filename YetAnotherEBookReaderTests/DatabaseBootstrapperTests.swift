@@ -33,6 +33,62 @@ final class DatabaseBootstrapperTests: XCTestCase {
 
     // MARK: - Main Realm open failure
 
+    func testTestConfigurationDoesNotChangeProductionSchemaVersion() {
+        let productionVersion = DatabaseSchema.version
+        let previousConfiguration = Realm.Configuration.defaultConfiguration
+        defer { Realm.Configuration.defaultConfiguration = previousConfiguration }
+        let configuration = Realm.Configuration(
+            inMemoryIdentifier: UUID().uuidString,
+            schemaVersion: 1
+        )
+
+        databaseService.installTestConfiguration(configuration)
+
+        XCTAssertEqual(databaseService.realmConf?.schemaVersion, 1)
+        XCTAssertEqual(DatabaseSchema.version, productionVersion)
+        XCTAssertGreaterThanOrEqual(DatabaseSchema.version, 148, "Do not downgrade databases opened by build 148")
+        databaseService.installInitialDefaultConfiguration()
+        XCTAssertEqual(databaseService.realmConf?.schemaVersion, DatabaseSchema.version)
+    }
+
+    /// Both the last schema change (147) and the build-only bump (148) must reopen
+    /// with their data intact after schema versioning is separated from app builds.
+    func testProductionConfigurationPreservesExistingDatabases() throws {
+        let previousConfiguration = Realm.Configuration.defaultConfiguration
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DatabaseSchema-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            Realm.Configuration.defaultConfiguration = previousConfiguration
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        for oldVersion: UInt64 in [147, 148] {
+            let realmURL = directory.appendingPathComponent("\(oldVersion).realm")
+            let oldConfiguration = Realm.Configuration(fileURL: realmURL, schemaVersion: oldVersion)
+            try autoreleasepool {
+                let realm = try Realm(configuration: oldConfiguration)
+                try realm.write {
+                    let profile = FolioReaderPreferenceRealm()
+                    profile.id = "Saved Profile"
+                    profile.currentFont = "Avenir"
+                    realm.add(profile)
+                }
+            }
+
+            try autoreleasepool {
+                try databaseService.prepareProductionConfiguration(fileURL: realmURL) { _ in }
+                let configuration = try XCTUnwrap(databaseService.realmConf)
+                XCTAssertEqual(configuration.schemaVersion, DatabaseSchema.version)
+                XCTAssertEqual(Realm.Configuration.defaultConfiguration.schemaVersion, DatabaseSchema.version)
+                XCTAssertEqual(try schemaVersionAtURL(realmURL), DatabaseSchema.version)
+                let realm = try Realm(configuration: configuration)
+                let profile = try XCTUnwrap(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Saved Profile"))
+                XCTAssertEqual(profile.currentFont, "Avenir")
+            }
+        }
+    }
+
     /// The main Realm open inside `bootstrap` is a `do/try/catch/throw`
     /// against `DatabaseBootstrapError.realmOpenFailed`. A Realm
     /// configuration that targets a non-existent directory forces the
