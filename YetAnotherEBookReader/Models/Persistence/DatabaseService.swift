@@ -10,8 +10,9 @@ import RealmSwift
 import os.log
 
 enum DatabaseSchema {
-    static let defaultVersion: UInt64 = 147
-    static var version: UInt64 = defaultVersion
+    // Independent of CFBundleVersion. Increment only for schema or data migrations.
+    // Start at 148 because build 148 already opened production Realms at this version.
+    static let version: UInt64 = 148
 }
 
 class DatabaseService: ObservableObject {
@@ -28,7 +29,6 @@ class DatabaseService: ObservableObject {
     init() {}
 
     func installInitialDefaultConfiguration() {
-        DatabaseSchema.version = DatabaseSchema.defaultVersion
         let initialConfiguration = Realm.Configuration(
             schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in }
@@ -38,16 +38,14 @@ class DatabaseService: ObservableObject {
     }
 
     func installTestConfiguration(_ configuration: Realm.Configuration) {
-        DatabaseSchema.version = configuration.schemaVersion
         Realm.Configuration.defaultConfiguration = configuration
         setup(conf: configuration)
     }
 
-    func prepareProductionConfiguration(statusHandler: @escaping (String) -> Void) throws {
-        let schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
-        DatabaseSchema.version = schemaVersion
+    func prepareProductionConfiguration(fileURL: URL? = nil, statusHandler: @escaping (String) -> Void) throws {
         let configuration = try DatabaseMigrator().makeConfiguration(
-            schemaVersion: schemaVersion,
+            schemaVersion: DatabaseSchema.version,
+            fileURL: fileURL,
             statusHandler: statusHandler
         )
         Realm.Configuration.defaultConfiguration = configuration

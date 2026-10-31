@@ -117,13 +117,15 @@ Run it by hand (Actions > TestFlight > Run workflow). It refuses any other
 branch, and it isn't a required check. A change to it alone doesn't run CI's
 build jobs ("Detect changes").
 
-- **Bump the build number first**, in a pull request (`chore: bump build to
-  N`: `CFBundleVersion` in both Info.plists and the four
-  `CURRENT_PROJECT_VERSION`s, as 1aa41d41 and #124 did). App Store Connect
-  refuses a build number it already has, and the build number is the
-  production Realm schema version
-  (`DatabaseService.prepareProductionConfiguration`). The workflow never
-  changes it (`manageAppVersionAndBuildNumber` is off).
+- **Build numbers are automatic on upload** (`manageAppVersionAndBuildNumber`
+  is on). No build-bump PR is needed for TestFlight: Xcode manages the uploaded
+  build number during export, without committing changes to source files.
+  `MARKETING_VERSION` stays unchanged until a deliberate version release.
+  The workflow summary labels the source archive version separately and reads
+  the uploaded version/build from `DistributionSummary.plist`; if unavailable,
+  it warns and keeps the successful upload status. The installed app's Settings
+  reads its packaged `CFBundleVersion`, so it shows the distributed build.
+  Realm schema version is maintained independently in `DatabaseSchema.version`.
 - **Signing:** the runner has no certificate. The archive is built unsigned
   (`CODE_SIGNING_ALLOWED=NO`, as CI builds), and the export signs it with a
   cloud-managed distribution certificate and uploads it, authenticated with
@@ -492,8 +494,11 @@ The modern path is value-type/actor based. Do not revive direct
   Realm from a background queue.
 - Keep Realm write transactions short. Do expensive sorting, merging, network
   preparation, and value construction outside writes.
-- Schema changes require a version bump and migration handling in
-  `AppContainer.tryInitializeDatabase(statusHandler:)`.
+- Schema or data migrations require incrementing `DatabaseSchema.version` in
+  `Models/Persistence/DatabaseService.swift` and migration handling in
+  `DatabaseMigrator` (or the server-scoped configuration provider as appropriate).
+  It is independent of the app build number. Keep it at least 148 to support
+  existing databases created when build 148 also set their schema version.
 
 ### Verification Checklist
 

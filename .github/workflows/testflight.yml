@@ -1,9 +1,9 @@
 name: TestFlight
 
 # Archives the iOS app from main and uploads it to App Store Connect, which makes it a TestFlight
-# build once it has processed it. Run it by hand (Actions > TestFlight > Run workflow) after the
-# build number has been bumped on main: App Store Connect refuses a build number it already has.
-# The build number is also the Realm schema version (DatabaseService), so it is never changed here.
+# build once it has processed it. Run it by hand (Actions > TestFlight > Run workflow).
+# Xcode manages the uploaded build number; the marketing version stays what main says.
+# Realm schema version is maintained independently in DatabaseSchema.version.
 #
 # Signing needs no certificate on the runner. The archive is built unsigned, as CI builds, and the
 # export signs it with a cloud-managed distribution certificate, authenticated with an App Store
@@ -70,7 +70,7 @@ jobs:
         run: |
           version=$(grep -m1 -o 'MARKETING_VERSION = [^;]*' "$PROJECT/project.pbxproj" | sed 's/MARKETING_VERSION = //')
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" YetAnotherEBookReader/Info.plist)
-          echo "D.S.Reader $version ($build) from $(git rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Source archive: D.S.Reader $version ($build) from $(git rev-parse --short HEAD). Xcode manages the uploaded build number." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Cache Swift packages
         uses: actions/cache@v6
@@ -111,8 +111,8 @@ jobs:
           done
 
       # Signs the archive for the App Store with a cloud-managed distribution certificate and
-      # uploads it. manageAppVersionAndBuildNumber is off: the build number is the Realm schema
-      # version and must stay what main says.
+      # uploads it. Xcode assigns an available build number during distribution,
+      # keeping the marketing version from the archive. No source-file bump is needed.
       - name: Upload to App Store Connect
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -135,7 +135,7 @@ jobs:
               <key>uploadSymbols</key>
               <true/>
               <key>manageAppVersionAndBuildNumber</key>
-              <false/>
+              <true/>
           </dict>
           </plist>
           PLIST
@@ -149,6 +149,34 @@ jobs:
             -authenticationKeyIssuerID "$ISSUER_ID" \
             2>&1 | tee "$LOGS/export.log" | xcbeautify --renderer github-actions
           echo "Uploaded. App Store Connect processes the build before it shows in TestFlight." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Uploaded version
+        run: |
+          python3 - <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          summary_path = Path(os.environ["EXPORT_DIR"]) / "DistributionSummary.plist"
+          try:
+              with summary_path.open("rb") as stream:
+                  summary = plistlib.load(stream)
+              app = next(
+                  app
+                  for products in summary.values() if isinstance(products, list)
+                  for app in products
+                  if isinstance(app, dict) and app.get("name", "").endswith(".app")
+              )
+              version = app["versionNumber"]
+              build = app["buildNumber"]
+          except (OSError, ValueError, KeyError, StopIteration) as error:
+              print(f"::warning::Upload succeeded, but could not read the uploaded version: {error}. See export.log.")
+          else:
+              message = f"Uploaded: D.S.Reader {version} ({build})."
+              print(message)
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  stream.write(message + "\n")
+          PY
 
       - name: Remove the API key
         if: always()

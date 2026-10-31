@@ -5,6 +5,39 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Realm Schema Independent of App Build (2026-10-30)
+
+- `DatabaseSchema.version` in `Models/Persistence/DatabaseService.swift` is now
+  an immutable, independently maintained schema version, starting at **148**.
+  Build 148 previously opened production databases at schema 148, so using the
+  old default 147 would downgrade existing main and server-scoped Realms.
+- Production setup no longer reads `YabrAppInfo.shared.build`; test setup no
+  longer mutates the production schema constant. All production Realm paths
+  use the same constant. Build-only releases need no schema bump; schema/data
+  migrations increment it and add the appropriate migration handling.
+- Updated AGENTS.md and TestFlight workflow comments. Regression tests cover
+  test-configuration isolation and preserving saved data from schemas 147/148.
+- Validation: iPhone 17 focused suites `DatabaseBootstrapperTests`,
+  `DefaultServerScopedRealmConfigurationProviderTests`, and
+  `MockAppContainerFactoryTests` passed (20 tests, zero failures), using locked
+  remote package versions and existing Xcode caches. Swift parse and
+  `git diff --check` passed; no new Realm usage in views. Full suite and
+  Mac Catalyst build were not run for this scoped change.
+
+## TestFlight Automatic Upload Build Numbers (2026-10-31)
+
+- `.github/workflows/testflight.yml` enables `manageAppVersionAndBuildNumber`.
+  Xcode manages build numbers at export/upload; no build-bump PR is needed.
+  Marketing version stays **0.2.9**, source build **148**, Realm schema **148**.
+  Installed Settings already reads the packaged build via `YabrAppInfo`.
+- Actions summary labels the source archive version and separately reads the
+  uploaded version/build from `DistributionSummary.plist`. Missing/incomplete
+  summary emits a warning without marking an already-successful upload failed.
+- Local validation passed: YAML parse, all embedded shell syntax, export plist
+  automatic-management flag, and summary handling with XML/binary plists,
+  adjusted build 149, missing file and incomplete metadata. `git diff --check`
+  passed. Actual cloud export/upload has not been run for this change.
+
 ## FolioReader Chapter-Swipe Container Snap (2026-10-30, app integration)
 
 FolioReaderKit [PR #24](https://github.com/drearycold/FolioReaderKit/pull/24)

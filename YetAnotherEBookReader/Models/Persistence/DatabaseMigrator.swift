@@ -3,7 +3,7 @@
 //  YetAnotherEBookReader
 //
 //  Extracted from AppContainer.tryInitializeDatabase() on 2026-06-24.
-//  Owns the Realm schema v42→v141 migration history.
+//  Owns the Realm migration history.
 //
 
 import Foundation
@@ -13,12 +13,11 @@ import OSLog
 final class DatabaseMigrator {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "DatabaseMigrator")
 
-    /// Build a fully-configured Realm.Configuration with all v42→v141 migration
+    /// Build a fully-configured Realm.Configuration with all historical migration
     /// blocks and the application-support file path. The supplied `statusHandler`
     /// receives human-readable progress updates (currently only emitted from the
     /// v90 server-id migration). The `schemaVersion` is supplied by the caller so
-    /// there is a single source of truth (typically derived from
-    /// `YabrAppInfo.shared.build`).
+    /// production uses `DatabaseSchema.version`, independently of the app build.
     func makeConfiguration(
         schemaVersion: UInt64,
         fileURL: URL? = nil,
