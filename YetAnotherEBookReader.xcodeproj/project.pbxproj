@@ -558,6 +558,9 @@
 		E7DFE3EF297A729900C60E7B /* ReaderOptionsReaderHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */; };
 		E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */; };
 		E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
+		4911E09F24170564765985B0 /* AdvertisingConsentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE362D53FC32ED4A5B56FDCF /* AdvertisingConsentManager.swift */; };
+		B94F2D98CC36A7A6EBF7975C /* AdvertisingConsentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE362D53FC32ED4A5B56FDCF /* AdvertisingConsentManager.swift */; };
+		0DF3FE4A2614F903BDA155BD /* AdvertisingConsentManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D41C0DF1CEFB69F57F10938 /* AdvertisingConsentManagerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -886,6 +889,8 @@
 		E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsFontHelpView.swift; sourceTree = "<group>"; };
 		E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDictViewEdit.swift; sourceTree = "<group>"; };
 		A0E4C8F72F00100100000001 /* UI Test Fixture.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "TestFixtures/UI Test Fixture.epub"; sourceTree = "<group>"; };
+		AE362D53FC32ED4A5B56FDCF /* AdvertisingConsentManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvertisingConsentManager.swift; sourceTree = "<group>"; };
+		2D41C0DF1CEFB69F57F10938 /* AdvertisingConsentManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvertisingConsentManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1211,6 +1216,7 @@
 		2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */ = {
 			isa = PBXGroup;
 			children = (
+				2D41C0DF1CEFB69F57F10938 /* AdvertisingConsentManagerTests.swift */,
 				C0A7AC7100000000000000A1 /* CalibreServerContractTests.swift */,
 				C0A7AC7200000000000000A1 /* CalibreHighlightUUIDTests.swift */,
 				A04D100130C0000100000007 /* CalibreServerServiceTests.swift */,
@@ -1522,6 +1528,7 @@
 		E7B100042FF1000000000004 /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				AE362D53FC32ED4A5B56FDCF /* AdvertisingConsentManager.swift */,
 				E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */,
 				E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */,
 				E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */,
@@ -1739,6 +1746,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4911E09F24170564765985B0 /* AdvertisingConsentManager.swift in Sources */,
 				E792C7EB2F84990E0015E020 /* ReadingSessionManager.swift in Sources */,
 				E71F34EB2FDD1DD2007AB0B1 /* CalibreLibraryManager.swift in Sources */,
 				E782836628EEA5BA0011438D /* YabrPDFTableViewController.swift in Sources */,
@@ -1971,6 +1979,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0DF3FE4A2614F903BDA155BD /* AdvertisingConsentManagerTests.swift in Sources */,
 				E71F34E22FDCF834007AB0B1 /* ReaderOptionsViewModelTests.swift in Sources */,
 				E71F34D72FDBDA3F007AB0B1 /* UnifiedCategoryServiceTests.swift in Sources */,
 				E71F358E2FE8E2C9007AB0B1 /* SectionShelfViewModelTests.swift in Sources */,
@@ -2049,6 +2058,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B94F2D98CC36A7A6EBF7975C /* AdvertisingConsentManager.swift in Sources */,
 				E792C7EC2F84990E0015E020 /* ReadingSessionManager.swift in Sources */,
 				E71F34EA2FDD1DD2007AB0B1 /* CalibreLibraryManager.swift in Sources */,
 				E7D315102BE5F8AF00A5B50A /* DictWebView.swift in Sources */,

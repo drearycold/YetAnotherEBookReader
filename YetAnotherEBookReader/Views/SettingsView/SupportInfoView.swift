@@ -45,24 +45,10 @@ struct SupportInfoView: View {
                 }
                 
 #if canImport(UserMessagingPlatform)
-                NavigationLink {
-                    List {
-                        HStack {
-                            Text("Status")
-                            Spacer()
-                            Text("\(ConsentInformation.shared.consentStatus.rawValue)")
-                            Text("/")
-                            Text("\(ConsentInformation.shared.formStatus.rawValue)")
-                        }
-                        Button {
-                            ConsentInformation.shared.reset()
-                        } label: {
-                            Text("Reset Tracking Consent")
-                        }.disabled(ConsentInformation.shared.consentStatus != ConsentStatus.obtained)
-                    }
-                } label: {
-                    Text("Reset Tracking Consent")
+                Button("Privacy Options") {
+                    Task { await AdvertisingConsentManager.shared.presentPrivacyOptions() }
                 }
+                .disabled(ConsentInformation.shared.privacyOptionsRequirementStatus != .required)
 #endif
             }
             

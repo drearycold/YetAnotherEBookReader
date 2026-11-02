@@ -36,7 +36,67 @@ placement (content right of center, top offset / drift after page turns).
 - Local validation passed: YAML parse, all embedded shell syntax, export plist
   automatic-management flag, and summary handling with XML/binary plists,
   adjusted build 149, missing file and incomplete metadata. `git diff --check`
-  passed. Actual cloud export/upload has not been run for this change.
+  passed. Cloud upload succeeded on 2026-10-31 in Actions run 41174759689;
+  App Store Connect confirms **0.2.9 (149)**, so automatic build management works.
+  The upload destination did not produce `DistributionSummary.plist`, and the
+  summary reporter emitted its intended warning. Actual build reporting from
+  upload logs/App Store Connect remains a workflow follow-up.
+
+## App Store iOS 1.5 Submitted (2026-10-31)
+
+- User requested formal App Store submission/publication after TestFlight.
+  Existing public version is 1.4; the existing **1.5** draft accepted the latest
+  **0.2.9 (149)** build without rebuilding or changing source marketing version.
+- Selected build 149, saved English update notes covering EPUB page turns and
+  position restoration, PDF reading, calibre browsing/offline search/sync, and
+  stability. Completed the required updated age-rating questionnaire (16+,
+  17+ on pre-26 systems), retaining unrestricted web access and declaring ads.
+  User handled Apple login and confirmed the developer agreement was accepted.
+- App Store Connect visibly confirmed **1 Item Submitted** and **Waiting for
+  Review**. Existing automatic release after approval and immediate rollout
+  settings were retained. No macOS version was submitted.
+- Review submission: https://appstoreconnect.apple.com/apps/1592052131/distribution/reviewsubmissions/details/6538baa8-5cc1-42fc-9067-8ac27d39b871
+
+## App Store 1.5 Review Feedback (2026-11-02)
+
+- Verified in App Store Connect and Apple's email: **Rejected**, one message
+  at 17:13 Asia/Shanghai, for **5.1.1(iv)**. Reviewed on iPad Air 11-inch (M3),
+  version 1.5/build 149. User denies ATT tracking, then sees a GDPR prompt
+  asking for tracking permission again in the same flow.
+- Apple says to respect the ATT denial; either revise the later consent wording
+  to distinguish data collection from tracking, or show GDPR before ATT. No
+  tracking may occur before permission. Region-specific behavior must be
+  documented and reproducible for review.
+- Apple explicitly offers bug-fix approval now with resolution in the next
+  update: request it by replying; no new upload/resubmission is needed for that
+  path. Alternatively fix and resubmit. No reply or new submission has been
+  sent; user has only requested tracking/reading the feedback so far.
+- Two screenshot attachments are listed: Screenshot-1102-091143.png and
+  Screenshot-1102-091208.png. Original review-submission URL above is unchanged.
+
+## App Store Privacy Consent Fix (2026-11-02, in progress)
+
+- User chose to fix and resubmit. `codex/fix-privacy-consent-flow` starts at
+  main 1113148a. Root cause: `MainView` requested ATT before UMP/GDPR, and ad
+  views could load independently of consent completion.
+- `AdvertisingConsentManager` now serializes UMP update/form → ATT only if
+  not determined → Mobile Ads initialization. Its published readiness gates
+  shelf banners/native/fallback ads and Folio banners/interstitials. Duplicate
+  triggers are ignored; consent errors keep ads blocked even with cached consent.
+- Removed the extra tracking explainer and replaced Settings' production UMP
+  reset with the supported privacy-options form. Simulator-only DEBUG arguments
+  `--consent-debug-eea --consent-debug-reset` reproduce an EEA first consent;
+  release builds always use UMP's real region/consent state.
+- Regression proof: old ATT-first order fails four of the five initial tests;
+  corrected order passes. Final iPhone 17 focused run: 49 tests pass (six consent,
+  32 MainViewModel, 11 ad layout), including respecting existing ATT decisions.
+  iOS 15.5 focused consent/ad-layout run: 16 pass. CI/upload/resubmission pending.
+- Final privacy-options edge case: users can change consent even if ads never
+  became ready; the same ATT/SDK gate is used afterward, and SDK initialization
+  happens once. All seven final consent tests pass, including recovery after
+  consent first disallows ads. Native Safari input was unreliable; the user
+  signed in to the in-app browser and review notes are saved there. Live EEA
+  form check hit a Google network error locally; ads correctly stayed disabled.
 
 ## FolioReader Chapter-Swipe Container Snap (2026-10-30, app integration)
 
