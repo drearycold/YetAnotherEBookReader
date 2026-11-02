@@ -104,4 +104,23 @@ final class AdvertisingConsentManagerTests: XCTestCase {
         XCTAssertEqual(events, ["update", "GDPR", "ads"])
         XCTAssertTrue(manager.canRequestAds)
     }
+
+    func testConsentCanBecomeAvailableOnARetry() async {
+        var allowsAds = false
+        var events: [String] = []
+        let manager = AdvertisingConsentManager(
+            updateConsent: { events.append("update") },
+            presentConsent: { events.append("GDPR") },
+            consentAllowsAds: { allowsAds },
+            requestTracking: { events.append("ATT") },
+            startAds: { events.append("ads") }
+        )
+        await manager.gatherConsent()
+        XCTAssertFalse(manager.canRequestAds)
+        XCTAssertEqual(events, ["update", "GDPR"])
+        allowsAds = true
+        await manager.gatherConsent()
+        XCTAssertTrue(manager.canRequestAds)
+        XCTAssertEqual(events, ["update", "GDPR", "update", "GDPR", "ATT", "ads"])
+    }
 }

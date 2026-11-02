@@ -15,6 +15,7 @@ final class AdvertisingConsentManager: ObservableObject {
 
     @Published private(set) var canRequestAds = false
     private var isGatheringConsent = false
+    private var hasInitializedAds = false
     private let updateConsent: @MainActor () async throws -> Void
     private let presentConsent: @MainActor () async throws -> Void
     private let consentAllowsAds: @MainActor () -> Bool
@@ -46,12 +47,7 @@ final class AdvertisingConsentManager: ObservableObject {
         do {
             try await updateConsent()
             try await presentConsent()
-            guard consentAllowsAds() else { return }
-            if trackingAuthorizationRequired() {
-                try await requestTracking()
-            }
-            await startAds()
-            canRequestAds = true
+            try await enableAdsAfterConsent()
         } catch {
             logger.error("Consent flow stopped; ads remain disabled: \(error.localizedDescription, privacy: .public)")
         }
@@ -59,9 +55,21 @@ final class AdvertisingConsentManager: ObservableObject {
 
     private enum FlowError: Error { case inactive }
 
+    private func enableAdsAfterConsent() async throws {
+        guard consentAllowsAds() else { return }
+        if trackingAuthorizationRequired() {
+            try await requestTracking()
+        }
+        if !hasInitializedAds {
+            await startAds()
+            hasInitializedAds = true
+        }
+        canRequestAds = true
+    }
+
     func presentPrivacyOptions() async {
         #if canImport(GoogleMobileAds)
-        guard canRequestAds, !isGatheringConsent else { return }
+        guard !isGatheringConsent else { return }
         isGatheringConsent = true
         canRequestAds = false
         defer { isGatheringConsent = false }
@@ -72,7 +80,7 @@ final class AdvertisingConsentManager: ObservableObject {
                     else { continuation.resume() }
                 }
             }
-            canRequestAds = ConsentInformation.shared.canRequestAds
+            try await enableAdsAfterConsent()
         } catch {
             logger.error("Could not present privacy options: \(error.localizedDescription, privacy: .public)")
         }

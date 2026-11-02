@@ -91,6 +91,12 @@ placement (content right of center, top offset / drift after page turns).
   corrected order passes. Final iPhone 17 focused run: 49 tests pass (six consent,
   32 MainViewModel, 11 ad layout), including respecting existing ATT decisions.
   iOS 15.5 focused consent/ad-layout run: 16 pass. CI/upload/resubmission pending.
+- Final privacy-options edge case: users can change consent even if ads never
+  became ready; the same ATT/SDK gate is used afterward, and SDK initialization
+  happens once. All seven final consent tests pass, including recovery after
+  consent first disallows ads. Native Safari input was unreliable; the user
+  signed in to the in-app browser and review notes are saved there. Live EEA
+  form check hit a Google network error locally; ads correctly stayed disabled.
 
 ## FolioReader Chapter-Swipe Container Snap (2026-10-30, app integration)
 
