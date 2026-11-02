@@ -5,6 +5,65 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## FolioReader Embedded Video Remote Pin (2026-11-02)
+
+App branch `codex/update-folioreaderkit-video`, based on `main` at `a0366c2e`,
+takes FolioReaderKit [PR #25](https://github.com/drearycold/FolioReaderKit/pull/25)
+merged to `master` as `75cca2e4a57e56f48448eac395a6454d15933a0f` (was
+`d82f388`). Its tree is identical to the tested video branch `69936c6`.
+Only this pin changes; every other package and the origin hash remain unchanged.
+No app Swift, persistence schema, marketing version or build-number changes.
+
+- The normal Xcode project, without a local package override, resolves the remote
+  checkout at `75cca2e`. Both builds use
+  `-onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates`.
+- iOS build-for-testing and Mac Catalyst build pass. Full iPhone 17 / iOS 26.5
+  scheme: 946 unit tests (22 skipped; two existing expected PDFKit failures),
+  zero unexpected failures, and all five UI journeys pass.
+- Upstream video PR CI [run #42](https://github.com/drearycold/FolioReaderKit/actions/runs/41440302801)
+  passed. The pre-merge package/manual regression and its iPad snapshot and
+  iOS 18.5 limitations are recorded immediately below.
+- Final remote-pin logs and result bundle: `/tmp/YabrFolioVideoPin/`.
+
+## FolioReader Embedded Video Branch Regression (2026-11-02)
+
+Verified FolioReaderKit `codex/embedded-video-support` at
+`69936c697f6b13694143603432692b4a51c807f9` against app `1113148aa`.
+An exact Git archive of the clean library branch was used through an external
+workspace in `/tmp/YabrEmbeddedVideoRegression`; app source and its remote
+`Package.resolved` pin remain unchanged.
+
+- **iPhone 17 / iOS 26.5:** all 207 package tests pass, including real WebKit
+  playback and seeking to 6 s for stored and Deflate video, byte ranges,
+  cancellation/corruption, media visibility, and spread/tier bounds.
+- **App integration:** iOS build-for-testing and Mac Catalyst build pass with
+  the local video package and the app's other locked dependencies. Full iPhone
+  scheme: 939 unit tests (22 skipped, two existing expected PDFKit failures),
+  zero unexpected failures; all five UI journeys pass, including FolioReader
+  opening, paging, closing and reading-history entry points.
+- **iPad mini / iOS 26.5:** 206 package tests pass; the only failure is
+  `ReaderStyleRenderingTests.testComputedStylesSnapshot`. A focused run on
+  master `d82f388` produces the identical failure text: the existing
+  `min-device-width: 600px` rule sets body hyphens to `none`, while the phone
+  snapshot expects `auto`. CSS, the snapshot and its test are unchanged by
+  the video branch. Do not re-record the phone snapshot to hide this.
+- **Manual app check, iPad 26.5:** a temporary copy of the built app replaced
+  only its mock EPUB resource with the branch's video sample. Inline video
+  advances to 3 s; media taps keep reader chrome stable; returning from the
+  background leaves playback paused without restarting. Native full-screen
+  playback renders moving frames and exits back to the chapter. The linked
+  Deflate chapter loads and plays after a landscape relayout.
+- **Incomplete:** iPad / iOS 18.5 stalled on the test helper's plain-HTML
+  WebKit warm-up, before reader or video scripts loaded; interrupted, with
+  logs and a WebContent process sample retained. No physical-device or iOS
+  15 run, nor the complete manual rotation/background matrix. Native seek
+  was not conclusive manually; automated real-WebKit seek passed on both
+  iPhone and iPad.
+- Logs, xcresults, baseline comparison and machine-readable summary:
+  `/tmp/YabrEmbeddedVideoRegression/verification.json`. Initial build attempts
+  hit SPM caches missing master `d82f388`; an isolated cache supplemented from
+  the local library repo resolved it. No application/library code was changed.
+
 ## Realm Schema Independent of App Build (2026-10-30)
 
 - `DatabaseSchema.version` in `Models/Persistence/DatabaseService.swift` is now
