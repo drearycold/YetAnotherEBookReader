@@ -67,18 +67,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
 #if canImport(GoogleMobileAds)
 #if GAD_ENABLED
-        let gadRequest = Request()
-        //        gadRequest.scene = self.view.window?.windowScene
-        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
-        
-        InterstitialAd.load(with: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
-            if let error = error {
-                print("\(#function) interstitial error=\(error.localizedDescription)")
-                return
-            }
-            self.interstitialAd = ad
-            self.interstitialAd?.fullScreenContentDelegate = self
-        }
+        initInterstitialAd()
 #endif
 #endif
         super.initialization()
@@ -199,6 +188,7 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
 
     func folioReaderAdView(_ folioReader: FolioReader) -> UIView? {
 #if canImport(GoogleMobileAds)
+        guard AdvertisingConsentManager.shared.canRequestAds else { return nil }
         let bannerView = BannerView(
             frame: .init(origin: .zero, size: bannerSize.size)
         )
@@ -228,6 +218,7 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
     
     func folioReaderAdPresent(_ folioReader: FolioReader) {
 #if canImport(GoogleMobileAds)
+        guard AdvertisingConsentManager.shared.canRequestAds else { return }
         guard let interstitialAd = interstitialAd else {
             initInterstitialAd()
             return
@@ -242,6 +233,7 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
 #if canImport(GoogleMobileAds)
 extension EpubFolioReaderContainer: FullScreenContentDelegate {
     func initInterstitialAd() {
+        guard AdvertisingConsentManager.shared.canRequestAds else { return }
         self.interstitialAd = nil
         
         let gadRequest = Request()

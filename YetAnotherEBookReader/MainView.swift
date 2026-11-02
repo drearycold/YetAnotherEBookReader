@@ -6,12 +6,6 @@
 //
 
 import SwiftUI
-import AppTrackingTransparency
-
-#if canImport(GoogleMobileAds)
-import GoogleMobileAds
-import UserMessagingPlatform
-#endif
 
 @available(macCatalyst 14.0, *)
 struct MainView: View {
@@ -113,13 +107,6 @@ struct MainView: View {
                     secondaryButton: .cancel(Text("Stay Here"))
                 )
             }
-            if item.id == "ATTNotice" {
-                return Alert(title: Text("Tracking Request"),
-                             message: Text("This free App is ads-Supported. We value our users' privary. Tracking will allow our ads providers to deliver personalized ads to you. Please make a choice in the next notice."),
-                             dismissButton: .default(Text("Continue"), action: {
-                    requestIDFA()
-                }))
-            }
             return Alert(
                 title: Text(item.id),
                 message: Text(item.msg ?? ""),
@@ -129,7 +116,7 @@ struct MainView: View {
         }
         .sheet(isPresented: $viewModel.initialTermsAgreementPresenting, onDismiss: {
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
-            viewModel.alertItem = AlertItem(id: "ATTNotice")
+            requestAdvertisingConsent()
         }, content: {
             VStack(spacing: 4) {
                 VStack(spacing: 16) {
@@ -240,10 +227,13 @@ struct MainView: View {
         .onChange(of: viewModel.consentRequestTriggered) { triggered in
             if triggered {
                 if !UITestingConfiguration.skipsConsentPrompts() {
-                    requestIDFA()
+                    requestAdvertisingConsent()
                 }
                 viewModel.consentRequestTriggered = false
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            requestAdvertisingConsent()
         }
         .onChange(of: viewModel.urlToOpen) { url in
             if let url = url {
@@ -254,79 +244,12 @@ struct MainView: View {
         .environment(\.readerWorkspaceID, viewModel.readerWorkspaceViewModel.id)
     }
 
-    private func requestIDFA() {
-        ATTrackingManager.requestTrackingAuthorization(completionHandler: { status in
-            // Tracking authorization completed. Start loading ads here.
-            showConsentInformation()
-        })
+    private func requestAdvertisingConsent() {
+        guard UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED),
+              !UITestingConfiguration.skipsConsentPrompts(),
+              UIApplication.shared.applicationState == .active else { return }
+        Task { await AdvertisingConsentManager.shared.gatherConsent() }
     }
-
-    private func showConsentInformation() {
-        #if canImport(GoogleMobileAds)
-        let parameters = RequestParameters()
-        // false means users are not under age.
-        parameters.isTaggedForUnderAgeOfConsent = false
-
-        ConsentInformation.shared.requestConsentInfoUpdate(
-            with: parameters,
-            completionHandler: { error in
-                if error != nil {
-                    // Handle the error.
-                } else {
-                    // The consent information state was updated.
-                    // You are now ready to check if a form is available.
-                    let formStatus = ConsentInformation.shared.formStatus
-                    if formStatus == FormStatus.available {
-                        loadForm()
-                    } else {
-                        startAdsIfConsentAllows()
-                    }
-                }
-            })
-        #endif
-    }
-
-    #if canImport(GoogleMobileAds)
-    private func loadForm() {
-        ConsentForm.load(
-            with: { form, loadError in
-                guard loadError == nil else {
-                    self.startAdsIfConsentAllows()
-                    return
-                }
-                guard ConsentInformation.shared.consentStatus == ConsentStatus.required else {
-                    self.startAdsIfConsentAllows()
-                    return
-                }
-                guard let form = form,
-                      let viewController = self.consentPresentationViewController else {
-                    self.startAdsIfConsentAllows()
-                    return
-                }
-
-                form.present(from: viewController, completionHandler: { dismissError in
-                    self.startAdsIfConsentAllows()
-                })
-            })
-    }
-
-    private var consentPresentationViewController: UIViewController? {
-        let windows = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-
-        return windows.first { $0.isKeyWindow }?.rootViewController
-            ?? windows.first?.rootViewController
-    }
-
-    private func startAdsIfConsentAllows() {
-        let consentStatus = ConsentInformation.shared.consentStatus
-        guard consentStatus == ConsentStatus.obtained || consentStatus == ConsentStatus.notRequired else { return }
-
-        // App can start requesting ads.
-        MobileAds.shared.start(completionHandler: nil)
-    }
-    #endif
 }
 
 @available(macCatalyst 14.0, *)

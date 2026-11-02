@@ -50,6 +50,7 @@ private final class BannerHostingViewController: UIViewController {
     }
 
     func configure(adUnitID: String, adSize: AdSize) {
+        guard AdvertisingConsentManager.shared.canRequestAds else { return }
         let size = adSize.size
         view.frame = CGRect(origin: .zero, size: size)
         view.bounds = CGRect(origin: .zero, size: size)
@@ -69,11 +70,12 @@ private final class BannerHostingViewController: UIViewController {
 #endif
 
 struct Banner: View {
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
     @Environment(\.appContainer) var container
     
     var body: some View {
         HStack {
-            if let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
+            if advertisingConsent.canRequestAds, let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
                 Spacer()
                 #if canImport(GoogleMobileAds)
                 BannerVC(adUnitID: adUnitID, adSize: AdSizeBanner)
@@ -86,12 +88,13 @@ struct Banner: View {
 }
 
 struct AdaptiveBanner: View {
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
     let width: CGFloat
     let maxHeight: CGFloat
 
     var body: some View {
         #if canImport(GoogleMobileAds)
-        if let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
+        if advertisingConsent.canRequestAds, let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
             let resolvedWidth = max(1, floor(width))
             let resolvedHeight = max(50, maxHeight)
             let adSize = inlineAdaptiveBanner(width: resolvedWidth, maxHeight: resolvedHeight)
@@ -108,9 +111,10 @@ struct AdaptiveBanner: View {
 }
 
 struct MediumRectangleBanner: View {
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
     var body: some View {
         #if canImport(GoogleMobileAds)
-        if let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
+        if advertisingConsent.canRequestAds, let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
             BannerVC(adUnitID: adUnitID, adSize: AdSizeMediumRectangle)
                 .frame(
                     width: AdSizeMediumRectangle.size.width,
@@ -304,6 +308,7 @@ private final class ShelfNativeAdViewController: UIViewController {
         bannerAdUnitID: String?,
         store: ShelfNativeAdStore
     ) {
+        guard AdvertisingConsentManager.shared.canRequestAds else { return }
         guard configuredSlotID != slotID
                 || configuredLayout != layout
                 || configuredNativeAdUnitID != nativeAdUnitID
@@ -382,7 +387,8 @@ private final class ShelfNativeAdViewController: UIViewController {
     private func showFallbackBannerIfAvailable() {
         removeAdContent()
 
-        guard let bannerAdUnitID = configuredBannerAdUnitID,
+        guard AdvertisingConsentManager.shared.canRequestAds,
+              let bannerAdUnitID = configuredBannerAdUnitID,
               let layout = configuredLayout else { return }
 
         let bannerSize = inlineAdaptiveBanner(
@@ -633,6 +639,7 @@ private final class ShelfNativeAdHostingView: NativeAdView {
 #endif
 
 struct ShelfNativeAd: View {
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
     enum Layout {
         case endcap(width: CGFloat)
         case strip(width: CGFloat)
@@ -662,7 +669,7 @@ struct ShelfNativeAd: View {
 
     var body: some View {
         #if canImport(GoogleMobileAds) && GAD_ENABLED
-        if let nativeAdUnitID = YabrAppInfo.shared.gadNativeShelfUnitID {
+        if advertisingConsent.canRequestAds, let nativeAdUnitID = YabrAppInfo.shared.gadNativeShelfUnitID {
             let frameSize = layout.frameSize
             ShelfNativeAdVC(
                 slotID: slotID,
