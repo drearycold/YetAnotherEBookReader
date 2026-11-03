@@ -5,6 +5,65 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## FolioReader 303f371 Remote Pin (2026-11-03)
+
+App branch `codex/update-folioreaderkit-tap-fix`, based on `main` at
+`db1c28a6` (PR #130 merged), updates only the FolioReaderKit master pin from
+`75cca2e` to `303f371ae0beb79552af95fae4f827fb729ba72c`, upstream PR #26.
+Every other package pin and the origin hash stay unchanged.
+
+- The normal Xcode project resolves the clean remote `303f371` checkout,
+  tree `1ab9dbbb493a1863fce0ad7500ef3a00775de9c2`, with locked versions and
+  no local override. iOS build-for-testing and Mac Catalyst build pass.
+- Remote-pin focused validation passes all 34 `FolioReaderProviderBookIdTests`
+  and the FolioReader Recent/detail/history UI journey (35 tests total).
+- `db1c28a6` has the same app file tree as the previously tested `3a5b388b`.
+  Reuse the full 216-package-test, 946-unit-test/five-UI-journey, iOS 15.5 and
+  actual native-touch verification below for the identical library tree;
+  the full app suite was not repeated for this pin-only follow-up.
+- Upstream PR #26's [CI run #45](https://github.com/drearycold/FolioReaderKit/actions/runs/41570700571)
+  passed. No temporary UI-test probe/fixture, app Swift, schema or build-number
+  change is included. Final remote-pin logs: `/tmp/YabrFolio303RemotePin/`.
+
+## FolioReader 303f371 Tap Regression Verification (2026-11-03)
+
+Verified FolioReaderKit master `303f371ae0beb79552af95fae4f827fb729ba72c`
+(PR #26) through an exact Git archive and external workspace at
+`/tmp/YabrFolio303f371`. App commit is `3a5b388b`; its formal remote pin stays
+at `75cca2e`. No app/library code or package-lock changes were made.
+
+- **Package, iPhone 17 / iOS 26.5:** all 216 tests pass. The nine new tests
+  cover retaining a completed tap through the asynchronous JS check, hide and
+  reveal, media exclusion, movement/scroll/page reuse, and real-WebKit HTML/
+  XHTML radio/checkbox controls, including 2/24-image cycles whose image
+  shrinks before the native hit-test result returns. CSS snapshot unchanged.
+- **iPhone 7 / iOS 15.5:** all nine `ReaderTapTests` and
+  `ReaderControlHitTests` pass using the same built test bundle.
+- **App integration with the local 303f371 override:** iOS build-for-testing
+  and Mac Catalyst build pass. Full iPhone 17 scheme: 946 unit tests (22
+  skipped, two existing expected PDFKit failures), no unexpected failures,
+  and all five UI journeys pass, including FolioReader open/page/close and
+  reading-history entry points. Logs confirm the new gesture file compiled.
+- **Actual native-touch follow-up completed:** on iPhone 17 / iOS 26.5,
+  `FolioTouchInteractionUITests.testActualImageCycleAndOrdinaryTextTaps` passes
+  (25.169 s, four native XCUITest coordinate taps). A temporary app copy adds
+  only the EPUB fixture and read-only UIKit/DOM observation; all FolioReaderKit
+  production sources remain byte-identical to `303f371`. No JS click or direct
+  toolbar mutation is used. The five captured states are: image 1 / 160 px /
+  bars visible; image 2 / 40 px / bars still visible; an ordinary-text tap at
+  the same screen point hides bars; another restores them; tapping image 2
+  cycles back to image 1 with bars preserved. Screenshots visually confirm
+  the image and toolbar changes. The earlier desktop CUA `noWindowsAvailable`
+  error affected that input method; XCUITest completes the actual interaction
+  validation. No physical-device or iPad run this round.
+- Native UI test, five screenshots and state attachments:
+  `/tmp/YabrFolio303f371/TouchHarness/Touch-303f371.xcresult`,
+  `TouchHarness/Evidence/` and `TouchHarness/touch-states.json` under the same
+  root. Test-only app/probe/UI-test code stays in the temporary directory;
+  no application/library code or formal dependency pin is changed.
+- Logs, xcresults, test summaries and fixture:
+  `/tmp/YabrFolio303f371/verification.json`.
+
 ## FolioReader Embedded Video Remote Pin (2026-11-02)
 
 App branch `codex/update-folioreaderkit-video`, based on `main` at `a0366c2e`,
