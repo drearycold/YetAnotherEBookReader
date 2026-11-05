@@ -29,6 +29,7 @@ class ServerViewModel: ObservableObject {
     @Published var calibreServerInfo: CalibreServerInfo? = nil
     @Published var serverCalibreInfoPresenting: Bool = false
     @Published var alertItem: AlertItem? = nil
+    @Published var browseLibraryID: String?
     
     // Server Detail properties (ServerDetailView)
     @Published var libraryList: [String] = []
@@ -54,6 +55,8 @@ class ServerViewModel: ObservableObject {
     
     private var libraryObservationTask: Task<Void, Never>?
     private var librarySyncStatusObservationTask: Task<Void, Never>?
+    private var probeTask: Task<Void, Never>?
+    private var probeID: UUID?
     
     init(container: AppContainer, server: CalibreServer?) {
         self.container = container
@@ -81,6 +84,7 @@ class ServerViewModel: ObservableObject {
     deinit {
         libraryObservationTask?.cancel()
         librarySyncStatusObservationTask?.cancel()
+        probeTask?.cancel()
     }
     
     func setupBindings() {
@@ -116,6 +120,10 @@ class ServerViewModel: ObservableObject {
     // MARK: - Add / Modify Server Actions (AddModServerView)
     
     func resetStates(server: CalibreServer?) {
+        disableProbeServerCancellable()
+        serverCalibreInfoPresenting = false
+        dataAction = nil
+        alertItem = nil
         self.calibreServerName = server?.name ?? ""
         self.calibreServerUrl = server?.baseUrl ?? ""
         self.calibreUsername = server?.username ?? ""
@@ -127,6 +135,7 @@ class ServerViewModel: ObservableObject {
     }
     
     func processInputAction(server: CalibreServer?, completion: @escaping () -> Void) {
+        disableProbeServerCancellable()
         if server == nil {
             dataAction = "Add"
             processUrlInputs(server: server)
@@ -136,7 +145,7 @@ class ServerViewModel: ObservableObject {
             processUrlInputs(server: server)
             modServerConfirmButtonAction(completion: completion)
         }
-        self.serverCalibreInfoPresenting = true
+        self.serverCalibreInfoPresenting = alertItem == nil
     }
     
     private func processUrlInputs(server: CalibreServer?) {
@@ -200,24 +209,40 @@ class ServerViewModel: ObservableObject {
         performProbeServer(server: calibreServer, isAdd: true, completion: completion)
     }
     
-    func addServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>) {
-        guard let serverInfo = calibreServerInfo else { return }
+    var canConfirmServer: Bool {
+        serverCalibreInfoPresenting && !isProbing && calibreServerInfo?.reachable == true
+            && calibreServerInfo?.errorMsg == "Success"
+    }
+
+    var librariesToAdd: [CalibreLibrary] {
+        guard let info = calibreServerInfo, info.reachable, info.errorMsg == "Success" else { return [] }
+        return info.libraryMap.map {
+            CalibreLibrary(server: info.server, key: $0.key, name: $0.value, discoverable: true)
+        }.sorted { $0.name == $1.name ? $0.key < $1.key : $0.name < $1.name }
+    }
+
+    var libraryToBrowse: CalibreLibrary? {
+        let libraries = librariesToAdd
+        return libraries.count == 1 ? libraries.first : libraries.first { $0.id == browseLibraryID }
+    }
+
+    func addServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>,
+                            browseLibrary: ((CalibreLibrary) -> Void)? = nil) {
+        guard canConfirmServer, dataAction == "Add", let serverInfo = calibreServerInfo else { return }
+        let selectedLibrary = libraryToBrowse
+        guard browseLibrary == nil || selectedLibrary != nil else { return }
 
         var newServer = serverInfo.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
 
-        let libraries: [CalibreLibrary] = serverInfo.libraryMap
-            .sorted { $0.key < $1.key }
-            .map {
-                .init(
-                    server: serverInfo.server,
-                    key: $0,
-                    name: $1,
-                    discoverable: true
-                )
-            }
+        let libraries = librariesToAdd
 
         container.serverManager.addServer(server: newServer, libraries: libraries)
+        guard container.serverManager.calibreServers[newServer.id] != nil,
+              libraries.allSatisfy({ container.libraryManager.calibreLibraries[$0.id] != nil }) else {
+            alertItem = AlertItem(id: "Error", msg: "Could not save the server. Please try again.")
+            return
+        }
         if let url = URL(string: newServer.baseUrl) {
             container.serverManager.updateServerDSReaderHelper(
                 serverId: newServer.id,
@@ -230,6 +255,7 @@ class ServerViewModel: ObservableObject {
         container.serverManager.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
 
         serverBinding.wrappedValue = newServer
+        if let selectedLibrary { browseLibrary?(selectedLibrary) }
         isActiveBinding.wrappedValue = false
     }
 
@@ -261,7 +287,7 @@ class ServerViewModel: ObservableObject {
     }
     
     func modServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>) {
-        guard let serverInfo = calibreServerInfo else {
+        guard canConfirmServer, dataAction == "Mod", let serverInfo = calibreServerInfo else {
             alertItem = AlertItem(id: "Error", msg: "Unexpected Error")
             return
         }
@@ -276,13 +302,16 @@ class ServerViewModel: ObservableObject {
     
     private func performProbeServer(server: CalibreServer, isAdd: Bool, completion: @escaping () -> Void) {
         isProbing = true
-        Task {
+        let probeID = UUID()
+        self.probeID = probeID
+        probeTask = Task { [weak self, container] in
             let serverInfo = await container.serverManager.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true))
-
+            guard let self, !Task.isCancelled, self.probeID == probeID else { return }
             self.calibreServerInfo = serverInfo
             if let serverInfo = serverInfo {
                 for (key, name) in serverInfo.libraryMap {
                     await container.libraryManager.probeLibrary(request: .init(library: .init(server: serverInfo.request.server, key: key, name: name)))
+                    guard !Task.isCancelled, self.probeID == probeID else { return }
                 }
             }
             self.isProbing = false
@@ -291,6 +320,10 @@ class ServerViewModel: ObservableObject {
     }
     
     func disableProbeServerCancellable() {
+        probeTask?.cancel()
+        probeTask = nil
+        probeID = nil
+        browseLibraryID = nil
         self.calibreServerInfo = nil
         self.isProbing = false
     }

@@ -48,7 +48,7 @@ struct MainView: View {
                         }
                         .tag(1)
 
-                    LibraryInfoView(importBook: viewModel.presentBookImportPicker)
+                    LibraryInfoView(importBook: viewModel.presentBookImportPicker, libraryToBrowse: $viewModel.browseLibraryID)
                         .environment(\.horizontalSizeClass, originalSizeClass)
                         .yabrAppChrome(.system, isActive: viewModel.activeTab == 2)
                         .accessibilityIdentifier("screen.browse")
@@ -79,7 +79,7 @@ struct MainView: View {
             if viewModel.showWelcome {
                 WelcomeEmptyShelfView(
                     importBook: viewModel.presentBookImportPicker,
-                    openSettings: viewModel.openWelcomeSettings,
+                    connectCalibre: viewModel.openWelcomeConnection,
                     openBrowse: viewModel.openWelcomeBrowse
                 )
             }
@@ -169,6 +169,18 @@ struct MainView: View {
                 }
             }.padding()
         })
+        .sheet(isPresented: $viewModel.welcomeServerPresenting, onDismiss: viewModel.completeWelcomeConnection) {
+            NavigationView {
+                AddModServerView(
+                    viewModel: viewModel.welcomeServerViewModel,
+                    server: .constant(nil),
+                    isActive: $viewModel.welcomeServerPresenting,
+                    browseLibrary: viewModel.browseConnectedLibrary
+                )
+                .navigationTitle("Connect to Calibre")
+            }
+            .navigationViewStyle(.stack)
+        }
         .sheet(isPresented: $viewModel.bookImportPickerPresenting, onDismiss: viewModel.completeBookImportPicker) {
             BookImportPicker(
                 bookURLs: Binding(get: { viewModel.bookImportURLs }, set: viewModel.receivePickedBookURLs),
@@ -262,7 +274,7 @@ private struct WelcomeEmptyShelfView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     let importBook: () -> Void
-    let openSettings: () -> Void
+    let connectCalibre: () -> Void
     let openBrowse: () -> Void
 
     var body: some View {
@@ -354,7 +366,7 @@ private struct WelcomeEmptyShelfView: View {
     }
 
     private var secondaryAction: some View {
-        Button(action: openSettings) {
+        Button(action: connectCalibre) {
             Label("Connect to Calibre", systemImage: "server.rack")
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -362,7 +374,7 @@ private struct WelcomeEmptyShelfView: View {
         }
         .buttonStyle(WelcomeSecondaryButtonStyle())
         .accessibilityIdentifier("welcome.calibre")
-        .accessibilityHint("Opens Settings to configure a calibre server and library.")
+        .accessibilityHint("Connect to a calibre server, then browse its books.")
     }
 
     private var dismissHint: some View {

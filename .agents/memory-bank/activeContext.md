@@ -5,6 +5,26 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## First Book Calibre Connection P2 (2026-11-05, branch)
+
+`codex/first-book-calibre-browse` starts at latest `main` `e196ff5a`, including
+P1 file import merged in #132. Welcome's Calibre action opens the existing
+connection form directly. **Add and Browse Library** saves through the existing
+manager; one library opens directly, multiple libraries require an explicit
+choice. Main waits for modal dismissal, then pushes that exact library's
+existing Browse list. Settings retains its management behavior and P1 import
+is unchanged. Cancelled/failed/stale probes cannot confirm or route.
+
+Final validation: 960 unit tests (22 skips, two existing expected PDFKit
+failures), five existing UI journeys, iOS/Catalyst builds; six isolated real
+Calibre journeys across iPhone 17, iOS 15.5 iPhone 7 and iPad mini pass. A further
+iPad run verifies stable landscape geometry, opens book detail and returns.
+iOS 15's supplementary category menu could not be opened by the native harness;
+its core connection/back paths pass. No physical-device, native HTTPS/Digest,
+download/read or HTTP-error-page work. Details and evidence are in
+[Shelf Modernization](history/shelf-modernization.md) and
+`/tmp/YabrCalibreOnboarding/verification.json`.
+
 ## First Book File Import P1 (2026-11-05, branch)
 
 `codex/first-book-file-import` adds welcome/empty-local-library file import,

@@ -101,12 +101,60 @@ import Combine
         XCTAssertTrue(refreshed)
     }
 
-    func testOpenWelcomeSettingsSelectsSettingsTab() throws {
+    func testWelcomeConnectionOpensFormWithoutChangingTabAndCancelPreservesShelf() throws {
         viewModel.activeTab = 0
+        let servers = mockAppContainer.calibreServers
+        let books = mockAppContainer.booksInShelf
 
-        viewModel.openWelcomeSettings()
+        viewModel.openWelcomeConnection()
 
-        XCTAssertEqual(viewModel.activeTab, 3)
+        XCTAssertTrue(viewModel.welcomeServerPresenting)
+        XCTAssertEqual(viewModel.activeTab, 0)
+        viewModel.welcomeServerPresenting = false
+        viewModel.completeWelcomeConnection()
+        XCTAssertNil(viewModel.browseLibraryID)
+        XCTAssertEqual(viewModel.activeTab, 0)
+        XCTAssertEqual(mockAppContainer.calibreServers, servers)
+        XCTAssertEqual(mockAppContainer.booksInShelf, books)
+    }
+
+    func testConnectedLibraryIsOpenedOnlyAfterConnectionDismissal() throws {
+        let server = TestFixtures.makeServer()
+        let library = CalibreLibrary(server: server, key: "new-library", name: "New Library")
+        mockAppContainer.serverManager.addServer(server: server, libraries: [library])
+        viewModel.openWelcomeConnection()
+
+        viewModel.browseConnectedLibrary(library)
+        XCTAssertEqual(viewModel.activeTab, 0)
+        XCTAssertNil(viewModel.browseLibraryID)
+
+        viewModel.welcomeServerPresenting = false
+        viewModel.completeWelcomeConnection()
+        XCTAssertEqual(viewModel.activeTab, 2)
+        XCTAssertEqual(viewModel.browseLibraryID, library.id)
+
+        viewModel.browseLibraryID = nil
+        viewModel.activeTab = 0
+        viewModel.completeWelcomeConnection()
+        XCTAssertNil(viewModel.browseLibraryID, "Completion is consumed once")
+        XCTAssertEqual(viewModel.activeTab, 0)
+    }
+
+    func testUnpersistedConnectionAndReopenedCancelledFormCannotRoute() {
+        viewModel.openWelcomeConnection()
+        let library = CalibreLibrary(server: TestFixtures.makeServer(), key: "missing", name: "Missing")
+        viewModel.browseConnectedLibrary(library)
+        viewModel.welcomeServerPresenting = false
+        viewModel.completeWelcomeConnection()
+        XCTAssertNil(viewModel.browseLibraryID)
+        XCTAssertEqual(viewModel.activeTab, 0)
+
+        viewModel.browseLibraryID = "previous-library"
+        viewModel.openWelcomeConnection()
+        XCTAssertNil(viewModel.browseLibraryID)
+        viewModel.welcomeServerPresenting = false
+        viewModel.completeWelcomeConnection()
+        XCTAssertEqual(viewModel.activeTab, 0)
     }
 
     func testOpenWelcomeBrowseSelectsBrowseTab() throws {

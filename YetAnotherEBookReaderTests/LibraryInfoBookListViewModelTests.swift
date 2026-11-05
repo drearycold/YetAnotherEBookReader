@@ -297,7 +297,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertTrue(source.contains("NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected)"))
         XCTAssertTrue(source.contains("selectRootCategoryItem(categoryItem.name)"))
         XCTAssertTrue(parentSource.contains("let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()"))
-        XCTAssertTrue(parentSource.contains("if !preserveFilters"))
+        // A new connection can also reset criteria; category returns still consult this flag.
+        XCTAssertTrue(parentSource.contains("!preserveFilters"))
         XCTAssertTrue(parentSource.contains("viewModel.fetchAvailableCategories()"))
         XCTAssertTrue(categoryDetailSource.contains("let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []"))
         XCTAssertTrue(categoryDetailSource.contains("libraryIds: scopedLibraryIds"))

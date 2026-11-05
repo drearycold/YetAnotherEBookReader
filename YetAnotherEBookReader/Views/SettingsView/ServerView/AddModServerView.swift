@@ -16,6 +16,7 @@ struct AddModServerView: View {
     @ObservedObject var viewModel: ServerViewModel
     @Binding var server: CalibreServer?
     @Binding var isActive: Bool
+    var browseLibrary: ((CalibreLibrary) -> Void)? = nil
     
     @State private var localLibraryImportBooksPicked = [URL]()
     @State private var localLibraryImportPresenting = false
@@ -109,6 +110,7 @@ struct AddModServerView: View {
                 }
             }
         }
+        .accessibilityIdentifier("server.connection.form")
         .onAppear {
             viewModel.resetStates(server: server)
         }
@@ -140,18 +142,33 @@ struct AddModServerView: View {
                     if viewModel.isProbing {
                         ProgressView().progressViewStyle(.circular)
                     } else {
-                        Image(systemName: "square.and.arrow.down")
+                        if browseLibrary != nil {
+                            Text("Connect")
+                        } else {
+                            Image(systemName: "square.and.arrow.down")
+                        }
                     }
                 }
-                .disabled(viewModel.isProbing || (server != nil && container.serverManager.isServerProbing(server: server!)))
+                .accessibilityIdentifier("server.connection.connect")
+                .disabled(viewModel.isProbing || server.map { container.serverManager.isServerProbing(server: $0) } == true)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
-                    viewModel.resetStates(server: server)
+                    if browseLibrary != nil {
+                        viewModel.disableProbeServerCancellable()
+                        isActive = false
+                    } else {
+                        viewModel.resetStates(server: server)
+                    }
                 }) {
-                    Image(systemName: "arrow.counterclockwise")
+                    if browseLibrary != nil {
+                        Text("Cancel")
+                    } else {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
                 }
-                .disabled(viewModel.isProbing || (server != nil && container.serverManager.isServerProbing(server: server!)))
+                .accessibilityIdentifier("server.connection.cancel")
+                .disabled(browseLibrary == nil && (viewModel.isProbing || server.map { container.serverManager.isServerProbing(server: $0) } == true))
             }
         }
     }
@@ -169,10 +186,12 @@ struct AddModServerView: View {
             
             Section {
                 Button(action: {
+                    viewModel.disableProbeServerCancellable()
                     viewModel.serverCalibreInfoPresenting = false
                 }) {
                     Text("Cancel")
                 }
+                .accessibilityIdentifier("server.connection.result.cancel")
                 
                 if viewModel.calibreServerInfo?.errorMsg != "Success" {
                     Button {
@@ -181,43 +200,71 @@ struct AddModServerView: View {
                     } label: {
                         Text("Retry")
                     }
+                    .accessibilityIdentifier("server.connection.retry")
+                    .disabled(viewModel.isProbing)
                 }
                 
                 Button(action: {
                     if viewModel.dataAction == "Add" {
-                        viewModel.addServerConfirmed(serverBinding: $server, isActiveBinding: $isActive)
+                        viewModel.addServerConfirmed(serverBinding: $server, isActiveBinding: $isActive, browseLibrary: browseLibrary)
                     } else if viewModel.dataAction == "Mod" {
                         viewModel.modServerConfirmed(serverBinding: $server, isActiveBinding: $isActive)
                     }
                     viewModel.serverCalibreInfoPresenting = false
                 }) {
                     if viewModel.dataAction == "Add" {
-                        Text("Add")
+                        Text(browseLibrary == nil ? "Add" : "Add and Browse Library")
                     } else if viewModel.dataAction == "Mod" {
                         Text("Update")
                     } else {
                         Text("OK")
                     }
-                }.disabled(viewModel.calibreServerInfo?.errorMsg != "Success")
+                }
+                .accessibilityIdentifier("server.connection.confirm")
+                .disabled(!viewModel.canConfirmServer || (browseLibrary != nil && viewModel.libraryToBrowse == nil))
             }
             
-            Section(header: Text("Library List")) {
+            Section(header: Text(browseLibrary == nil ? "Library List" : "Library to Browse"), footer: Text(
+                browseLibrary != nil && viewModel.librariesToAdd.count > 1
+                    ? "Choose a library to browse. All libraries will be added." : ""
+            )) {
                 if let serverInfo = viewModel.calibreServerInfo,
                    serverInfo.errorMsg == "Success" {
                     ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
-                        HStack {
-                            Text(libraryEntry.value)
-                            Spacer()
-                            if let info = self.container.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
-                                Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
-                            } else {
-                                Text("Probing")
+                        if browseLibrary != nil && viewModel.librariesToAdd.count > 1 {
+                            let libraryID = CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id
+                            Button {
+                                viewModel.browseLibraryID = libraryID
+                            } label: {
+                                HStack {
+                                    libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
+                                    Image(systemName: viewModel.browseLibraryID == libraryID ? "checkmark.circle.fill" : "circle")
+                                }
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("server.connection.library.\(libraryEntry.key)")
+                            .accessibilityAddTraits(viewModel.browseLibraryID == libraryID ? .isSelected : [])
+                        } else {
+                            libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
                         }
                     }
                 } else {
                     Text("Cannot Fetch Library List")
                 }
+            }
+        }
+        .accessibilityIdentifier("server.connection.result")
+    }
+
+    private func libraryInfoRow(serverInfo: CalibreServerInfo, key: String, name: String) -> some View {
+        HStack {
+            Text(name)
+            Spacer()
+            if let info = container.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: key, name: name).id] {
+                Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
+            } else {
+                Text("Probing")
             }
         }
     }
@@ -232,6 +279,7 @@ struct AddModServerView: View {
             Button(action:{ text.wrappedValue.removeAll() }) {
                 Image(systemName: "xmark.circle.fill")
             }
+            .accessibilityIdentifier("server.connection.field.\(label).clear")
             if original.isEmpty == false {
                 Button(action:{ text.wrappedValue = original }) {
                     Image(systemName: "arrow.counterclockwise")
