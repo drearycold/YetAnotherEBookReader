@@ -161,6 +161,136 @@ import Combine
         XCTAssertTrue(viewModel.serverCalibreInfoPresenting)
     }
 
+    func testFailedProbeCannotBeConfirmedAsANewServer() throws {
+        let server = TestFixtures.makeServer()
+        let connection = ServerViewModel(container: mockAppContainer, server: nil)
+        connection.dataAction = "Add"
+        connection.serverCalibreInfoPresenting = true
+        connection.calibreServerInfo = CalibreServerInfo(
+            server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
+            reachable: false, probing: false, errorMsg: "Connection failed",
+            defaultLibrary: "library", libraryMap: ["library": "Library"],
+            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+        )
+        var savedServer: CalibreServer?
+        var active = true
+
+        connection.addServerConfirmed(
+            serverBinding: Binding(get: { savedServer }, set: { savedServer = $0 }),
+            isActiveBinding: Binding(get: { active }, set: { active = $0 })
+        )
+
+        XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
+        XCTAssertTrue(mockAppContainer.calibreLibraries.isEmpty)
+        XCTAssertNil(savedServer)
+        XCTAssertTrue(active)
+    }
+
+    func testSingleConnectedLibrarySavesAndBrowsesThatLibrary() throws {
+        let connection = try stagedConnection(libraries: ["only": "Only Library"])
+        let expected = try XCTUnwrap(connection.librariesToAdd.first)
+        XCTAssertEqual(connection.libraryToBrowse?.id, expected.id)
+        var browsedLibrary: CalibreLibrary?
+        var active = true
+        connection.addServerConfirmed(serverBinding: .constant(nil),
+            isActiveBinding: Binding(get: { active }, set: { active = $0 }),
+            browseLibrary: { browsedLibrary = $0 })
+
+        XCTAssertFalse(active)
+        XCTAssertEqual(browsedLibrary?.id, expected.id)
+        XCTAssertEqual(mockAppContainer.libraryRepository.getAllLibraries().first { $0.id == expected.id }?.name, "Only Library")
+        XCTAssertNotNil(mockAppContainer.serverRepository.getAllServers().first { $0.id == expected.server.id })
+    }
+
+    func testMultipleLibrariesRequireAnExplicitChoiceAndSaveAllLibraries() throws {
+        let connection = try stagedConnection(libraries: ["a": "First Library", "b": "Second Library"])
+        XCTAssertNil(connection.libraryToBrowse)
+        var browsedLibrary: CalibreLibrary?
+        var active = true
+        let binding = Binding(get: { active }, set: { active = $0 })
+        connection.addServerConfirmed(serverBinding: .constant(nil), isActiveBinding: binding,
+                                      browseLibrary: { browsedLibrary = $0 })
+        XCTAssertTrue(active)
+        XCTAssertNil(browsedLibrary)
+        XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
+
+        let second = try XCTUnwrap(connection.librariesToAdd.first { $0.key == "b" })
+        connection.browseLibraryID = second.id
+        connection.addServerConfirmed(serverBinding: .constant(nil), isActiveBinding: binding,
+                                      browseLibrary: { browsedLibrary = $0 })
+        XCTAssertFalse(active)
+        XCTAssertEqual(browsedLibrary?.id, second.id)
+        XCTAssertEqual(Set(mockAppContainer.calibreLibraries.values.map(\.key)), ["a", "b"])
+        XCTAssertEqual(mockAppContainer.libraryRepository.getAllLibraries().filter { $0.server.id == second.server.id }.count, 2)
+    }
+
+    func testSettingsAddDoesNotRequireChoosingABrowseLibrary() throws {
+        let connection = try stagedConnection(libraries: ["a": "First", "b": "Second"])
+        var active = true
+        connection.addServerConfirmed(serverBinding: .constant(nil),
+            isActiveBinding: Binding(get: { active }, set: { active = $0 }))
+        XCTAssertFalse(active)
+        XCTAssertEqual(mockAppContainer.calibreLibraries.count, 2)
+    }
+
+    func testCancelledOrStillProbingConnectionCannotSaveOrBrowse() throws {
+        for cancelled in [false, true] {
+            let connection = try stagedConnection(libraries: ["a": "Library"])
+            if cancelled {
+                connection.disableProbeServerCancellable()
+            } else {
+                connection.isProbing = true
+            }
+            var active = true
+            var didBrowse = false
+            connection.addServerConfirmed(serverBinding: .constant(nil),
+                isActiveBinding: Binding(get: { active }, set: { active = $0 }),
+                browseLibrary: { _ in didBrowse = true })
+            XCTAssertTrue(active)
+            XCTAssertFalse(didBrowse)
+            XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
+            XCTAssertTrue(mockAppContainer.calibreLibraries.isEmpty)
+        }
+    }
+
+    func testCancellingAnInFlightProbeDiscardsItsLateAnswer() async throws {
+        let connection = ServerViewModel(container: mockAppContainer, server: nil)
+        connection.calibreServerUrl = "http://127.0.0.1:1"
+        var didComplete = false
+        connection.processInputAction(server: nil) { didComplete = true }
+        connection.disableProbeServerCancellable()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNil(connection.calibreServerInfo)
+        XCTAssertFalse(connection.isProbing)
+        XCTAssertFalse(didComplete)
+        XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
+    }
+
+    func testReopeningConnectionClearsPreviousResultAndLibraryChoice() throws {
+        let connection = try stagedConnection(libraries: ["a": "First", "b": "Second"])
+        connection.browseLibraryID = connection.librariesToAdd.last?.id
+        connection.resetStates(server: nil)
+        XCTAssertFalse(connection.serverCalibreInfoPresenting)
+        XCTAssertNil(connection.calibreServerInfo)
+        XCTAssertNil(connection.libraryToBrowse)
+        XCTAssertNil(connection.browseLibraryID)
+        XCTAssertNil(connection.dataAction)
+        XCTAssertTrue(connection.calibreServerUrl.isEmpty)
+    }
+
+    private func stagedConnection(libraries: [String: String]) throws -> ServerViewModel {
+        let server = TestFixtures.makeServer(baseUrl: "http://127.0.0.1:1")
+        let connection = ServerViewModel(container: mockAppContainer, server: nil)
+        connection.dataAction = "Add"
+        connection.serverCalibreInfoPresenting = true
+        connection.calibreServerInfo = CalibreServerInfo(
+            server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
+            reachable: true, probing: false, errorMsg: "Success", defaultLibrary: "a", libraryMap: libraries,
+            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+        )
+        return connection
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1.0,
         condition: @escaping () -> Bool

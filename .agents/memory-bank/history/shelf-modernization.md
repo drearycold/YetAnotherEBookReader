@@ -6,6 +6,65 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **First Book Calibre Connection, Priority 2 (2026-11-05, branch):**
+  `codex/first-book-calibre-browse`, based on fetched `main` at `e196ff5a`
+  (#132 merged P1 file import). Clean worktree at start; prior branch retained.
+  - Welcome's **Connect to Calibre** presents the existing `AddModServerView`
+    directly, with textual Connect/Cancel actions. Its optional browse callback
+    changes confirmation to **Add and Browse Library**. A single discovered
+    library is used directly; multiple libraries require choosing a row, with
+    an explicit explanation that all libraries are saved.
+  - `MainViewModel` holds the chosen library ID until the connection sheet has
+    dismissed. It then selects Browse and activates a root hidden
+    `NavigationLink(isActive:)` in `LibraryInfoView`. Both routed and ordinary
+    links reuse the same book-list builder and exact singleton library scope.
+    Initial connection criteria reset once; returning from a category respects
+    the existing preserve flag. Back returns to Library Browser normally.
+  - The existing server/library manager and repositories still persist data.
+    `ServerViewModel` checks successful reachability before Add/Update, clears
+    old results/selections on a new attempt, and cancels/identifies probe tasks
+    so late answers cannot restore a dismissed or superseded result. Conflict
+    errors do not open a stale confirmation sheet. Settings' Add/Update and
+    configuration rows retain their management purposes.
+  - No new files/target registration, Realm schema, dependency pins, app build
+    number, download/read behavior or HTTP error-page redesign. P1 import is
+    retained. Swift parse and `git diff --check` pass.
+  - Regression proof: the new failed-probe test fails four assertions against
+    the original confirmation implementation, which saved an unsuccessful
+    probe. Final full unit target: **960 tests, zero failures, 22 skipped**
+    (Calibre contracts without their opt-in environment and the benchmark),
+    with two existing expected PDFKit failures. All **five existing UI journeys**
+    passed. The first full scheme's one failure was the existing source-text
+    assertion expecting `if !preserveFilters`; it now allows the extra initial
+    connection condition, and the complete unit target passed afterward.
+  - iOS build-for-testing and Mac Catalyst build pass with locked remote
+    packages, no local overrides. The default `/tmp/YabrSourcePackages` cache
+    was incomplete; builds use the existing
+    `/tmp/YabrFolioVideoPin/SourcePackages` and `/tmp/YabrFolioSwipeDerivedData`.
+  - **Native real-server coverage:** two journeys each pass on iPhone 17/iOS
+    26.5, iPhone 7/iOS 15.5 and iPad mini/iPadOS 26.5. Normal disk/bootstrap and
+    networking run in `org.dsreader.onboarding.calibre.p2.verified`, separate
+    from the user's app; the existing XCTest consent flag skips terms/ads.
+    Single-library checks use the existing read-only 127.0.0.1:8080 Quick Start
+    Guide. Two temporary independent libraries on port 18081 have distinct book
+    titles, proving selection of the non-default second library and no mixing.
+    The tests cover form and successful-probe cancellation, failed connection
+    and corrected URL, disabled failure confirmation, exact list/navigation,
+    ordinary Settings management and persistence across app relaunch.
+  - **iPad layout:** portrait connection/selection screenshots checked. An
+    additional passing run waits for landscape geometry, opens the selected
+    book's detail, returns to the list, and captures the full screen after
+    rotation. This replaces an initial cropped rotation attachment.
+  - **Boundaries:** iOS 15's extra category-menu step did not open in native
+    automation and is not claimed as verified; both core journeys pass there.
+    Category selection/return is verified on iPhone/iPad iOS 26.5. No physical
+    device or native HTTPS/Digest run; no new download/read or HTTP-error work.
+    The local temporary multi-library server is stopped after verification;
+    the user's original 8080 server remains running.
+  - Logs, xcresults, source hashes and exact limitations:
+    `/tmp/YabrCalibreOnboarding/verification.json`. Reviewable Chinese report:
+    `/Users/peterlee/.codex/visualizations/2026/11/05/01a1aaed-3a44-71a1-8251-40d3cbe8f542/calibre-onboarding-p2/report.html`.
+
 - **First Book File Import, Priority 1 (2026-11-05, branch):**
   `codex/first-book-file-import`, based on clean `main` at `cf3448e2`, adds
   **Import from Files** to the empty-shelf welcome panel and the genuinely

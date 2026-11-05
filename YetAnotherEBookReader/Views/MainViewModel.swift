@@ -31,12 +31,15 @@ final class MainViewModel: ObservableObject {
     private var welcomeBooksInShelfTask: Task<Void, Never>?
     private var welcomeShelfLoadedTask: Task<Void, Never>?
     private var bookImportPickerDismissed = false
+    private var pendingBrowseLibraryID: String?
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
     @Published var initialTermsAgreementPresenting = false
     @Published var privacyWebViewPresenting = false
     @Published var termsWebViewPresenting = false
+    @Published var welcomeServerPresenting = false
+    @Published var browseLibraryID: String?
     @Published var bookImportPickerPresenting = false
     @Published private(set) var bookImportURLs: [URL] = []
     @Published var bookImportActionSheetPresenting = false
@@ -52,6 +55,7 @@ final class MainViewModel: ObservableObject {
     let recentShelfViewModel: RecentShelfViewModel
     let sectionShelfViewModel: SectionShelfViewModel
     let settingsViewModel: SettingsViewModel
+    let welcomeServerViewModel: ServerViewModel
     let readerWorkspaceViewModel: ReaderWorkspaceViewModel
     
     init(container: AppContainer, sessionManager: ReadingSessionManager) {
@@ -65,6 +69,7 @@ final class MainViewModel: ObservableObject {
         )
         self.sectionShelfViewModel = SectionShelfViewModel(container: container)
         self.settingsViewModel = SettingsViewModel(container: container)
+        self.welcomeServerViewModel = ServerViewModel(container: container, server: nil)
         
         setupSubscriptions()
     }
@@ -139,8 +144,29 @@ final class MainViewModel: ObservableObject {
         activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
     }
 
-    func openWelcomeSettings() {
-        activeTab = 3
+    func openWelcomeConnection() {
+        pendingBrowseLibraryID = nil
+        browseLibraryID = nil
+        welcomeServerViewModel.resetStates(server: nil)
+        welcomeServerPresenting = true
+    }
+
+    func browseConnectedLibrary(_ library: CalibreLibrary) {
+        guard welcomeServerPresenting,
+              container.libraryManager.calibreLibraries[library.id] != nil,
+              container.serverManager.calibreServers[library.server.id] != nil else { return }
+        pendingBrowseLibraryID = library.id
+    }
+
+    /// Navigate only after both connection sheets have left the screen.
+    func completeWelcomeConnection() {
+        welcomeServerViewModel.disableProbeServerCancellable()
+        guard let libraryID = pendingBrowseLibraryID else { return }
+        pendingBrowseLibraryID = nil
+        guard let library = container.libraryManager.calibreLibraries[libraryID],
+              !library.hidden, !library.server.removed else { return }
+        browseLibraryID = libraryID
+        activeTab = 2
     }
 
     func openWelcomeBrowse() {

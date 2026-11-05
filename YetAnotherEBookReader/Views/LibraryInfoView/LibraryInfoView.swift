@@ -14,9 +14,11 @@ import KingfisherSwiftUI
 struct LibraryInfoView: View {
     @Environment(\.appContainer) var container
     let importBook: () -> Void
+    @Binding var libraryToBrowse: String?
 
-    init(importBook: @escaping () -> Void = {}) {
+    init(importBook: @escaping () -> Void = {}, libraryToBrowse: Binding<String?> = .constant(nil)) {
         self.importBook = importBook
+        self._libraryToBrowse = libraryToBrowse
     }
     
     @StateObject var viewModel = ViewModel()
@@ -33,6 +35,7 @@ struct LibraryInfoView: View {
     
     @State private var searchHistoryList = [String]()
     @State private var libraryList = [CalibreLibrary]()
+    @State private var preparedBrowseLibraryID: String?
 
     @State private var lastSortCriteria = [LibrarySearchSort]()
     
@@ -61,6 +64,20 @@ struct LibraryInfoView: View {
                 libraryListView()
             }
             .padding(4)
+            .background(
+                NavigationLink(isActive: Binding(
+                    get: { libraryToBrowse != nil },
+                    set: { if !$0 { libraryToBrowse = nil } }
+                )) {
+                    if let libraryID = libraryToBrowse,
+                       let library = container.libraryManager.calibreLibraries[libraryID] {
+                        libraryBookListView(library, fromConnection: true)
+                    }
+                } label: {
+                    EmptyView()
+                }
+                .isDetailLink(false)
+            )
             .navigationTitle(Text("Library Browser"))
             .environmentObject(viewModel)
             .environmentObject(unifiedSearchViewModel)
@@ -75,6 +92,9 @@ struct LibraryInfoView: View {
             libraryList = container.libraryManager.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
+        }
+        .onChange(of: libraryToBrowse) { libraryID in
+            if libraryID == nil { preparedBrowseLibraryID = nil }
         }
         .task {
             for await _ in container.dismissAllEvents() {
@@ -114,21 +134,7 @@ struct LibraryInfoView: View {
         Section {
             ForEach(libraryList, id: \.id) { library in
                 NavigationLink {
-                    bookListView()
-                        .navigationTitle(Text(library.name))
-                        .onAppear {
-                            let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()
-                            if !preserveFilters {
-                                resetSearchCriteria()
-                                if let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
-                                    viewModel.restoreFilterCriteriaCategory(savedFilterCriteriaCategory)
-                                    self.savedFilterCriteriaCategory = nil
-                                }
-                            }
-                            viewModel.filterCriteriaLibraries.insert(library.id)
-                            viewModel.fetchAvailableCategories()
-                            resetToFirstPage()
-                        }
+                    libraryBookListView(library)
                 } label: {
                     HStack {
                         Text(library.name)
@@ -144,6 +150,27 @@ struct LibraryInfoView: View {
         } header: {
             Text("By Library")
         }
+    }
+
+    private func libraryBookListView(_ library: CalibreLibrary, fromConnection: Bool = false) -> some View {
+        bookListView()
+            .navigationTitle(Text(library.name))
+            .onAppear {
+                viewModel.calibreLibraries = container.libraryManager.calibreLibraries
+                let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()
+                let startsConnectedLibrary = fromConnection && preparedBrowseLibraryID != library.id
+                if startsConnectedLibrary || !preserveFilters {
+                    resetSearchCriteria()
+                    if !startsConnectedLibrary, let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
+                        viewModel.restoreFilterCriteriaCategory(savedFilterCriteriaCategory)
+                    }
+                    self.savedFilterCriteriaCategory = nil
+                }
+                if fromConnection { preparedBrowseLibraryID = library.id }
+                viewModel.filterCriteriaLibraries = [library.id]
+                viewModel.fetchAvailableCategories()
+                resetToFirstPage()
+            }
     }
     
     @ViewBuilder

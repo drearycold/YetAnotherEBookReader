@@ -639,3 +639,181 @@ final class YetAnotherEBookReaderBrowseCategoriesUITests: UIJourneyTestCase {
         runBrowseCategoriesAndFiltersJourney()
     }
 }
+
+/// Opt-in native journeys against real calibre servers and a separately installed app copy.
+/// Supply the three YABR_ONBOARDING_* variables through the UI runner's xctestrun environment.
+final class CalibreOnboardingUITests: XCTestCase {
+    private var app: XCUIApplication!
+    private var singleURL = ""
+    private var multiURL = ""
+
+    override func setUpWithError() throws {
+        let environment = ProcessInfo.processInfo.environment
+        let bundleID = environment["YABR_ONBOARDING_BUNDLE_ID"] ?? ""
+        singleURL = environment["YABR_ONBOARDING_SINGLE_URL"] ?? ""
+        multiURL = environment["YABR_ONBOARDING_MULTI_URL"] ?? ""
+        try XCTSkipIf(bundleID.isEmpty || singleURL.isEmpty || multiURL.isEmpty,
+                      "Requires an isolated app installation and local calibre test servers")
+        continueAfterFailure = false
+        app = XCUIApplication(bundleIdentifier: bundleID)
+        // Uses the existing test-host consent gate, with normal disk persistence and networking.
+        app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/CalibreOnboardingValidation"
+        app.launch()
+        element("welcome.calibre")
+    }
+
+    func testSingleLibraryCancelFailureRetryAndBrowse() {
+        capture("welcome")
+        element("welcome.import")
+        element("welcome.calibre").tap()
+        element("server.connection.form")
+        capture("direct-connection-form")
+        element("server.connection.cancel").tap()
+        element("welcome.calibre")
+        XCTAssertFalse(app.tabBars.buttons["Settings"].isSelected)
+
+        // A successful probe cancelled before Add must leave no saved server, even after relaunch.
+        connect(name: "P2 Cancelled Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        capture("successful-probe-before-cancel")
+        element("server.connection.result.cancel").tap()
+        element("server.connection.cancel").tap()
+        app.terminate()
+        app.launch()
+        element("welcome.calibre")
+        element("welcome.browse").tap()
+        app.tabBars.buttons["Settings"].tap()
+        element("screen.settings")
+        XCTAssertFalse(app.staticTexts["P2 Cancelled Server"].exists)
+        app.tabBars.buttons["Recent"].tap()
+
+        connect(name: "P2 Single Server", url: "http://127.0.0.1:1")
+        waitForEnabled(element("server.connection.retry"))
+        XCTAssertFalse(element("server.connection.confirm").isEnabled)
+        capture("connection-failed")
+        element("server.connection.result.cancel").tap()
+        replaceURL(singleURL)
+        element("server.connection.connect").tap()
+        waitForEnabled(element("server.connection.confirm"))
+        capture("single-library-confirm")
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.navigationBars["Calibre Library"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Quick Start Guide"].firstMatch.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertTrue(app.tabBars.buttons["Browse"].isSelected)
+        capture("single-library-books")
+        back()
+        XCTAssertTrue(app.navigationBars["Library Browser"].waitForExistence(timeout: 10), app.debugDescription)
+        app.staticTexts["Calibre Library"].firstMatch.tap()
+        element("screen.browse.book-list")
+        back()
+        app.tabBars.buttons["Settings"].tap()
+        app.staticTexts["P2 Single Server"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Calibre Library"].firstMatch.waitForExistence(timeout: 10))
+        capture("settings-management-preserved")
+        app.terminate()
+        app.launch()
+        element("welcome.browse").tap()
+        app.staticTexts["Calibre Library"].firstMatch.tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.staticTexts["Quick Start Guide"].firstMatch.waitForExistence(timeout: 30))
+        capture("saved-library-after-relaunch")
+    }
+
+    func testMultipleLibrariesRequireChoiceAndBrowseOnlyTheChosenLibrary() {
+        connect(name: "P2 Multiple Server", url: multiURL)
+        let first = element("server.connection.library.P2_First_Library")
+        let second = element("server.connection.library.P2_Second_Library")
+        let confirm = element("server.connection.confirm")
+        XCTAssertFalse(confirm.isEnabled)
+        capture("multiple-libraries-require-choice")
+        first.tap()
+        second.tap()
+        waitForEnabled(confirm)
+        capture("second-library-selected")
+        confirm.tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.navigationBars["P2 Second Library"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["P2 Second Only Book"].firstMatch.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["P2 First Only Book"].exists)
+        XCTAssertFalse(app.staticTexts["Quick Start Guide"].exists)
+        capture("chosen-library-books")
+        // Supplementary filter coverage on modern systems. On iOS 15 the menu did not open
+        // in the native harness; keep its connection/back-navigation checks independent.
+        if #available(iOS 16, *) {
+            element("browse.category.menu").tap()
+            element("browse.category.menu.authors").tap()
+            element("browse.category.authors.item.john-schember").tap()
+            element("browse.category.authors.done").tap()
+            element("browse.filter.chip.authors.john-schember")
+            XCTAssertTrue(app.staticTexts["P2 Second Only Book"].firstMatch.waitForExistence(timeout: 20))
+            XCTAssertFalse(app.staticTexts["P2 First Only Book"].exists)
+            capture("connected-library-category-filter")
+            element("browse.filter.clear").tap()
+        }
+
+        if min(app.frame.width, app.frame.height) > 600 {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+                app.frame.width > app.frame.height
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 10), .completed, app.debugDescription)
+            XCTAssertTrue(app.staticTexts["P2 Second Only Book"].firstMatch.waitForExistence(timeout: 10))
+            element("browse.book.mock").tap()
+            element("screen.book-detail")
+            capture("chosen-book-detail-landscape")
+            back()
+            element("screen.browse.book-list")
+            capture("chosen-library-landscape")
+            XCUIDevice.shared.orientation = .portrait
+        }
+        back()
+        XCTAssertTrue(app.staticTexts["P2 First Library"].firstMatch.waitForExistence(timeout: 10))
+        app.staticTexts["P2 First Library"].firstMatch.tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.staticTexts["P2 First Only Book"].firstMatch.waitForExistence(timeout: 30))
+        XCTAssertFalse(app.staticTexts["P2 Second Only Book"].exists)
+        capture("other-library-remains-browsable")
+    }
+
+    private func connect(name: String, url: String) {
+        element("welcome.calibre").tap()
+        element("server.connection.form")
+        let nameField = app.textFields["Name Your Server"]
+        nameField.tap()
+        nameField.typeText(name)
+        replaceURL(url)
+        element("server.connection.connect").tap()
+        element("server.connection.result")
+    }
+
+    private func replaceURL(_ url: String) {
+        let field = app.textFields["Internal Server Address"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), app.debugDescription)
+        element("server.connection.field.URL.clear").tap()
+        field.tap()
+        field.typeText(url)
+    }
+
+    @discardableResult private func element(_ id: String) -> XCUIElement {
+        let result = app.descendants(matching: .any).matching(identifier: id).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 20), "Missing \(id): \(app.debugDescription)")
+        return result
+    }
+
+    private func waitForEnabled(_ element: XCUIElement) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed, app.debugDescription)
+    }
+
+    private func back() {
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+    }
+
+    private func capture(_ name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}
