@@ -5,6 +5,36 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## First Book Download and Read P3 (2026-11-05, branch)
+
+Independent read-only review against `5b0aff44`, including staged, unstaged
+and untracked changes, found no actionable issues. Prepared for a PR to main.
+
+`codex/first-book-download-read` starts at fetched `main` `5b0aff44`, with P1
+#132 and P2 #133 merged; initial worktree clean. Book Detail now has textual,
+accessibly named **Download and Read** / **Read**, plus **Download Only**.
+A pending read binds the full book ID, download UUID and originating workspace.
+Only successful, ready files open once; cancellation, leaving detail, history,
+preview or another reader opening clears the intent. Existing format selection
+and reading-session position policy are reused. Download terminal outcomes also
+prevent late pause data from reactivating a cancelled attempt.
+
+Final validation: **976 unit tests** (22 skips, two existing expected PDFKit
+failures), **five existing UI journeys**, **64 focused iOS 15.5 tests**, iOS and
+Catalyst builds, and complete isolated real-Calibre journeys on iPhone 17/iOS
+26.5 and iPhone 7/iOS 15.5 all pass. Success, cached resume, download-only, 503
+retry, cancellation and leaving detail are covered. Native EPUB/Folio checks
+use ordinary controls and normal disk/network, with the existing consent skip
+flag only; PDF/CBZ and old-system PDF fallback are covered by units.
+
+Observed boundary: iOS 15's auxiliary toolbar download/clear label can lag cache
+changes; the native journey uses the existing format-row clear button. The
+primary reading text/name is correct. No physical device, iPad, HTTPS/Digest,
+large-file stress or desktop interaction check. P4, schema, pins and versions
+are unchanged. Reusable fixture: `.github/scripts/calibre-download-proxy.py`.
+Full evidence: `/tmp/YabrDownloadReadP3/verification.json`; Chinese report:
+`/Users/peterlee/.codex/visualizations/2026/11/05/01a1ab4c-32a7-7430-9886-27e16f7272a6/download-read-p3/report.html`.
+
 ## First Book Calibre Connection P2 (2026-11-05, branch)
 
 `codex/first-book-calibre-browse` starts at latest `main` `e196ff5a`, including

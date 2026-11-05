@@ -47,6 +47,7 @@ struct BookDetailView: View {
         .onAppear() {
             _viewModel.onAppear(bookId: bookId, targetWorkspaceID: readerWorkspaceID)
         }
+        .onDisappear { _viewModel.onDisappear() }
         .accessibilityIdentifier("screen.book-detail")
     }
     
