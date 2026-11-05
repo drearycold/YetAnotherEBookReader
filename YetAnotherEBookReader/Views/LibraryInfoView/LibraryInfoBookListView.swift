@@ -15,6 +15,11 @@ struct LibraryInfoBookListView: View {
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
     @StateObject private var listViewModel = LibraryInfoBookListViewModel()
+    let importBook: () -> Void
+
+    init(importBook: @escaping () -> Void = {}) {
+        self.importBook = importBook
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -62,7 +67,8 @@ struct LibraryInfoBookListView: View {
             libraryInfoViewModel: libraryInfoViewModel,
             viewModel: viewModel,
             container: container,
-            geometry: geometry
+            geometry: geometry,
+            importBook: importBook
         )
     }
     

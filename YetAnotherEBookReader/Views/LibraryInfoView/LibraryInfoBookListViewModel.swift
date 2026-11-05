@@ -40,6 +40,28 @@ class LibraryInfoBookListViewModel: ObservableObject {
             download.book.id == book.id && download.isActive
         }
     }
+
+    func shouldShowLocalLibraryImport(
+        result: UnifiedSearchResult?,
+        selectedLibraryIds: Set<String>,
+        criteria: SearchCriteria,
+        localLibrary: CalibreLibrary?,
+        statuses: [String: LibrarySearchStatus],
+        repository: SearchCacheRepository
+    ) -> Bool {
+        guard let localLibrary, localLibrary.server.isLocal,
+              selectedLibraryIds == [localLibrary.id],
+              criteria.searchString.isEmpty, criteria.hasEmptyFilter,
+              let result, result.libraryIds == selectedLibraryIds,
+              result.search.isEmpty, result.filters.isEmpty,
+              result.totalNumber == 0, result.books.isEmpty,
+              let status = statuses[localLibrary.id],
+              !status.loading, status.error == nil, !status.fromCache else { return false }
+        // An old empty search result isn't proof that the local library is still empty.
+        return (try? repository.searchLocalLibrary(
+            library: localLibrary, criteria: criteria, offset: 0, limit: 1
+        ).numBooksWithoutSearch) == 0
+    }
     
     func syncDraftFromCriteria(_ criteriaSearchString: String) {
         self.searchString = criteriaSearchString

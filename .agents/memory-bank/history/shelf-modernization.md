@@ -6,6 +6,47 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **First Book File Import, Priority 1 (2026-11-05, branch):**
+  `codex/first-book-file-import`, based on clean `main` at `cf3448e2`, adds
+  **Import from Files** to the empty-shelf welcome panel and the genuinely
+  empty Local Library page. The welcome panel keeps **Connect to Calibre**
+  (the existing Settings route) and Browse Libraries. Existing English SwiftUI
+  string conventions are retained; no Calibre configuration, download, consent,
+  schema, dependency or reader-engine change.
+  - `MainViewModel` owns the single-file picker presentation and forwards both
+    picked files and system Files/onOpenURL to the existing
+    `CalibreBookManager.onOpenURL`/`publishBookImport`/Read flow. Existing content
+    hashing and same-name conflict choices remain in that manager.
+  - Wait for both the selected URL and sheet dismissal, in either order.
+    Real iOS 26.5 logs show `onDismiss` **before** `didPickDocumentsAt`; the
+    initial dismissal-only implementation lost the selection. The regression
+    test fails that implementation and passes both orders after the fix.
+    Cancellation publishes no import and preserves the page/shelf.
+  - Local guidance requires an explicitly selected Local Library, no search or
+    category filters, completed/error-free status, empty results, and a fresh
+    repository count of zero (including unshelved books). Combined/remote
+    libraries and no-match searches keep ordinary empty results.
+  - A second native regression found the old empty local search cache hiding
+    a later import: local imports do not change a server generation.
+    `LibrarySearchService` now reads current local IDs each search; remote
+    caching is unchanged. The new integration test fails before this fix, and
+    the same native cache now shows the imported book.
+  - Final locked-package validation: iPhone 17/iOS 26.5 **118 unit tests + 2
+    existing Recent/Browse UI journeys pass**; iPhone 7/iOS 15.5 **118 unit
+    tests pass**; iOS build-for-testing and Catalyst build pass. Swift parse
+    and `git diff --check` pass. Full scheme/physical devices not run.
+  - Native isolated app copies (normal database, no mock library; existing test
+    flag skips terms/ads): iPhone EPUB picker → Read → visible text; Files Open
+    With repeats the same book with one file/row; final local list shows 1 and
+    unmatched search has no guide. iPad PDF from empty Local Library → Read →
+    page 2 → Recent resumes page 2, with both picker cancellations preserving
+    the original empty pages. iOS 15 picker cancellations and CBZ page 1/3
+    render pass with the identical picker/lifecycle implementation before the
+    final local-cache-only change; all final-code unit tests then pass there.
+    Nonzero duplicate reading-position preservation is pinned by the unit test.
+  - Evidence, exact command logs, result bundles and limitations:
+    `/tmp/YabrFirstBookImport/verification.json` and `Evidence/`.
+
 - **Shelf Ad Placement And Pure Layout Planning (2026-07-10, complete):**
   Restored the Google Mobile Ads shelf integration with viewport-aware
   placement: Recent uses regular-width native end-caps when the row remains

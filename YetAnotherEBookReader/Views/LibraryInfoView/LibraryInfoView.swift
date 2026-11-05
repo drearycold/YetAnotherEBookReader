@@ -13,6 +13,11 @@ import KingfisherSwiftUI
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
     @Environment(\.appContainer) var container
+    let importBook: () -> Void
+
+    init(importBook: @escaping () -> Void = {}) {
+        self.importBook = importBook
+    }
     
     @StateObject var viewModel = ViewModel()
     @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
@@ -145,7 +150,7 @@ struct LibraryInfoView: View {
     private func bookListView() -> some View {
         Group {
             if unifiedSearchViewModel.unifiedSearchResult != nil {
-                LibraryInfoBookListView()
+                LibraryInfoBookListView(importBook: importBook)
                     .environmentObject(unifiedSearchViewModel)
                     .environmentObject(viewModel)
             } else {

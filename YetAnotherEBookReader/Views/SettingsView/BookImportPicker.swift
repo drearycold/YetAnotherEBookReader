@@ -11,7 +11,9 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct BookImportPicker: UIViewControllerRepresentable {
+    @Environment(\.presentationMode) private var presentationMode
     @Binding var bookURLs: [URL]
+    var allowsMultipleSelection = true
     
     func makeCoordinator() -> BookImportPicker.Coordinator {
         return BookImportPicker.Coordinator(parent: self)
@@ -19,7 +21,7 @@ struct BookImportPicker: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.epub, .pdf, .cbz], asCopy: true)
-        picker.allowsMultipleSelection = true
+        picker.allowsMultipleSelection = allowsMultipleSelection
         picker.delegate = context.coordinator
         return picker
     }
@@ -37,10 +39,12 @@ struct BookImportPicker: UIViewControllerRepresentable {
         
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             parent.bookURLs = urls
+            parent.presentationMode.wrappedValue.dismiss()
         }
         
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             parent.bookURLs.removeAll()
+            parent.presentationMode.wrappedValue.dismiss()
         }
     }
 }

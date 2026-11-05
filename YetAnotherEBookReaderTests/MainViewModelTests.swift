@@ -117,6 +117,96 @@ import Combine
         XCTAssertEqual(viewModel.activeTab, 2)
     }
 
+    func testCancellingFilePickerPreservesPageAndShelf() {
+        viewModel.receivePickedBookURLs([URL(fileURLWithPath: "/tmp/stale.epub")])
+        for tab in [0, 2] {
+            viewModel.activeTab = tab
+            let books = mockAppContainer.bookManager.booksInShelf
+
+            viewModel.presentBookImportPicker()
+            XCTAssertTrue(viewModel.bookImportPickerPresenting)
+            XCTAssertTrue(viewModel.bookImportURLs.isEmpty)
+            viewModel.bookImportPickerPresenting = false
+            viewModel.completeBookImportPicker()
+            viewModel.receivePickedBookURLs([])
+
+            XCTAssertEqual(viewModel.activeTab, tab)
+            XCTAssertEqual(mockAppContainer.bookManager.booksInShelf, books)
+            XCTAssertNil(viewModel.bookImportInfo)
+            XCTAssertFalse(viewModel.bookImportActionSheetPresenting)
+        }
+    }
+
+    func testPickedEPUBUsesExistingImportReadAndDuplicateHandling() async throws {
+        try await verifyPickedEPUB(dismissBeforeSelection: false)
+    }
+
+    func testPickerCanDismissBeforeItsSelectionCallback() async throws {
+        try await verifyPickedEPUB(dismissBeforeSelection: true)
+    }
+
+    private func verifyPickedEPUB(dismissBeforeSelection: Bool) async throws {
+        let localLibrary = try XCTUnwrap(mockAppContainer.libraryManager.localLibrary)
+        let fixture = try XCTUnwrap(Bundle.main.url(forResource: "UI Test Fixture", withExtension: "epub"))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let source = directory.appendingPathComponent("Import-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: fixture, to: source)
+        let destination = try XCTUnwrap(localLibrary.server.localBaseUrl)
+            .appendingPathComponent(localLibrary.key, isDirectory: true).appendingPathComponent(source.lastPathComponent)
+        defer {
+            mockAppContainer.sessionManager.readerPresentations.forEach {
+                mockAppContainer.sessionManager.closeReader(id: $0.id)
+            }
+            if let id = viewModel.bookImportInfo?.bookId {
+                mockAppContainer.bookRepository.deleteBook(id: CalibreBook(id: id, library: localLibrary).inShelfId)
+            }
+            try? FileManager.default.removeItem(at: destination)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        viewModel.activeTab = 2
+        let count = mockAppContainer.bookManager.booksInShelf.count
+        viewModel.presentBookImportPicker()
+        if dismissBeforeSelection {
+            // UIDocumentPicker on iOS 26 calls the sheet's onDismiss before didPickDocumentsAt.
+            viewModel.bookImportPickerPresenting = false
+            viewModel.completeBookImportPicker()
+            viewModel.receivePickedBookURLs([source])
+        } else {
+            viewModel.receivePickedBookURLs([source])
+            XCTAssertEqual(mockAppContainer.bookManager.booksInShelf.count, count, "Selection waits for sheet dismissal")
+            viewModel.bookImportPickerPresenting = false
+            viewModel.completeBookImportPicker()
+        }
+        let imported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        XCTAssertTrue(imported)
+        XCTAssertNil(viewModel.bookImportInfo?.error)
+        XCTAssertTrue(viewModel.bookImportURLs.isEmpty)
+        XCTAssertEqual(viewModel.activeTab, 0)
+        XCTAssertEqual(mockAppContainer.bookManager.booksInShelf.count, count + 1)
+
+        viewModel.openImportedBook()
+        let opened = await waitUntil { self.viewModel.activeReaderPresentation?.source == .importResult }
+        XCTAssertTrue(opened)
+        XCTAssertFalse(viewModel.activeReaderPresentation?.readerInfo.missing ?? true)
+        let bookId = try XCTUnwrap(viewModel.bookImportInfo?.bookId)
+        let book = try XCTUnwrap(mockAppContainer.bookRepository.getBook(library: localLibrary, bookId: bookId))
+        var position = TestFixtures.makeReadingPosition(lastProgress: 37)
+        position.id = mockAppContainer.deviceName
+        mockAppContainer.readingPositionRepository.savePosition(position, for: book)
+        let savedPositions = mockAppContainer.readingPositionRepository.getPositions(for: book)
+
+        // System Files/onOpenURL uses this same entry point, including identical-file detection.
+        viewModel.bookImportActionSheetPresenting = false
+        viewModel.importBook(url: source)
+        let reimported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        XCTAssertTrue(reimported)
+        XCTAssertNil(viewModel.bookImportInfo?.error)
+        XCTAssertEqual(viewModel.bookImportInfo?.bookId, bookId)
+        XCTAssertEqual(mockAppContainer.bookManager.booksInShelf.count, count + 1)
+        XCTAssertEqual(mockAppContainer.readingPositionRepository.getPositions(for: book), savedPositions)
+    }
+
     func testRecentShelfTapPublishesReaderPresentation() async throws {
         let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
         mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
