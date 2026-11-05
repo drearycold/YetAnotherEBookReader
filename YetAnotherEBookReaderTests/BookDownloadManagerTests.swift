@@ -217,6 +217,23 @@ final class BookDownloadManagerTests: XCTestCase {
         downloadTask.completePause()
     }
 
+    func testLatePauseDataCannotReactivateCancelledDownload() async throws {
+        let book = try makeDownloadableBook(id: 1006, filenamePrefix: "pause-then-cancel")
+        let task = StubDownloadTask(request: URLRequest(url: try downloadURL(for: book, format: .EPUB)),
+            resumeData: Data("late-resume".utf8), completesPauseImmediately: false)
+        var download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        download.downloadTask = task
+        manager.activeDownloads[download.sourceURL] = download
+        manager.pauseDownload(book, format: .EPUB)
+        manager.cancelDownload(book, format: .EPUB)
+        task.completePause()
+        await Task.yield()
+        await Task.yield()
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.completion, .cancelled)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isActive, false)
+        XCTAssertNil(manager.activeDownloads[download.sourceURL]?.resumeData)
+    }
+
     func testPauseDownloadDoesNothingWhenNoActiveDownload() throws {
         let book = try makeDownloadableBook(id: 1007)
         let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false, resumeData: Data("existing".utf8))
@@ -706,6 +723,7 @@ private final class StubDownloadTask: URLSessionDownloadTask, @unchecked Sendabl
 
     override var originalRequest: URLRequest? { stubRequest }
     override var response: URLResponse? { stubResponse }
+    override func cancel() {}
 
     init(request: URLRequest?, response: URLResponse? = nil, resumeData: Data? = nil, completesPauseImmediately: Bool = true) {
         self.stubRequest = request

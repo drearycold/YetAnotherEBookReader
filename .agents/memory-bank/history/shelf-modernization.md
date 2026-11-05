@@ -6,6 +6,57 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **First Book Download and Read, Priority 3 (2026-11-05, branch):**
+  `codex/first-book-download-read` is based on fetched main `5b0aff44`, including
+  P1 #132 and P2 #133, from a clean worktree. Independent read-only review
+  found no actionable issues; the change is prepared for a PR to main.
+  - Replaced the cover's icon-only overlay with visible **Download and Read**
+    / **Read**, matching accessibility names, a pending spinner/cancel action,
+    and an independent **Download Only** entry. Format downloads remain.
+  - `BookDetailViewModel` keeps the read intent with full book identity,
+    download UUID and initiating workspace. It joins an existing download or
+    starts the preferred supported format using the existing manager, then
+    consumes a successful completion once after checking repository/file state.
+    Cached reads use the session manager's existing device/latest-position
+    policy, restricted to available formats. Shelf membership alone is not
+    treated as proof of a readable file.
+  - Leaving detail, history/preview navigation, cancellation or another reader
+    opening discards the intent. Failures clear it and allow retry. Download
+    snapshots now distinguish success/failure/cancel; a late pause-data callback
+    cannot revive a terminal attempt. Cancel/pause/resume and format-row lookup
+    use full book identity instead of only a numeric library-local ID.
+  - Regression evidence: original download completion generates zero reading
+    requests and fails the new test. A separate failing test proves late pause
+    data restores active/resume state after cancel; its terminal guard fixes it.
+  - Final iPhone 17 units: **976 tests, zero failures, 22 skipped**, two existing
+    expected PDFKit failures. The full scheme's **five existing UI journeys**
+    passed; the subsequent cancellation guard is covered by the final full
+    units and real-server runs. **64 focused units pass on iOS 15.5**. iOS
+    build-for-testing and Catalyst build pass with locked remote packages,
+    no local override; FolioReaderKit checkout is clean at `303f371`.
+  - A complete real-Calibre journey passes on iPhone 17/iOS 26.5 and iPhone
+    7/iOS 15.5, using isolated `org.dsreader.onboarding.download-read.p3`, normal
+    disk/network and only the existing consent skip flag. It verifies one
+    primary reading action opens the downloaded book, normal chapter paging
+    reaches Introduction, cached Read resumes that body, Download Only stays
+    in detail, 503 retry opens, cancel does not open, and a download completed
+    after leaving detail requires a new explicit Read on return.
+  - `.github/scripts/calibre-download-proxy.py` is an opt-in loopback fixture
+    forwarding real Calibre read APIs and supplying one 503 or a seven-second
+    delay. Python compile plus real library/503/EPUB smoke passed; the iOS 15
+    native run uses this script. The temporary proxy is stopped after testing;
+    the original 8080 Calibre service is retained.
+  - Boundaries: native real-server coverage is EPUB/Folio; PDF/CBZ automatic
+    opening and iOS 15 PDF reader fallback have unit coverage. No physical
+    device, iPad, HTTPS/Digest, cross-device sync, large-file stress or Catalyst
+    interaction run. iOS 15's auxiliary toolbar can retain its original
+    download/clear accessibility label after caching; the format-row clear
+    action is used there. Primary reading text/name is verified on both OSes.
+    No P4 error-page, schema, package-pin or version/build-number change.
+  - Logs, xcresults, hashes and exact bounds: `/tmp/YabrDownloadReadP3/verification.json`.
+    Chinese review report and native screenshots:
+    `/Users/peterlee/.codex/visualizations/2026/11/05/01a1ab4c-32a7-7430-9886-27e16f7272a6/download-read-p3/report.html`.
+
 - **First Book Calibre Connection, Priority 2 (2026-11-05, branch):**
   `codex/first-book-calibre-browse`, based on fetched `main` at `e196ff5a`
   (#132 merged P1 file import). Clean worktree at start; prior branch retained.

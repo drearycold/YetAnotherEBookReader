@@ -14,38 +14,40 @@ struct BookCoverView: View {
     @Binding var alertItem: AlertItem?
 
     var body: some View {
-        ZStack {
+        VStack(spacing: 12) {
             KFImage(book.coverURL)
                 .placeholder {
                     Text("Loading Cover ...")
                 }
                 .resizable()
                 .scaledToFit()
+                .frame(width: 300, height: 300)
+                .accessibilityHidden(true)
             Button(action: {
-                guard viewModel.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty else { return }
                 viewModel.readBook(book: book)
             }) {
-                if viewModel.activeDownloads.filter({ $1.book.id == book.id && $1.isActive }).isEmpty == false ||
-                    book.formats.filter({ $0.value.selected == true && $0.value.cached == false }).isEmpty == false {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
-                        .scaleEffect(6, anchor: .center)
-                } else if book.inShelf,
-                          book.formats.allSatisfy({ $1.selected != true || $1.cached }) {
-                    Image(systemName: "book")
-                        .resizable()
-                        .frame(width: 160, height: 160)
-                        .foregroundColor(.gray)
-                } else {
-                    Image(systemName: "tray.and.arrow.down")
-                        .resizable()
-                        .frame(width: 160, height: 160)
-                        .foregroundColor(.gray)
+                HStack {
+                    if viewModel.isWaitingToRead(book) { ProgressView() }
+                    Label(viewModel.readActionTitle(for: book),
+                          systemImage: viewModel.canRead(book) ? "book" : "tray.and.arrow.down")
                 }
+                .frame(maxWidth: .infinity)
             }
-            .opacity(0.8)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(viewModel.isWaitingToRead(book))
+            .accessibilityLabel(Text(viewModel.readActionTitle(for: book)))
             .accessibilityIdentifier("book-detail.read")
+
+            if viewModel.isWaitingToRead(book) {
+                Button("Cancel Download") { viewModel.cancelReadDownload(book: book) }
+                    .accessibilityIdentifier("book-detail.cancel-download")
+            } else if !viewModel.canRead(book) {
+                Button("Download Only") { viewModel.downloadOnly(book: book) }
+                    .disabled(viewModel.hasActiveDownload(book))
+                    .accessibilityIdentifier("book-detail.download-only")
+            }
         }
-        .frame(width: 300, height: 400)
+        .frame(width: 300)
     }
 }

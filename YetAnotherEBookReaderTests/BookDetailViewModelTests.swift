@@ -173,6 +173,302 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation?.book.inShelfId, mockCalibreBook.inShelfId, "Reader presentation should target the selected detail book")
         XCTAssertEqual(presentation?.source, .bookDetail)
     }
+
+    func testDownloadAndReadOpensOnceInTheOriginatingWorkspace() async throws {
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats = ["EPUB": FormatInfo(selected: true, filename: "download-read.epub", serverSize: 1024,
+            serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: .distantPast, manifest: nil)]
+        mockAppContainer.bookRepository.saveBook(book)
+        let savedURL = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try? FileManager.default.removeItem(at: savedURL)
+        defer { try? FileManager.default.removeItem(at: savedURL) }
+        let sourceURL = try XCTUnwrap(URL(string: "http://localhost/get/EPUB/123/lib1"))
+        let task = DetailDownloadTask(url: sourceURL)
+        let download = BookFormatDownload(isDownloading: true, book: book, format: .EPUB,
+            startDatetime: Date(), sourceURL: sourceURL, savedURL: savedURL,
+            modificationDate: Date(), downloadTask: task)
+        mockAppContainer.downloadManager.activeDownloads[sourceURL] = download
+        let workspaceID = UUID()
+        viewModel.targetWorkspaceID = workspaceID
+        var requests = [ReaderOpenRequest]()
+        let stream = mockAppContainer.readerOpenRequests()
+        let observer = Task { @MainActor in
+            for await request in stream { requests.append(request) }
+        }
+        defer { observer.cancel() }
+        await Task.yield()
+
+        viewModel.readBook(book: book)
+        viewModel.readBook(book: book)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        // A later workspace focus change must not redirect the original read request.
+        viewModel.targetWorkspaceID = UUID()
+        try FileManager.default.createDirectory(at: savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("EPUB".utf8).write(to: savedURL)
+        let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
+        delegate.isFileExist = true
+        delegate.urlSession(URLSession.shared, task: task, didCompleteWithError: nil)
+        await waitUntil { !requests.isEmpty }
+
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.targetWorkspaceID, workspaceID)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, book.inShelfId)
+        delegate.urlSession(URLSession.shared, task: task, didCompleteWithError: nil)
+        await Task.yield()
+        XCTAssertEqual(requests.count, 1)
+    }
+
+    func testReadStartsThePreferredSupportedFormatAndIgnoresUnsupportedSelection() throws {
+        var book = try makeDownloadReadBook()
+        book.formats["UNKNOWN"] = book.formats["EPUB"]
+        book.formats["UNKNOWN"]?.selected = true
+        book.formats["PDF"] = book.formats["EPUB"]
+        book.formats["PDF"]?.selected = true
+        book.formats["EPUB"]?.selected = false
+        viewModel.readBook(book: book)
+        let download = try XCTUnwrap(mockAppContainer.downloadManager.activeDownloads.values.first)
+        XCTAssertEqual(download.format, .PDF)
+        XCTAssertTrue(viewModel.isWaitingToRead(book))
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        viewModel.cancelDownload(book: book, format: .PDF)
+    }
+
+    func testCachedReadKeepsTheExistingPositionAndDoesNotDownload() throws {
+        var book = try makeDownloadReadBook()
+        book.inShelf = true
+        book.formats["EPUB"]?.cached = true
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try Data("EPUB".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let position = BookDeviceReadingPosition(id: mockAppContainer.deviceName,
+            readerName: ReaderType.ReadiumEPUB.rawValue, lastReadPage: 12, lastProgress: 42,
+            epoch: Date().timeIntervalSince1970)
+        mockAppContainer.readingPositionRepository.savePosition(position, for: book)
+        XCTAssertEqual(viewModel.readActionTitle(for: book), "Read")
+        viewModel.readBook(book: book)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.readerInfo.position.lastReadPage, 12)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.readerInfo.readerType, .ReadiumEPUB)
+        XCTAssertTrue(mockAppContainer.downloadManager.activeDownloads.isEmpty)
+    }
+
+    func testDownloadOnlyCompletesWithoutOpeningReader() async throws {
+        let book = try makeDownloadReadBook()
+        XCTAssertEqual(viewModel.readActionTitle(for: book), "Download and Read")
+        viewModel.downloadOnly(book: book)
+        let download = try controlledDownload(for: book)
+        XCTAssertFalse(viewModel.isWaitingToRead(book))
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        let cached = try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId))
+        XCTAssertEqual(viewModel.readActionTitle(for: cached), "Read")
+    }
+
+    func testFormatDownloadOnlyDoesNotOpenReader() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        let download = try controlledDownload(for: book)
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testFailureAllowsRetryAndLateOldCompletionCannotOpen() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let first = try controlledDownload(for: book)
+        let failed = BookFormatDownloadDelegate(download: first, manager: mockAppContainer.downloadManager)
+        failed.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask),
+            didCompleteWithError: URLError(.notConnectedToInternet))
+        await waitUntil { !self.viewModel.isWaitingToRead(book) }
+        XCTAssertNotNil(viewModel.alertItem)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        let updatedBook = try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId))
+        viewModel.readBook(book: updatedBook)
+        let second = try controlledDownload(for: book)
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertNil(viewModel.alertItem)
+        failed.isFileExist = true
+        failed.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask), didCompleteWithError: nil)
+        await Task.yield()
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        try await completeReadDownload(second)
+        await waitUntil { self.mockAppContainer.sessionManager.activeReaderPresentation != nil }
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, book.inShelfId)
+    }
+
+    func testCancelAllowsRetryAndIgnoresLateSuccessfulCallback() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let first = try controlledDownload(for: book)
+        viewModel.cancelReadDownload(book: book)
+        XCTAssertFalse(viewModel.isWaitingToRead(book))
+        try await completeReadDownload(first)
+        await Task.yield()
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertEqual(mockAppContainer.downloadManager.activeDownloads[first.sourceURL]?.completion, .cancelled)
+        let savedURL = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try? FileManager.default.removeItem(at: savedURL)
+        viewModel.readBook(book: try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId)))
+        let retry = try controlledDownload(for: book)
+        XCTAssertNotEqual(first.id, retry.id)
+        try await completeReadDownload(retry)
+        await waitUntil { self.mockAppContainer.sessionManager.activeReaderPresentation != nil }
+        XCTAssertNotNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testLeavingDetailDiscardsAutoReadUntilAnotherExplicitRead() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        viewModel.onDisappear()
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertTrue(viewModel.setup(bookId: book.inShelfId))
+        await Task.yield()
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        viewModel.readBook(book: try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId)))
+        XCTAssertNotNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testOpeningHistoryDiscardsAutoRead() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        viewModel.showReadingPositionHistory(book: book)
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testAnotherReaderOpeningDiscardsPendingAutoRead() async throws {
+        let book = try makeDownloadReadBook()
+        await Task.yield()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        mockAppContainer.publishDismissAll("reader-opened")
+        await waitUntil { !self.viewModel.isWaitingToRead(book) }
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testSameNumericBookIDInAnotherLibraryCannotOpenOrBlockThisBook() async throws {
+        let book = try makeDownloadReadBook()
+        let otherLibrary = CalibreLibrary(server: book.library.server, key: "other", name: "Other")
+        var other = CalibreBook(id: book.id, library: otherLibrary)
+        other.formats = book.formats
+        viewModel.cacheFormat(book: other, format: .EPUB)
+        let otherDownload = try controlledDownload(for: other)
+        defer { try? FileManager.default.removeItem(at: otherDownload.savedURL) }
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        viewModel.cancelDownload(book: other, format: .EPUB)
+        XCTAssertTrue(mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.isActive == true)
+        XCTAssertTrue(viewModel.isWaitingToRead(book))
+        try await completeReadDownload(otherDownload)
+        await Task.yield()
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.sessionManager.activeReaderPresentation != nil }
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, book.inShelfId)
+    }
+
+    func testSuccessfulSignalWithMissingFileDoesNotOpenAndAllowsRetry() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
+        delegate.isFileExist = true
+        delegate.urlSession(URLSession.shared, task: try XCTUnwrap(download.downloadTask), didCompleteWithError: nil)
+        await waitUntil { !self.viewModel.isWaitingToRead(book) }
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertNotNil(viewModel.alertItem)
+        viewModel.readBook(book: try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId)))
+        XCTAssertTrue(viewModel.isWaitingToRead(book))
+        viewModel.cancelReadDownload(book: book)
+    }
+
+    func testDownloadAndReadPDFUsesTheAvailablePDFReader() async throws {
+        try await assertDownloadAndRead(format: .PDF)
+    }
+
+    func testDownloadAndReadCBZUsesReadium() async throws {
+        try await assertDownloadAndRead(format: .CBZ)
+    }
+
+    func testPauseAndResumeRetainsThePendingRead() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let first = try controlledDownload(for: book)
+        viewModel.pauseDownload(book: book, format: .EPUB)
+        await Task.yield()
+        XCTAssertTrue(viewModel.isWaitingToRead(book))
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        viewModel.resumeDownload(book: book, format: .EPUB)
+        let resumed = try controlledDownload(for: book)
+        XCTAssertEqual(resumed.id, first.id)
+        try await completeReadDownload(resumed)
+        await waitUntil { self.mockAppContainer.sessionManager.activeReaderPresentation != nil }
+        XCTAssertNotNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    private func assertDownloadAndRead(format: Format) async throws {
+        var book = try makeDownloadReadBook()
+        let info = try XCTUnwrap(book.formats["EPUB"])
+        book.formats = [format.rawValue: info]
+        mockAppContainer.bookRepository.saveBook(book)
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: format))
+        try? FileManager.default.removeItem(at: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        XCTAssertEqual(download.format, format)
+        try await completeReadDownload(download)
+        await waitUntil { self.mockAppContainer.sessionManager.activeReaderPresentation != nil }
+        let presentation = try XCTUnwrap(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertEqual(presentation.readerInfo.format, format)
+        XCTAssertEqual(presentation.readerInfo.readerType, mockAppContainer.sessionManager.getPreferredReader(for: format))
+    }
+
+    private func makeDownloadReadBook() throws -> CalibreBook {
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats = ["EPUB": FormatInfo(selected: nil, filename: "download-read.epub", serverSize: 1024,
+            serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: .distantPast, manifest: nil)]
+        mockAppContainer.bookRepository.saveBook(book)
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DetailHoldingURLProtocol.self]
+        mockAppContainer.downloadManager.sessionConfiguration = configuration
+        return book
+    }
+
+    /// Keep the real startDownload path; replace only its transport for deterministic callbacks.
+    private func controlledDownload(for book: CalibreBook) throws -> BookFormatDownload {
+        let manager = mockAppContainer.downloadManager
+        var download = try XCTUnwrap(manager.activeDownloads.values.first { $0.book.inShelfId == book.inShelfId && $0.isActive })
+        let originalTask = download.downloadTask
+        download.downloadTask = DetailDownloadTask(url: download.sourceURL)
+        manager.activeDownloads[download.sourceURL] = download
+        originalTask?.cancel()
+        return download
+    }
+
+    private func completeReadDownload(_ download: BookFormatDownload) async throws {
+        try FileManager.default.createDirectory(at: download.savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("EPUB".utf8).write(to: download.savedURL)
+        let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
+        delegate.isFileExist = true
+        delegate.urlSession(URLSession.shared, task: try XCTUnwrap(download.downloadTask), didCompleteWithError: nil)
+        await Task.yield()
+        await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
+        XCTAssertNotNil(mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion)
+        withExtendedLifetime(delegate) {}
+    }
     
     func testParseManifestToTOCSuccess() throws {
         let jsonString = "{\"toc\": {\"children\": [{\"title\": \"Chapter 1\"}, {\"title\": \"Chapter 2\"}]}}"
@@ -413,7 +709,7 @@ class BookDetailViewModelTests: XCTestCase {
     
     func testIsFormatDownloading() throws {
         let format = Format.EPUB
-        XCTAssertFalse(viewModel.isFormatDownloading(bookId: 123, format: format))
+        XCTAssertFalse(viewModel.isFormatDownloading(book: mockCalibreBook, format: format))
         
         let download = BookFormatDownload(
             isDownloading: true,
@@ -427,8 +723,8 @@ class BookDetailViewModelTests: XCTestCase {
             modificationDate: Date()
         )
         viewModel.activeDownloads[download.savedURL] = download
-        XCTAssertTrue(viewModel.isFormatDownloading(bookId: 123, format: format))
-        XCTAssertFalse(viewModel.isFormatDownloading(bookId: 456, format: format))
+        XCTAssertTrue(viewModel.isFormatDownloading(book: mockCalibreBook, format: format))
+        XCTAssertFalse(viewModel.isFormatDownloading(book: CalibreBook(id: 456, library: mockCalibreBook.library), format: format))
 
         let pausedDownload = BookFormatDownload(
             isDownloading: false,
@@ -443,14 +739,14 @@ class BookDetailViewModelTests: XCTestCase {
             modificationDate: Date()
         )
         viewModel.activeDownloads = [pausedDownload.savedURL: pausedDownload]
-        XCTAssertTrue(viewModel.isFormatDownloading(bookId: 123, format: format))
+        XCTAssertTrue(viewModel.isFormatDownloading(book: mockCalibreBook, format: format))
         
         viewModel.activeDownloads.removeAll()
     }
     
     func testGetActiveDownload() throws {
         let format = Format.EPUB
-        XCTAssertNil(viewModel.getActiveDownload(bookId: 123, format: format))
+        XCTAssertNil(viewModel.getActiveDownload(book: mockCalibreBook, format: format))
         
         let download = BookFormatDownload(
             isDownloading: true,
@@ -465,7 +761,7 @@ class BookDetailViewModelTests: XCTestCase {
         )
         viewModel.activeDownloads[download.savedURL] = download
         
-        let retrieved = viewModel.getActiveDownload(bookId: 123, format: format)
+        let retrieved = viewModel.getActiveDownload(book: mockCalibreBook, format: format)
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.book.id, 123)
         XCTAssertEqual(retrieved?.format, format)
@@ -483,7 +779,7 @@ class BookDetailViewModelTests: XCTestCase {
             modificationDate: Date()
         )
         viewModel.activeDownloads = [pausedDownload.savedURL: pausedDownload]
-        let pausedRetrieved = viewModel.getActiveDownload(bookId: 123, format: format)
+        let pausedRetrieved = viewModel.getActiveDownload(book: mockCalibreBook, format: format)
         XCTAssertNotNil(pausedRetrieved)
         XCTAssertEqual(pausedRetrieved?.isPaused, true)
         
@@ -509,11 +805,11 @@ class BookDetailViewModelTests: XCTestCase {
         var book = mockCalibreBook!
         book.formats = ["EPUB": FormatInfo(selected: nil, filename: "book.epub", serverSize: 1024, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)]
         
-        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+        XCTAssertFalse(viewModel.isFormatDownloading(book: book, format: .EPUB))
         viewModel.cacheFormat(book: book, format: .EPUB)
         
         viewModel.cancelDownload(book: book, format: .EPUB)
-        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+        XCTAssertFalse(viewModel.isFormatDownloading(book: book, format: .EPUB))
     }
 
     func testPreviewSelection() async throws {
@@ -638,6 +934,29 @@ class BookDetailViewModelTests: XCTestCase {
             "Refreshed Title"
         )
     }
+}
+
+private final class DetailDownloadTask: URLSessionDownloadTask, @unchecked Sendable {
+    private let url: URL
+    override var originalRequest: URLRequest? { URLRequest(url: url) }
+    override var response: URLResponse? {
+        HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+    }
+    init(url: URL) {
+        self.url = url
+        super.init()
+    }
+    override func cancel() {}
+    override func cancel(byProducingResumeData completionHandler: @escaping (Data?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+private final class DetailHoldingURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {}
+    override func stopLoading() {}
 }
 
 class ReadingPositionViewModelTests: XCTestCase {

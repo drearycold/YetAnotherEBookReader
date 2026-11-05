@@ -23,7 +23,7 @@ struct BookFormatRow: View {
                         .frame(minWidth: 48, alignment: .leading)
                     
                     cacheFormatButton
-                        .disabled(viewModel.isFormatDownloading(bookId: book.id, format: format))
+                        .disabled(viewModel.isFormatDownloading(book: book, format: format))
                     
                     clearFormatButton
                         .disabled(!formatInfo.cached)
@@ -33,7 +33,7 @@ struct BookFormatRow: View {
                 }
                 HStack {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.serverSize), countStyle: .file))
-                    if let download = viewModel.getActiveDownload(bookId: book.id, format: format) {
+                    if let download = viewModel.getActiveDownload(book: book, format: format) {
                         ProgressView(value: download.progress)
                             .progressViewStyle(LinearProgressViewStyle())
                             .frame(maxWidth: 160)
@@ -47,6 +47,7 @@ struct BookFormatRow: View {
                         }) {
                             Image(systemName: download.isDownloading ? "pause" : "play")
                         }
+                        .accessibilityLabel(download.isDownloading ? "Pause Download" : "Resume Download")
                         
                         Button(action:{
                             viewModel.cancelDownload(book: book, format: format)
@@ -54,6 +55,7 @@ struct BookFormatRow: View {
                             Image(systemName: "xmark")
                                 .foregroundColor(.red)
                         }
+                        .accessibilityLabel("Cancel Download")
                     } else if formatInfo.cached {
                         Text(viewModel.getFormatStatusText(formatInfo: formatInfo))
                         Image(systemName: viewModel.getFormatStatusIcon(formatInfo: formatInfo))
@@ -78,6 +80,7 @@ struct BookFormatRow: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
         }
+        .accessibilityLabel("Download \(format.rawValue) Only")
     }
     
     private var clearFormatButton: some View {

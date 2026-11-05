@@ -776,6 +776,135 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("other-library-remains-browsable")
     }
 
+    /// The optional control endpoint forwards to real calibre and can delay/fail a download.
+    func testDownloadAndReadFromRealCalibreWithRetryCancellationAndCachedResume() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DOWNLOAD_READ_CONTROL_URL"] == nil,
+                      "Requires the P3 real-calibre download-control proxy")
+        connect(name: "P3 Read Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        element("browse.book.mock").tap()
+        element("screen.book-detail")
+        waitForReadLabel("Download and Read")
+        capture("p3-visible-download-and-read")
+
+        try downloadMode("success")
+        element("book-detail.read").tap() // The only reading action from this uncached detail.
+        element("reader.folio.content")
+        let bodyText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "e-book management tool")).firstMatch
+        // Normal mode scrolls within chapters vertically and changes chapters horizontally.
+        for _ in 0..<10 {
+            if bodyText.exists && bodyText.isHittable { break }
+            app.collectionViews["reader.folio.screen"].firstMatch.swipeLeft()
+        }
+        waitForVisibleBody(bodyText)
+        capture("p3-one-read-action-reaches-body")
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+        capture("p3-cached-read")
+        element("book-detail.read").tap()
+        element("reader.folio.content")
+        waitForVisibleBody(bodyText)
+        capture("p3-resumes-existing-position")
+        closeReaderWorkspace()
+
+        clearDownloadedFiles()
+        try downloadMode("success")
+        element("book-detail.download-only").tap()
+        waitForReadLabel("Read")
+        XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+        capture("p3-download-only-stays-in-detail")
+
+        clearDownloadedFiles()
+        try downloadMode("fail_once")
+        element("book-detail.read").tap()
+        XCTAssertTrue(app.alerts["Error Download Book"].waitForExistence(timeout: 20), app.debugDescription)
+        capture("p3-download-failure-retry")
+        app.alerts.buttons.firstMatch.tap()
+        waitForReadLabel("Download and Read")
+        element("book-detail.read").tap()
+        element("reader.folio.content")
+        capture("p3-retry-opens-reader")
+        closeReaderWorkspace()
+
+        clearDownloadedFiles()
+        try downloadMode("slow")
+        element("book-detail.read").tap()
+        element("book-detail.cancel-download").tap()
+        waitForReadLabel("Download and Read")
+        XCTAssertFalse(app.webViews["reader.folio.content"].waitForExistence(timeout: 9))
+        capture("p3-cancel-does-not-open")
+
+        element("book-detail.read").tap()
+        element("book-detail.cancel-download")
+        back()
+        element("screen.browse.book-list")
+        XCTAssertFalse(app.webViews["reader.folio.content"].waitForExistence(timeout: 9))
+        capture("p3-leave-detail-does-not-open")
+        element("browse.book.mock").tap()
+        waitForReadLabel("Read")
+        XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+        element("book-detail.read").tap()
+        element("reader.folio.content")
+        capture("p3-explicit-read-after-return")
+    }
+
+    private func waitForVisibleBody(_ body: XCUIElement) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: body)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, app.debugDescription)
+    }
+
+    private func closeReaderWorkspace() {
+        let buttons = app.buttons.matching(NSPredicate(format: "label == 'Close'"))
+        XCTAssertTrue(buttons.firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        guard let close = buttons.allElementsBoundByIndex.last else {
+            return XCTFail("Missing workspace Close button: \(app.debugDescription)")
+        }
+        close.tap()
+    }
+
+    private func waitForReadLabel(_ title: String) {
+        let action = element("book-detail.read")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@ AND enabled == true", title), object: action)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed, app.debugDescription)
+    }
+
+    private func clearDownloadedFiles() {
+        let clear = app.buttons["Clear Downloaded Files"].firstMatch
+        if clear.waitForExistence(timeout: 2) {
+            clear.tap()
+        } else {
+            // Older SwiftUI toolbars can retain the original Download Only label after caching.
+            // The format row's ordinary removal action remains available.
+            let formatClear = app.buttons["Outbox"].firstMatch
+            for _ in 0..<5 {
+                if formatClear.exists && formatClear.isHittable { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(formatClear.exists && formatClear.isHittable, app.debugDescription)
+            formatClear.tap()
+            let read = element("book-detail.read")
+            for _ in 0..<5 {
+                if read.isHittable { break }
+                app.swipeDown()
+            }
+        }
+        waitForReadLabel("Download and Read")
+    }
+
+    private func downloadMode(_ mode: String) throws {
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["YABR_DOWNLOAD_READ_CONTROL_URL"])
+        let url = try XCTUnwrap(URL(string: base + "?mode=" + mode))
+        let configured = expectation(description: "Configure download transport")
+        URLSession.shared.dataTask(with: url) { _, response, error in
+            XCTAssertNil(error)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            configured.fulfill()
+        }.resume()
+        wait(for: [configured], timeout: 10)
+    }
+
     private func connect(name: String, url: String) {
         element("welcome.calibre").tap()
         element("server.connection.form")

@@ -33,6 +33,14 @@ class BookDetailViewModel: ObservableObject {
     private var isReturningFromHistory = false
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
+    private var dismissTask: Task<Void, Never>?
+    private struct PendingReading {
+        let bookID: String
+        let format: Format
+        let downloadID: UUID
+        let workspaceID: UUID?
+    }
+    @Published private var pendingReading: PendingReading?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var deviceName: String {
         return container?.deviceName ?? ""
@@ -56,6 +64,7 @@ class BookDetailViewModel: ObservableObject {
         fetchTask?.cancel()
         activeDownloadsTask?.cancel()
         bookObserverTask?.cancel()
+        dismissTask?.cancel()
     }
     
     /// Loads the book and refreshes its metadata, except when coming back from Reading History,
@@ -69,6 +78,10 @@ class BookDetailViewModel: ObservableObject {
         loadedBookId = bookId
         fetchMetadata(book: calibreBook)
     }
+
+    func onDisappear() {
+        pendingReading = nil
+    }
     
     @discardableResult
     func setup(bookId: String) -> Bool {
@@ -77,13 +90,21 @@ class BookDetailViewModel: ObservableObject {
             return false
         }
         
+        if calibreBook?.inShelfId != bookId { pendingReading = nil }
         activeDownloadsTask?.cancel()
         activeDownloadsTask = Task { [weak self, weak container] in
             guard let container else { return }
             for await snapshot in container.downloadManager.downloadSnapshots() {
-                await MainActor.run {
-                    self?.activeDownloads = snapshot
-                }
+                guard !Task.isCancelled else { return }
+                self?.applyDownloadSnapshot(snapshot)
+            }
+        }
+        dismissTask?.cancel()
+        let dismissEvents = container.dismissAllEvents()
+        dismissTask = Task { [weak self] in
+            for await _ in dismissEvents {
+                guard !Task.isCancelled else { return }
+                self?.pendingReading = nil
             }
         }
         
@@ -150,43 +171,65 @@ class BookDetailViewModel: ObservableObject {
     
     func downloadOrClearCache(book: CalibreBook) {
         guard let container = container else { return }
+        pendingReading = nil
         if book.inShelf {
             container.bookManager.clearCache(inShelfId: book.inShelfId)
-        } else if container.downloadManager.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty {
-            if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
-                container.bookManager.addToShelf(book: book, formats: [downloadFormat])
-            } else {
-                alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
-            }
+        } else {
+            downloadOnly(book: book)
         }
     }
 
     func readBook(book: CalibreBook) {
-        guard let container = container else { return }
-        guard container.downloadManager.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty else { return }
+        guard let container, pendingReading == nil else { return }
+        alertItem = nil
 
-        if book.inShelf {
-            prepareReadingSession(for: book)
-        } else {
-            if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
-                container.bookManager.addToShelf(book: book, formats: [downloadFormat])
-            } else {
-                alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
-            }
+        if let info = cachedReaderInfo(for: book) {
+            if !book.inShelf { container.bookManager.addToShelf(book: book, formats: [info.format]) }
+            openReader(for: book, info: info, workspaceID: targetWorkspaceID)
+            return
+        }
+        guard let format = preferredReadableFormat(for: book) else {
+            alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
+            return
+        }
+        if activeDownload(for: book, format: format) == nil {
+            guard startCaching(book: book, format: format) else { return }
+        }
+        guard let download = activeDownload(for: book, format: format) else { return }
+        pendingReading = PendingReading(bookID: book.inShelfId, format: format,
+            downloadID: download.id, workspaceID: targetWorkspaceID)
+        if download.isPaused {
+            container.downloadManager.resumeDownload(book, format: format)
         }
     }
 
+    func downloadOnly(book: CalibreBook) {
+        pendingReading = nil
+        guard let format = preferredReadableFormat(for: book) else {
+            alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
+            return
+        }
+        if activeDownload(for: book, format: format) == nil { _ = startCaching(book: book, format: format) }
+    }
+
     func cacheFormat(book: CalibreBook, format: Format) {
-        guard let container = container else { return }
-        if book.inShelf {
-            switch container.downloadManager.startDownload(book, format: format, overwrite: true) {
-            case .success:
-                break
-            case .failure(let error):
-                alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
-            }
-        } else {
+        pendingReading = nil
+        _ = startCaching(book: book, format: format)
+    }
+
+    private func startCaching(book: CalibreBook, format: Format) -> Bool {
+        guard let container else { return false }
+        var book = book
+        if !book.inShelf || book.formats[format.rawValue]?.selected != true {
             container.bookManager.addToShelf(book: book, formats: [format])
+            book.inShelf = true
+            book.formats[format.rawValue]?.selected = true
+        }
+        switch container.downloadManager.startDownload(book, format: format, overwrite: true) {
+        case .success: return true
+        case .failure(let error):
+            alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
+            return false
         }
     }
 
@@ -199,11 +242,91 @@ class BookDetailViewModel: ObservableObject {
     }
 
     func cancelDownload(book: CalibreBook, format: Format) {
+        if pendingReading?.bookID == book.inShelfId, pendingReading?.format == format { pendingReading = nil }
         container?.downloadManager.cancelDownload(book, format: format)
     }
 
+    func cancelReadDownload(book: CalibreBook) {
+        guard let pendingReading, pendingReading.bookID == book.inShelfId else { return }
+        cancelDownload(book: book, format: pendingReading.format)
+    }
+
     func clearFormat(book: CalibreBook, format: Format) {
+        pendingReading = nil
         container?.bookManager.clearCache(book: book, format: format)
+    }
+
+    func isWaitingToRead(_ book: CalibreBook) -> Bool { pendingReading?.bookID == book.inShelfId }
+
+    func canRead(_ book: CalibreBook) -> Bool { cachedReaderInfo(for: book) != nil }
+
+    func readActionTitle(for book: CalibreBook) -> String {
+        isWaitingToRead(book) ? "Downloading…" : (canRead(book) ? "Read" : "Download and Read")
+    }
+
+    func hasActiveDownload(_ book: CalibreBook) -> Bool {
+        activeDownloads.values.contains { $0.book.inShelfId == book.inShelfId && $0.isActive }
+    }
+
+    private func activeDownload(for book: CalibreBook, format: Format) -> BookFormatDownload? {
+        container?.downloadManager.activeDownloads.values.first {
+            $0.book.inShelfId == book.inShelfId && $0.format == format && $0.isActive
+        }
+    }
+
+    private func preferredReadableFormat(for book: CalibreBook) -> Format? {
+        guard let container else { return nil }
+        var readableBook = book
+        readableBook.formats = book.formats.filter {
+            guard let format = Format(rawValue: $0.key) else { return false }
+            return container.sessionManager.getPreferredReader(for: format) != .UNSUPPORTED
+        }
+        return container.sessionManager.getPreferredFormat(for: readableBook)
+    }
+
+    /// Keep the session manager's device/latest-position policy, considering only ready files.
+    private func cachedReaderInfo(for book: CalibreBook, format: Format? = nil) -> ReaderInfo? {
+        guard let container else { return nil }
+        var readyBook = book
+        readyBook.formats = book.formats.filter { raw, info in
+            guard let candidate = Format(rawValue: raw), format == nil || format == candidate,
+                  info.cached, container.sessionManager.getPreferredReader(for: candidate) != .UNSUPPORTED,
+                  let url = getSavedUrl(book: book, format: candidate) else { return false }
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+        guard !readyBook.formats.isEmpty else { return nil }
+        let positions = container.readingPositionRepository.getPositions(for: book).filter {
+            guard let reader = ReaderType(rawValue: $0.readerName) else { return false }
+            return readyBook.formats[reader.format.rawValue] != nil
+        }
+        let info = container.sessionManager.prepareBookReading(book: readyBook, withLoadedPositions: positions)
+        return info.missing ? nil : info
+    }
+
+    private func applyDownloadSnapshot(_ snapshot: [URL: BookFormatDownload]) {
+        activeDownloads = snapshot
+        guard let pending = pendingReading else { return }
+        guard container?.downloadManager.activeDownloads.values.contains(where: { $0.id == pending.downloadID }) == true else {
+            pendingReading = nil
+            return
+        }
+        guard let download = snapshot.values.first(where: { $0.id == pending.downloadID }) else { return }
+        guard let completion = download.completion else { return }
+        // Consume before opening: duplicate callbacks and subsequent metadata updates cannot reopen.
+        pendingReading = nil
+        switch completion {
+        case .succeeded:
+            guard let book = container?.bookRepository.getBook(id: pending.bookID),
+                  calibreBook?.inShelfId == pending.bookID,
+                  let info = cachedReaderInfo(for: book, format: pending.format) else {
+                alertItem = AlertItem(id: "Cannot locate book file", msg: "Please download the book again.")
+                return
+            }
+            openReader(for: book, info: info, workspaceID: pending.workspaceID)
+        case .failed(let message):
+            alertItem = AlertItem(id: "Error Download Book", msg: message)
+        case .cancelled: break
+        }
     }
 
     private func applyBookUpdate(_ book: CalibreBook, container: AppContainer) {
@@ -213,6 +336,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func showReadingPositionHistory(book: CalibreBook) {
+        pendingReading = nil
         prepareReadingPositionHistory(book: book)
         isReturningFromHistory = true
         isReadingPositionHistoryActive = true
@@ -231,6 +355,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
+        pendingReading = nil
         guard let container = container else { return false }
         guard let reader = container.sessionManager.formatReaderMap[format]?.first else { return false }
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
@@ -297,15 +422,13 @@ class BookDetailViewModel: ObservableObject {
         _ = container?.sessionManager.prepareBookReading(book: book)
     }
 
-    private func prepareReadingSession(for book: CalibreBook) {
+    private func openReader(for book: CalibreBook, info: ReaderInfo, workspaceID: UUID?) {
         guard let container else { return }
-        let readerInfo = container.sessionManager.prepareBookReading(book: book)
-        guard readerInfo.missing == false else { return }
         container.openReader(
             book: book,
-            readerInfo: readerInfo,
+            readerInfo: info,
             source: .bookDetail,
-            targetWorkspaceID: targetWorkspaceID
+            targetWorkspaceID: workspaceID
         )
     }
 
@@ -382,15 +505,15 @@ class BookDetailViewModel: ObservableObject {
         return !repository.getPositions(for: book).isEmpty
     }
     
-    func isFormatDownloading(bookId: Int32, format: Format) -> Bool {
+    func isFormatDownloading(book: CalibreBook, format: Format) -> Bool {
         return activeDownloads.values.contains { download in
-            download.book.id == bookId && download.format == format && download.isActive
+            download.book.inShelfId == book.inShelfId && download.format == format && download.isActive
         }
     }
     
-    func getActiveDownload(bookId: Int32, format: Format) -> BookFormatDownload? {
+    func getActiveDownload(book: CalibreBook, format: Format) -> BookFormatDownload? {
         return activeDownloads.values.first { download in
-            download.book.id == bookId && download.format == format && download.isActive
+            download.book.inShelfId == book.inShelfId && download.format == format && download.isActive
         }
     }
     

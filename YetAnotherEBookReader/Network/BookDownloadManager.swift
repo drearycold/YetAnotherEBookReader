@@ -84,7 +84,7 @@ class BookDownloadManager {
     @MainActor
     func cancelDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
-                    $1.book.id == book.id && $1.format == format
+                    $1.book.inShelfId == book.inShelfId && $1.format == format
             && $1.isActive
         }).first else {
             return
@@ -101,13 +101,14 @@ class BookDownloadManager {
         activeDownloads[download.key]?.isPaused = false
         activeDownloads[download.key]?.progress = 0.0
         activeDownloads[download.key]?.resumeData = nil
+        activeDownloads[download.key]?.completion = .cancelled
         publishDownloadSnapshot()
     }
     
     @MainActor
     func pauseDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
-                    $1.isDownloading && $1.book.id == book.id && $1.format == format
+                    $1.isDownloading && $1.book.inShelfId == book.inShelfId && $1.format == format
         }).first else {
             return
         }
@@ -125,6 +126,7 @@ class BookDownloadManager {
                    currentTask !== pausedTask {
                     return
                 }
+                guard self.activeDownloads[download.key]?.completion == nil else { return }
                 self.activeDownloads[download.key]?.isDownloading = false
                 self.activeDownloads[download.key]?.isPausing = false
                 self.activeDownloads[download.key]?.isPaused = true
@@ -141,7 +143,7 @@ class BookDownloadManager {
     @MainActor
     func resumeDownload(_ book: CalibreBook, format: Format) -> Bool {
         guard let bookFormatDownloadIndex = activeDownloads.firstIndex (where: {
-                $1.book.id == book.id && $1.format == format && ($1.resumeData != nil || $1.isPaused)
+                $1.book.inShelfId == book.inShelfId && $1.format == format && ($1.resumeData != nil || $1.isPaused)
         }) else {
             cancelDownload(book, format: format)
             return false
@@ -274,6 +276,15 @@ class BookDownloadManager {
 }
 
 struct BookFormatDownload {
+    enum Completion: Equatable {
+        case succeeded
+        case failed(String)
+        case cancelled
+    }
+
+    /// A retry is a new download; pause/resume retains the same identity.
+    var id = UUID()
+    var completion: Completion?
     var isDownloading = false
     var isPaused = false
     var isPausing = false
@@ -346,7 +357,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         if let response = task.response,
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
-           isFileExist {
+           error == nil, isFileExist {
             Task { @MainActor [weak self] in
                 guard let self = self, let manager = self.manager, let container = manager.container
                        else { return }
@@ -354,12 +365,14 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                    currentTask !== task {
                     return
                 }
+                guard manager.activeDownloads[self.download.sourceURL]?.completion == nil else { return }
 
                 container.bookManager.addedCache(book: self.download.book, format: self.download.format)
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.isPausing = false
                 manager.activeDownloads[self.download.sourceURL]?.isPaused = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                manager.activeDownloads[self.download.sourceURL]?.completion = .succeeded
                 manager.publishDownloadSnapshot()
 
                 container.publishCalibreUpdate(.book(self.download.book))
@@ -382,6 +395,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                    currentTask !== task {
                     return
                 }
+                guard manager.activeDownloads[self.download.sourceURL]?.completion == nil else { return }
 
                 let nsError = error as NSError?
                 if manager.activeDownloads[self.download.sourceURL]?.isPaused == true,
@@ -394,6 +408,16 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.activeDownloads[self.download.sourceURL]?.isPausing = false
                 manager.activeDownloads[self.download.sourceURL]?.isPaused = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                let message: String
+                if let error {
+                    message = error.localizedDescription
+                } else if let response = task.response as? HTTPURLResponse,
+                          !(200...299).contains(response.statusCode) {
+                    message = "Server returned HTTP \(response.statusCode)."
+                } else {
+                    message = "The downloaded file could not be saved."
+                }
+                manager.activeDownloads[self.download.sourceURL]?.completion = .failed(message)
                 manager.publishDownloadSnapshot()
 
                 let logger = container.logger

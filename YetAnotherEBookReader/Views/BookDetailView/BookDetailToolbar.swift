@@ -29,7 +29,7 @@ struct BookDetailToolbar: ToolbarContent {
             Button(action: {
                 viewModel.downloadOrClearCache(book: book)
             }) {
-                if viewModel.activeDownloads.filter( {$1.isActive && $1.book.id == book.id} ).first != nil {
+                if viewModel.hasActiveDownload(book) {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else if book.inShelf {
@@ -38,6 +38,7 @@ struct BookDetailToolbar: ToolbarContent {
                     Image(systemName: "star")
                 }
             }
+            .accessibilityLabel(book.inShelf ? "Clear Downloaded Files" : "Download Only")
 
             Button(action: {
                 viewModel.showReadingPositionHistory(book: book)
