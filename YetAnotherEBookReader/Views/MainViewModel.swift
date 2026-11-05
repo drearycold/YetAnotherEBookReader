@@ -30,12 +30,15 @@ final class MainViewModel: ObservableObject {
     private var newerPositionTask: Task<Void, Never>?
     private var welcomeBooksInShelfTask: Task<Void, Never>?
     private var welcomeShelfLoadedTask: Task<Void, Never>?
+    private var bookImportPickerDismissed = false
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
     @Published var initialTermsAgreementPresenting = false
     @Published var privacyWebViewPresenting = false
     @Published var termsWebViewPresenting = false
+    @Published var bookImportPickerPresenting = false
+    @Published private(set) var bookImportURLs: [URL] = []
     @Published var bookImportActionSheetPresenting = false
     @Published var bookImportInfo: BookImportInfo?
     @Published var readerPresentations: [ReaderPresentation] = []
@@ -142,6 +145,35 @@ final class MainViewModel: ObservableObject {
 
     func openWelcomeBrowse() {
         activeTab = 2
+    }
+
+    func presentBookImportPicker() {
+        bookImportPickerDismissed = false
+        bookImportURLs = []
+        bookImportPickerPresenting = true
+    }
+
+    func receivePickedBookURLs(_ urls: [URL]) {
+        bookImportURLs = urls
+        importPickedBookIfReady()
+    }
+
+    /// UIKit can dismiss its picker before or after delivering the selected URL. Wait for both
+    /// events, so no selection is lost and the result never competes with the picker sheet.
+    func completeBookImportPicker() {
+        bookImportPickerDismissed = true
+        importPickedBookIfReady()
+    }
+
+    private func importPickedBookIfReady() {
+        guard bookImportPickerDismissed, let url = bookImportURLs.first else { return }
+        bookImportURLs = []
+        importBook(url: url)
+    }
+
+    func importBook(url: URL) {
+        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
+        container.publishBookImport(result)
     }
     
     func onAppear() {

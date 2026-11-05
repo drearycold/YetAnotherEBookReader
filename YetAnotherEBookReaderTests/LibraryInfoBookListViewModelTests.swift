@@ -46,6 +46,85 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertFalse(listViewModel.searchHistoryPresenting)
     }
 
+    func testImportGuidanceOnlyForCompletedUnfilteredEmptyLocalLibrary() throws {
+        let documentLibrary = try XCTUnwrap(container.libraryManager.localLibrary)
+        let local = CalibreLibrary(server: documentLibrary.server, key: UUID().uuidString, name: UUID().uuidString)
+        var result = UnifiedSearchResult(libraryIds: [local.id])
+        var selection: Set<String> = [local.id]
+        var criteria = SearchCriteria(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
+        var statuses = [local.id: LibrarySearchStatus()]
+        func showsGuidance() -> Bool {
+            listViewModel.shouldShowLocalLibraryImport(
+                result: result, selectedLibraryIds: selection, criteria: criteria,
+                localLibrary: local, statuses: statuses, repository: container.searchCacheRepository
+            )
+        }
+        XCTAssertTrue(showsGuidance())
+        selection = []
+        XCTAssertFalse(showsGuidance(), "Combined All Books is not the local library page")
+        selection = [local.id, "remote"]
+        XCTAssertFalse(showsGuidance())
+        selection = ["remote"]
+        result.libraryIds = selection
+        XCTAssertFalse(showsGuidance(), "An empty remote library is not first-use local onboarding")
+        selection = [local.id]
+        XCTAssertFalse(showsGuidance(), "Ignore results from a previously selected library")
+        result.libraryIds = selection
+        criteria = SearchCriteria(searchString: "no match", sortCriteria: .init(), filterCriteriaCategory: [:])
+        XCTAssertFalse(showsGuidance(), "Do not show old empty results while a search starts")
+        result.search = "no match"
+        XCTAssertFalse(showsGuidance())
+        criteria = SearchCriteria(searchString: "", sortCriteria: .init(), filterCriteriaCategory: ["Tags": ["Fiction"]])
+        result.search = ""
+        XCTAssertFalse(showsGuidance())
+        criteria = SearchCriteria(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
+        result.filters = ["Tags": ["Fiction"]]
+        XCTAssertFalse(showsGuidance())
+        result.filters = [:]
+        for status in [LibrarySearchStatus(loading: true), LibrarySearchStatus(error: .database("failed")), LibrarySearchStatus(fromCache: true)] {
+            statuses[local.id] = status
+            XCTAssertFalse(showsGuidance())
+        }
+        statuses = [:]
+        XCTAssertFalse(showsGuidance(), "Wait for a completed local query")
+        statuses[local.id] = LibrarySearchStatus()
+        result.totalNumber = 1
+        XCTAssertFalse(showsGuidance())
+        result.totalNumber = 0
+        result.books = [CalibreBook(id: 42, library: local)]
+        XCTAssertFalse(showsGuidance())
+
+        result.books = []
+        let unshelvedBook = CalibreBook(id: 43, library: local)
+        container.bookRepository.saveBook(unshelvedBook)
+        defer { container.bookRepository.deleteBook(id: unshelvedBook.inShelfId) }
+        XCTAssertFalse(showsGuidance(), "Even an unshelved local book rules out an empty library, regardless of an old empty cache")
+    }
+
+    func testLocalLibrarySearchSeesABookAddedAfterAnEmptySearch() async throws {
+        let documentLibrary = try XCTUnwrap(container.libraryManager.localLibrary)
+        let local = CalibreLibrary(server: documentLibrary.server, key: UUID().uuidString, name: UUID().uuidString)
+        container.libraryManager.calibreLibraries[local.id] = local
+        let criteria = SearchCriteria(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
+        let empty = try await container.librarySearchService.searchAndFetchMetadata(
+            library: local, criteria: criteria, limit: 100, force: false
+        )
+        XCTAssertEqual(empty.sources.values.first?.totalNumber, 0)
+
+        var book = CalibreBook(id: 456, library: local)
+        book.title = "Imported after browsing an empty library"
+        book.lastModified = Date()
+        book.lastSynced = book.lastModified
+        container.bookRepository.saveBook(book)
+        defer { container.bookRepository.deleteBook(id: book.inShelfId) }
+
+        let updated = try await container.librarySearchService.searchAndFetchMetadata(
+            library: local, criteria: criteria, limit: 100, force: false
+        )
+        XCTAssertEqual(updated.sources.values.first?.totalNumber, 1)
+        XCTAssertEqual(updated.sources.values.first?.bookIds, [book.id])
+    }
+
     func testUITestingMockLibraryFixtureHasThreeDistinctOfflineBooks() {
         let server = CalibreServer(
             uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,

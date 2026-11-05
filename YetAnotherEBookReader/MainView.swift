@@ -48,7 +48,7 @@ struct MainView: View {
                         }
                         .tag(1)
 
-                    LibraryInfoView()
+                    LibraryInfoView(importBook: viewModel.presentBookImportPicker)
                         .environment(\.horizontalSizeClass, originalSizeClass)
                         .yabrAppChrome(.system, isActive: viewModel.activeTab == 2)
                         .accessibilityIdentifier("screen.browse")
@@ -78,6 +78,7 @@ struct MainView: View {
 
             if viewModel.showWelcome {
                 WelcomeEmptyShelfView(
+                    importBook: viewModel.presentBookImportPicker,
                     openSettings: viewModel.openWelcomeSettings,
                     openBrowse: viewModel.openWelcomeBrowse
                 )
@@ -168,6 +169,12 @@ struct MainView: View {
                 }
             }.padding()
         })
+        .sheet(isPresented: $viewModel.bookImportPickerPresenting, onDismiss: viewModel.completeBookImportPicker) {
+            BookImportPicker(
+                bookURLs: Binding(get: { viewModel.bookImportURLs }, set: viewModel.receivePickedBookURLs),
+                allowsMultipleSelection: false
+            )
+        }
         .actionSheet(isPresented: $viewModel.bookImportActionSheetPresenting, content: {
             guard let bookImportInfo = viewModel.bookImportInfo else {
                 return ActionSheet(
@@ -218,9 +225,7 @@ struct MainView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
         .onOpenURL { url in
-            print("onOpenURL \(url)")
-            let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
-            container.publishBookImport(result)
+            viewModel.importBook(url: url)
         }.onAppear {
             viewModel.onAppear()
         }
@@ -256,6 +261,7 @@ struct MainView: View {
 private struct WelcomeEmptyShelfView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
+    let importBook: () -> Void
     let openSettings: () -> Void
     let openBrowse: () -> Void
 
@@ -309,7 +315,7 @@ private struct WelcomeEmptyShelfView: View {
     }
 
     private var summary: some View {
-        Text("Connect a calibre library or browse available libraries to start building your reading shelf.")
+        Text("Import EPUB, PDF or CBZ files, or connect a calibre library to start reading.")
             .font(.body)
             .foregroundColor(.primary)
             .multilineTextAlignment(.center)
@@ -330,28 +336,33 @@ private struct WelcomeEmptyShelfView: View {
                 secondaryAction
             }
         }
+        Button("Browse Libraries", action: openBrowse)
+            .font(.subheadline)
+            .accessibilityIdentifier("welcome.browse")
     }
 
     private var primaryAction: some View {
-        Button(action: openSettings) {
-            Label("Set Up Server & Library", systemImage: "server.rack")
+        Button(action: importBook) {
+            Label("Import from Files", systemImage: "square.and.arrow.down")
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(WelcomePrimaryButtonStyle())
-        .accessibilityHint("Opens Settings to configure a calibre server and library.")
+        .accessibilityIdentifier("welcome.import")
+        .accessibilityHint("Opens the file picker for EPUB, PDF and CBZ books.")
     }
 
     private var secondaryAction: some View {
-        Button(action: openBrowse) {
-            Label("Browse Libraries", systemImage: "building.columns")
+        Button(action: openSettings) {
+            Label("Connect to Calibre", systemImage: "server.rack")
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(WelcomeSecondaryButtonStyle())
-        .accessibilityHint("Opens Browse to explore configured libraries.")
+        .accessibilityIdentifier("welcome.calibre")
+        .accessibilityHint("Opens Settings to configure a calibre server and library.")
     }
 
     private var dismissHint: some View {

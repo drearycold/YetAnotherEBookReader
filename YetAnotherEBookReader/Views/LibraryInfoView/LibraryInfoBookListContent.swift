@@ -12,6 +12,7 @@ struct LibraryInfoBookListContent: View {
     @ObservedObject var viewModel: UnifiedSearchViewModel
     let container: AppContainer
     let geometry: GeometryProxy
+    let importBook: () -> Void
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -26,8 +27,34 @@ struct LibraryInfoBookListContent: View {
                 #endif
                 
                 if books.isEmpty {
-                    Text(emptyListText())
-                        .accessibilityIdentifier("browse.no-results")
+                    if listViewModel.shouldShowLocalLibraryImport(
+                        result: viewModel.unifiedSearchResult,
+                        selectedLibraryIds: libraryInfoViewModel.filterCriteriaLibraries,
+                        criteria: libraryInfoViewModel.currentLibrarySearchCriteria,
+                        localLibrary: container.libraryManager.localLibrary,
+                        statuses: viewModel.libraryStatuses,
+                        repository: container.searchCacheRepository
+                    ) && !viewModel.isSearchLoading {
+                        VStack(spacing: 16) {
+                            Text("Your local library is empty")
+                                .font(.headline)
+                            Text("Import an EPUB, PDF or CBZ file to start reading.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button(action: importBook) {
+                                Label("Import from Files", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("browse.local.import")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .listRowSeparator(.hidden)
+                    } else {
+                        Text(emptyListText())
+                            .accessibilityIdentifier("browse.no-results")
+                    }
                 } else {
                     let sections = listViewModel.buildSections(books: books, sectionedBy: libraryInfoViewModel.sectionedBy)
                     ForEach(sections) { section in

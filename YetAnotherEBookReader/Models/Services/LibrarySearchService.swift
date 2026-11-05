@@ -53,7 +53,9 @@ actor LibrarySearchService {
         let sourceObj = cacheResult?.sources[targetSource]
 
         let isStaleGeneration = sourceObj.map { $0.generation < library.lastModified } ?? false
-        let shouldRebuildCache = force || sourceObj == nil || isStaleGeneration
+        // Local imports/deletions change the database without a server generation change.
+        // Read the current local ids, including after a previously empty search.
+        let shouldRebuildCache = force || library.server.isLocal || sourceObj == nil || isStaleGeneration
         let needsFetch: Bool
         if shouldRebuildCache {
             needsFetch = true

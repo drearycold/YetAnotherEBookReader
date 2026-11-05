@@ -5,6 +5,16 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## First Book File Import P1 (2026-11-05, branch)
+
+`codex/first-book-file-import` adds welcome/empty-local-library file import,
+reuses existing deduplication and Read, and handles picker callback ordering
+and stale empty local-search caches. Final iPhone 17: 118 unit + 2 UI tests;
+iOS 15.5: 118 unit tests; Catalyst build pass. Native EPUB/PDF/CBZ checks and
+boundaries are recorded in [Shelf Modernization](history/shelf-modernization.md)
+and `/tmp/YabrFirstBookImport/verification.json`. Independent read-only review
+found no actionable issues.
+
 ## FolioReader 303f371 Remote Pin (2026-11-03)
 
 App branch `codex/update-folioreaderkit-tap-fix`, based on `main` at
