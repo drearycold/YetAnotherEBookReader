@@ -1,76 +1,60 @@
-//
-//  BookConnectivitySection.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
 struct BookConnectivitySection: View {
-    @ObservedObject var viewModel: BookDetailViewModel
-    var book: CalibreBook
-    var lastUpdated: Date
-    var isCompat: Bool
-    
-    @Binding var alertItem: AlertItem?
+    let libraryName: String
+    let serverName: String?
+    let bookID: String
+    let lastModified: String?
+    let refreshState: BookDetailViewModel.RefreshState
+    let showFailure: (String) -> Void
+    let retry: () -> Void
+    let showActivity: () -> Void
+
+    init(book: CalibreBook, refreshState: BookDetailViewModel.RefreshState,
+         showFailure: @escaping (String) -> Void, retry: @escaping () -> Void,
+         showActivity: @escaping () -> Void) {
+        libraryName = book.library.name
+        serverName = book.library.server.isLocal ? nil : book.library.server.name
+        bookID = book.id.description
+        lastModified = book.lastModified.timeIntervalSince1970 != 0 ? book.lastModifiedByLocale : nil
+        self.refreshState = refreshState
+        self.showFailure = showFailure
+        self.retry = retry
+        self.showActivity = showActivity
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                switch viewModel.refreshState {
-                case .idle:
-                    metadataIcon(systemName: "arrow.clockwise")
-                    Text("Details Saved on This Device")
-                case .refreshing:
-                    metadataIcon(systemName: "arrow.clockwise")
-                    Text("Syncing with Server")
-                case .synced:
-                    metadataIcon(systemName: "checkmark.shield")
-                    Text("In Sync with Server")
-                case .local:
-                    metadataIcon(systemName: "doc")
-                    Text("Local File")
-                case .unavailable:
-                    metadataIcon(systemName: "xmark.shield")
-                    Text("Unavailable on Server")
+        VStack(alignment: .leading, spacing: 16) {
+            Group {
+                switch refreshState {
+                case .idle: Label("Details Saved on This Device", systemImage: "arrow.clockwise")
+                case .refreshing: Label("Syncing with Server", systemImage: "arrow.clockwise")
+                case .synced: Label("In Sync with Server", systemImage: "checkmark.shield")
+                case .local: Label("Local File", systemImage: "doc")
+                case .unavailable: Label("Unavailable on Server", systemImage: "xmark.shield")
                 case .failed(let message):
-                    metadataIcon(systemName: "exclamationmark.shield")
-                    Button("Refresh Failed") {
-                        alertItem = AlertItem(id: "Refresh Failed", msg: message)
+                    Button { showFailure(message) } label: {
+                        Label("Refresh Failed", systemImage: "exclamationmark.shield")
                     }
+                    .frame(minHeight: 44)
                 }
             }
-            if viewModel.refreshState == .unavailable {
+            .fixedSize(horizontal: false, vertical: true)
+            if refreshState == .unavailable {
                 Text("The server cannot provide this book. Downloaded files remain available to read.")
-                    .font(.caption)
+                    .font(.subheadline).foregroundColor(.secondary)
             }
-            if case .failed = viewModel.refreshState {
-                Button("Retry Refresh") { viewModel.refresh(book: book) }
+            if case .failed = refreshState {
+                Button("Retry Refresh", action: retry).frame(minHeight: 44)
             }
-            HStack {
-                metadataIcon(systemName: "scroll")
-                Button(action: {
-                    viewModel.activityListViewPresenting = true
-                }) {
-                    Text("Activity Logs")
-                }.sheet(isPresented: $viewModel.activityListViewPresenting, onDismiss: {
-                }, content: {
-                    NavigationView {
-                        if let container = viewModel.sharedAppContainer {
-                            ActivityList(
-                                viewModel: ActivityListViewModel(container: container, libraryId: book.library.id, bookId: book.id),
-                                presenting: $viewModel.activityListViewPresenting
-                            )
-                        }
-                    }
-                })
+            BookMetadataValue(title: "Library", value: libraryName)
+            if let serverName { BookMetadataValue(title: "Server", value: serverName) }
+            BookMetadataValue(title: "Book ID", value: bookID)
+            if let lastModified {
+                BookMetadataValue(title: "Last Modified", value: lastModified)
             }
+            Button(action: showActivity) { Label("Activity Logs", systemImage: "scroll") }
+                .frame(minHeight: 44)
         }
-    }
-    
-    private func metadataIcon(systemName: String) -> some View {
-        Image(systemName: systemName)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 36, height: 24, alignment: .center)
     }
 }

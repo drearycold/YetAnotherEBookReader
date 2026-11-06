@@ -335,7 +335,7 @@ struct SectionShelfView: View {
             )
         ) {
             if let bookId = viewModel.displayedBookDetailId {
-                BookDetailView(bookId: bookId, viewMode: .SHELF, container: container)
+                BookDetailView(bookId: bookId, container: container)
                     .navigationBarTitleDisplayMode(.inline)
                     .id(bookId)
             }

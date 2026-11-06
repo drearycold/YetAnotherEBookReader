@@ -316,7 +316,7 @@ struct RecentShelfView: View {
     private var routeDestination: some View {
         switch viewModel.displayedRoute {
         case .bookDetail(let bookId):
-            BookDetailView(bookId: bookId, viewMode: .SHELF, container: container)
+            BookDetailView(bookId: bookId, container: container)
                 .navigationBarTitleDisplayMode(.inline)
                 .id(bookId)
         case .readingHistory(let bookId):

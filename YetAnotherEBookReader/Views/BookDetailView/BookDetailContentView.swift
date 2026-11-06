@@ -1,78 +1,79 @@
-//
-//  BookDetailContentView.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
+/// Composition only. The page owns observations, actions and modal/navigation state.
 struct BookDetailContentView: View {
-    @ObservedObject var viewModel: BookDetailViewModel
-    let book: CalibreBook
-    let isCompat: Bool
-    
+    let comments: String
+    let commentBaseURL: URL?
+    let overview: BookOverviewView
+    let progress: BookProgressSection
+    let formats: BookFormatList
+    let metadata: BookMetadataSection
+    let connectivity: BookConnectivitySection
+    let countPages: BookCountPagesCorner?
+
+    init(book: CalibreBook, overview: BookOverviewView, progress: BookProgressSection,
+         formats: BookFormatList, metadata: BookMetadataSection,
+         connectivity: BookConnectivitySection, countPages: BookCountPagesCorner?) {
+        comments = book.comments
+        commentBaseURL = book.commentBaseURL
+        self.overview = overview
+        self.progress = progress
+        self.formats = formats
+        self.metadata = metadata
+        self.connectivity = connectivity
+        self.countPages = countPages
+    }
+
     var body: some View {
-        VStack(alignment: .center) {
-            
-            #if canImport(GoogleMobileAds)
-            #if GAD_ENABLED
+        VStack(alignment: .leading, spacing: 20) {
+            #if canImport(GoogleMobileAds) && GAD_ENABLED
             Banner()
             #endif
-            #endif
-            
-            if isCompat {
-                VStack(alignment: .center, spacing: 16) {
-                    BookCoverView(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $viewModel.alertItem)
-                    
-                    BookMetadataSection(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    BookConnectivitySection(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $viewModel.alertItem)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    BookFormatList(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    let countPage = viewModel.countPagesConfiguration(for: book.library)
-                    if countPage.isEnabled {
-                        BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    }
-                }
-            } else {
-                HStack(alignment: .top, spacing: 32) {
-                    BookCoverView(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $viewModel.alertItem)
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        BookMetadataSection(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        BookConnectivitySection(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $viewModel.alertItem)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        BookFormatList(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        let countPage = viewModel.countPagesConfiguration(for: book.library)
-                        if countPage.isEnabled {
-                            BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
-                                .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        }
-                    }
+
+            overview
+            BookDetailSection("Reading Progress") { progress }
+            if !comments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               comments != "Without Comments" {
+                BookDetailSection("Description") {
+                    // Content loading, expansion and height ownership are BD4 work.
+                    WebViewUI(content: comments, baseURL: commentBaseURL)
+                        .frame(height: 400)
                 }
             }
-            
-            #if canImport(GoogleMobileAds)
-            #if GAD_ENABLED
+            BookDetailSection("Files and Formats") { formats }
+            BookDetailSection("Book Information") { metadata }
+            if let countPages {
+                BookDetailSection("Count Pages") { countPages }
+            }
+            BookDetailSection("Sync and Advanced") { connectivity }
+
+            #if canImport(GoogleMobileAds) && GAD_ENABLED
             Banner()
             #endif
-            #endif
-            
-            WebViewUI(
-                content: book.comments,
-                baseURL: book.commentBaseURL
-            )
-            .frame(maxWidth: isCompat ? 400 : 600, minHeight: 400, maxHeight: 400, alignment: .center)
-            
         }
+    }
+}
+
+struct BookDetailSection<Content: View>: View {
+    let title: LocalizedStringKey
+    let content: Content
+
+    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(12)
     }
 }

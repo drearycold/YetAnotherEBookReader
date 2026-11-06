@@ -196,7 +196,7 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         ))
 
         XCTAssertTrue(source.contains("NavigationLink {"))
-        XCTAssertTrue(source.contains("BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY, container: container)"))
+        XCTAssertTrue(source.contains("BookDetailView(bookId: book.inShelfId, container: container)"))
         XCTAssertTrue(source.contains("container.bookManager.selectedBookId = book.inShelfId"))
 
         XCTAssertFalse(source.contains("List(selection:"))

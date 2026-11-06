@@ -297,7 +297,17 @@ class BookDetailViewModelTests: XCTestCase {
         positions.createInitialCalled = false
         let queriesBefore = fileQueries
         let host = UIHostingController(rootView: NavigationView {
-            BookDetailContentView(viewModel: model, book: book, isCompat: true)
+            BookDetailContentView(book: book,
+                overview: BookOverviewView(book: book, availableWidth: 358, canRead: model.canRead(book),
+                    waitingToRead: model.isWaitingToRead(book), hasActiveDownload: model.hasActiveDownload(book),
+                    readActionTitle: model.readActionTitle(for: book), read: {}, downloadOnly: {}, cancelDownload: {}),
+                progress: BookProgressSection(summary: model.getReadingProgressSummary(for: book),
+                    hasHistory: model.hasReadingHistory(for: book), showHistory: {}),
+                formats: BookFormatList(rows: []),
+                metadata: BookMetadataSection(book: book, goodreadsRating: model.ratingGRDescription(for: book),
+                    goodreadsShelves: model.goodreadsShelves(for: book)),
+                connectivity: BookConnectivitySection(book: book, refreshState: model.refreshState,
+                    showFailure: { _ in }, retry: {}, showActivity: {}), countPages: nil)
                 .toolbar { BookDetailToolbar(viewModel: model) }
         })
         host.loadViewIfNeeded()
@@ -1888,4 +1898,42 @@ private final class PausingMetadataBookRepository: RealmBookRepository {
         if blockAfterCommit { atBoundary() }
         return result
     }
+}
+
+@MainActor
+final class BookMetadataPublicationDateTests: XCTestCase {
+    private func makeBook() -> CalibreBook {
+        let server = CalibreServer(uuid: UUID(), name: "Metadata", baseUrl: "http://localhost",
+            hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        return CalibreBook(id: 1, library: CalibreLibrary(server: server, key: "metadata", name: "Metadata"))
+    }
+
+    func testPublicationDateKeepsValidDatesWithPreferredCalendar() throws {
+        if let expected = ProcessInfo.processInfo.environment["YABR_TEST_EXPECTED_CALENDAR"] {
+            XCTAssertEqual(String(describing: Calendar.current.identifier), expected)
+        }
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        var book = makeBook()
+        for year in [2024, 2000] {
+            book.pubDate = try XCTUnwrap(gregorian.date(from: DateComponents(year: year, month: 6, day: 1, hour: 12)))
+            let section = BookMetadataSection(book: book, goodreadsRating: nil, goodreadsShelves: nil)
+            XCTAssertEqual(section.publicationDate, book.pubDateByLocale, "Valid Gregorian year \(year) must remain visible")
+        }
+    }
+
+    func testPublicationDateOmitsCalibreSentinelWithPreferredCalendar() throws {
+        if let expected = ProcessInfo.processInfo.environment["YABR_TEST_EXPECTED_CALENDAR"] {
+            XCTAssertEqual(String(describing: Calendar.current.identifier), expected)
+        }
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let sentinel = try XCTUnwrap(gregorian.date(from: DateComponents(year: 101, month: 1, day: 1, hour: 12)))
+        var book = makeBook()
+        for date in [Date(timeIntervalSince1970: 0), Date.distantPast, sentinel] {
+            book.pubDate = date
+            XCTAssertNil(BookMetadataSection(book: book, goodreadsRating: nil, goodreadsShelves: nil).publicationDate)
+        }
+    }
+
 }

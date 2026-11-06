@@ -1,53 +1,34 @@
-//
-//  BookProgressSection.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
 struct BookProgressSection: View {
-    @ObservedObject var viewModel: BookDetailViewModel
-    var book: CalibreBook
-    var lastUpdated: Date
-    var isCompat: Bool
+    let summary: BookDetailViewModel.ReadingProgressSummary?
+    let hasHistory: Bool
+    let showHistory: () -> Void
 
     var body: some View {
-        HStack {
-            Image(systemName: "text.book.closed")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 36, height: 24, alignment: .center)
-            
-            Button(action:{
-                viewModel.showReadingPositionHistory(book: book)
-            }) {
-                if let summary = viewModel.getReadingProgressSummary(for: book) {
-                    switch summary {
-                    case .goodreadsReadDate(let dateString):
-                        Image(systemName: "arrow.down.to.line")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text(dateString)
-                    case .goodreadsProgress(let progressString):
-                        Image(systemName: "hourglass")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text("\(progressString)%")
-                    case .localProgress(let percent, let device):
-                        Image(systemName: "book.circle")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text(String(format: "%.1f%%", percent))
-                        Text("on")
-                        Text(device)
+        VStack(alignment: .leading, spacing: 12) {
+            Group {
+                switch summary {
+                case .goodreadsReadDate(let date):
+                    Label(date, systemImage: "checkmark.circle")
+                case .goodreadsProgress(let progress):
+                    Label("\(progress)%", systemImage: "hourglass")
+                case .localProgress(let percent, let device):
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(String(format: "%.1f%%", percent), systemImage: "book.circle")
+                        ProgressView(value: min(100, max(0, percent)), total: 100)
+                        Text("on \(device)").font(.subheadline).foregroundColor(.secondary)
                     }
-                } else {
-                    Text("No Reading History")
+                case nil:
+                    Text("No Reading History").foregroundColor(.secondary)
                 }
-            }.disabled(!viewModel.hasReadingHistory(for: book))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            if hasHistory {
+                Button(action: showHistory) { Label("Reading History", systemImage: "clock") }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("book-detail.progress-history")
+            }
         }
     }
 }

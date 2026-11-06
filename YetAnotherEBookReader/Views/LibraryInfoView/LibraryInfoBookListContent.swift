@@ -177,7 +177,7 @@ struct LibraryInfoBookListContent: View {
                 batchSelectionEntryView(book: book, index: index)
             } else if container.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
                 NavigationLink {
-                    BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY, container: container)
+                    BookDetailView(bookId: book.inShelfId, container: container)
                         .onAppear {
                             container.bookManager.selectedBookId = book.inShelfId
                         }
