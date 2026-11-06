@@ -662,6 +662,141 @@ final class CalibreOnboardingUITests: XCTestCase {
         element("welcome.calibre")
     }
 
+    func testConnectionRecoveryKeepsActionsVisibleAndUsesEditedConfiguration() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_CONNECTION_CONTROL_URL"] == nil,
+                      "Requires the P4 loopback connection-control proxy")
+        try connectionMode("html503")
+        connect(name: "P4 Recovery Server", url: singleURL)
+        assertRecovery(status: 503, screenshot: "p4-add-long-html-503")
+        try connectionMode("auth401")
+        element("server.connection.retry").tap()
+        assertRecovery(status: 401, screenshot: "p4-add-http-401")
+        try connectionMode("auth403")
+        element("server.connection.retry").tap()
+        assertRecovery(status: 403, screenshot: "p4-add-http-403")
+        element("server.connection.edit").tap()
+        XCTAssertEqual(app.textFields["Name Your Server"].value as? String, "P4 Recovery Server")
+        XCTAssertEqual(app.textFields["Internal Server Address"].value as? String, singleURL + "/")
+        replaceURL("http://127.0.0.1:1")
+        element("server.connection.connect").tap()
+        assertRecovery(status: nil, screenshot: "p4-add-cannot-connect")
+        element("server.connection.result.cancel").tap()
+        element("server.connection.cancel").tap()
+        app.terminate()
+        app.launch()
+        element("welcome.calibre") // failed probes did not save a server
+        element("welcome.browse").tap()
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertFalse(app.staticTexts["P4 Recovery Server"].exists)
+        app.tabBars.buttons["Recent"].tap()
+
+        try connectionMode("auth_basic")
+        connect(name: "P4 Recovery Server", url: singleURL)
+        assertRecovery(status: 401, screenshot: "p4-auth-challenge-without-credentials")
+        element("server.connection.edit").tap()
+        let require = app.switches["Require"].firstMatch
+        for _ in 0..<4 {
+            if require.isHittable { break }
+            app.swipeUp()
+        }
+        // SwiftUI exposes the whole row as a Switch; tap the visible switch at its trailing edge.
+        require.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let user = app.textFields["Username"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: user)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
+        user.tap()
+        user.typeText("contract")
+        let password = app.secureTextFields.firstMatch
+        password.tap()
+        password.typeText("wrong")
+        element("server.connection.connect").tap()
+        assertRecovery(status: 401, screenshot: "p4-auth-rejected-credentials")
+        element("server.connection.edit").tap()
+        for _ in 0..<4 {
+            if password.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertEqual(user.value as? String, "contract")
+        XCTAssertEqual((password.value as? String)?.count, 5)
+        // The clear icon is immediately to the right of this field on both supported form layouts.
+        password.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+            .withOffset(CGVector(dx: 12, dy: 0)).tap()
+        XCTAssertTrue((password.value as? String ?? "").isEmpty)
+        password.tap()
+        password.typeText("correct")
+        XCTAssertEqual((password.value as? String)?.count, 7)
+        element("server.connection.connect").tap()
+        waitForEnabled(element("server.connection.confirm"))
+        capture("p4-corrected-credentials-connected")
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.staticTexts["Quick Start Guide"].firstMatch.waitForExistence(timeout: 30))
+        capture("p4-recovered-to-real-book-list")
+        back()
+        app.tabBars.buttons["Settings"].tap()
+        app.staticTexts["P4 Recovery Server"].firstMatch.tap()
+        app.buttons["Modify Configuration"].firstMatch.tap()
+        element("server.connection.form")
+        let name = app.textFields["Name Your Server"]
+        element("server.connection.field.Name.clear").tap()
+        name.tap()
+        name.typeText("P4 Edited Server")
+        try connectionMode("html503")
+        element("server.connection.connect").tap()
+        assertRecovery(status: 503, screenshot: "p4-modify-long-html-503")
+        element("server.connection.edit").tap()
+        XCTAssertEqual(name.value as? String, "P4 Edited Server")
+        capture("p4-modify-retains-input")
+        element("server.connection.connect").tap()
+        assertRecovery(status: 503, screenshot: "p4-modify-still-failing")
+        try connectionMode("success")
+        element("server.connection.retry").tap()
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        XCTAssertTrue(app.navigationBars["P4 Edited Server"].waitForExistence(timeout: 20), app.debugDescription)
+        capture("p4-modify-retry-success")
+        app.terminate()
+        app.launch()
+        element("welcome.browse").tap()
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.staticTexts["P4 Edited Server"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["P4 Recovery Server"].exists)
+        app.tabBars.buttons["Browse"].tap()
+        app.staticTexts["Calibre Library"].firstMatch.tap()
+        element("screen.browse.book-list")
+        XCTAssertTrue(app.staticTexts["Quick Start Guide"].firstMatch.waitForExistence(timeout: 30))
+        capture("p4-modified-connection-still-browses")
+    }
+
+    private func assertRecovery(status: Int?, screenshot: String) {
+        waitForEnabled(element("server.connection.retry"))
+        capture(screenshot + "-initial")
+        let title = element("server.connection.status.title")
+        XCTAssertEqual(title.label, status.map { "Connection Failed (HTTP \($0))" } ?? "Connection Failed")
+        let message = element("server.connection.status.message")
+        XCTAssertLessThan(message.label.count, 180)
+        XCTAssertFalse(message.label.contains("<html>"))
+        XCTAssertFalse(element("server.connection.confirm").isEnabled)
+        for id in ["server.connection.edit", "server.connection.retry"] {
+            let action = element(id)
+            XCTAssertTrue(action.isHittable, app.debugDescription)
+            XCTAssertTrue(app.frame.contains(action.frame), app.debugDescription)
+        }
+        capture(screenshot) // No scrolling on the error page, including iPhone 7.
+    }
+
+    private func connectionMode(_ mode: String) throws {
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["YABR_CONNECTION_CONTROL_URL"])
+        let url = try XCTUnwrap(URL(string: base + "?mode=" + mode))
+        let configured = expectation(description: "Configure connection response")
+        URLSession.shared.dataTask(with: url) { _, response, error in
+            XCTAssertNil(error)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            configured.fulfill()
+        }.resume()
+        wait(for: [configured], timeout: 10)
+    }
+
     func testSingleLibraryCancelFailureRetryAndBrowse() {
         capture("welcome")
         element("welcome.import")

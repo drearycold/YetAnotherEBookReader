@@ -46,13 +46,20 @@ extension CalibreServerService {
         resultInfo.reachable = false
         resultInfo.errorMsg = "Cannot connect"
         resultInfo.error = nil
+        resultInfo.httpStatusCode = nil
+        resultInfo.libraryMap = [:]
 
         var url = resultInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
 
+        let delegate = CalibreServerProbeTaskDelegate(resultInfo.server)
         do {
             let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
-            let (data, _) = try await validatedData(for: request, server: resultInfo.server, timeout: 10)
+            let (data, response) = try await withURLSession(server: resultInfo.server, timeout: 10) {
+                try await $0.data(for: request, delegate: delegate)
+            }
+            resultInfo.httpStatusCode = (response as? HTTPURLResponse)?.statusCode
+            _ = try validateHTTPResponse(data: data, response: response)
             let libraryInfo = try decodePayload(CalibreServerLibraryInfo.self, from: data)
             guard let defaultLibrary = libraryInfo.defaultLibrary,
                   libraryInfo.libraryMap.count > 0 else {
@@ -67,17 +74,15 @@ extension CalibreServerService {
             resultInfo.error = nil
             resultInfo.reachable = true
             return resultInfo
-        } catch let error as CalibreAPIError {
-            resultInfo.error = error
-            if case .transport(let transportError) = error, transportError.code == .cancelled {
+        } catch {
+            let apiError = CalibreAPIError(error: error)
+            resultInfo.httpStatusCode = resultInfo.httpStatusCode ?? delegate.authenticationStatusCode
+            resultInfo.error = apiError
+            if case .transport(let transportError) = apiError, transportError.code == .cancelled {
                 resultInfo.errorMsg = "cancelled, server may require authentication"
             } else {
-                resultInfo.errorMsg = error.localizedDescription
+                resultInfo.errorMsg = apiError.localizedDescription
             }
-            return resultInfo
-        } catch {
-            resultInfo.error = CalibreAPIError(error: error)
-            resultInfo.errorMsg = error.localizedDescription
             return resultInfo
         }
     }
@@ -110,5 +115,29 @@ extension CalibreServerService {
             library: library,
             probeUrl: probeUrl
         )
+    }
+}
+
+/// Keep an HTTP authentication challenge's status when URLSession cancels after rejection.
+/// This delegate is per probe and follows the shared delegate's credential/retry policy.
+private final class CalibreServerProbeTaskDelegate: CalibreServerTaskDelegate {
+    private let lock = NSLock()
+    private var statusCode: Int?
+
+    var authenticationStatusCode: Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return statusCode
+    }
+
+    override func urlSession(_ session: URLSession, task: URLSessionTask,
+                             didReceive challenge: URLAuthenticationChallenge,
+                             completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if let response = challenge.failureResponse as? HTTPURLResponse {
+            lock.lock()
+            statusCode = response.statusCode
+            lock.unlock()
+        }
+        super.urlSession(session, task: task, didReceive: challenge, completionHandler: completionHandler)
     }
 }

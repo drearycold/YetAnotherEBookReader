@@ -37,6 +37,73 @@ final class CalibreServerManagerTests: XCTestCase {
         AppContainer.shared = nil
     }
 
+    func testProbePreservesStructuredFailureAndUsesCurrentConfigurationOnRetry() async throws {
+        var server = TestFixtures.makeServer(baseUrl: "http://localhost/recovery")
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: config)
+        func installSession() {
+            container.calibreServerService.metadataSessions[
+                CalibreServerURLSessionKey(server: server, timeout: 10, qos: .default)
+            ] = session
+        }
+        let body = Data(("<html><style>body { color: red; }</style>" + String(repeating: "error", count: 8000) + "</html>").utf8)
+        MockURLProtocol.requestHandler = { request in
+            (try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 503,
+                                          httpVersion: nil, headerFields: nil)), body)
+        }
+        installSession()
+        let failed = await serverManager.probeServer(request: .init(server: server, isPublic: false,
+                                                                    updateLibrary: false, autoUpdateOnly: true))
+        XCTAssertEqual(failed?.error, .httpStatus(503, body))
+        XCTAssertFalse(failed?.reachable ?? true)
+        XCTAssertFalse(serverRepository.getAllServers().contains { $0.id == server.id })
+
+        server.name = "Edited server"
+        server.password = "corrected password"
+        MockURLProtocol.requestHandler = { request in
+            (try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200,
+                                          httpVersion: nil, headerFields: nil)),
+             Data(#"{"default_library":"lib","library_map":{"lib":"Library"}}"#.utf8))
+        }
+        installSession()
+        let recovered = await serverManager.probeServer(request: .init(server: server, isPublic: false,
+                                                                       updateLibrary: false, autoUpdateOnly: true))
+        XCTAssertEqual(recovered?.server.name, server.name)
+        XCTAssertEqual(recovered?.server.password, server.password)
+        XCTAssertTrue(recovered?.reachable ?? false)
+        XCTAssertNil(recovered?.error)
+    }
+
+    func testBackgroundProbeKeepsKnownReachabilityUntilItsAnswer() async throws {
+        let server = TestFixtures.makeServer(baseUrl: "http://localhost/background")
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+        let url = try XCTUnwrap(URL(string: server.baseUrl))
+        serverManager.calibreServerInfoStaging[request.id] = .init(
+            server: server, isPublic: false, url: url, reachable: true, defaultLibrary: "lib",
+            libraryMap: ["lib": "Library"], request: request)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        container.calibreServerService.metadataSessions[
+            CalibreServerURLSessionKey(server: server, timeout: 10, qos: .default)
+        ] = URLSession(configuration: config)
+        MockURLProtocol.requestHandler = { _ in
+            Thread.sleep(forTimeInterval: 0.2)
+            throw URLError(.cannotConnectToHost)
+        }
+        let task = Task { await serverManager.probeServer(request: request) }
+        for _ in 0..<50 {
+            if serverManager.isServerProbing(server: server) { break }
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(serverManager.isServerProbing(server: server))
+        XCTAssertEqual(container.calibreServerService.getServerUrlByReachability(server: server), url)
+        let result = await task.value
+        XCTAssertFalse(result?.reachable ?? true)
+        XCTAssertEqual(result?.error, .transport(URLError(.cannotConnectToHost)))
+        XCTAssertTrue(result?.libraryMap.isEmpty == true)
+    }
+
     func testPopulateServers() throws {
         // Create custom mock servers and save to repository
         let server1 = CalibreServer(uuid: UUID(), name: "A Server", baseUrl: "http://localhost/a", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "userA", password: "")

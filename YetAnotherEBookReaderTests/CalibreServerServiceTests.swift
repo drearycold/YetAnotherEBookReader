@@ -1085,6 +1085,25 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
+    func testProbeHTTPFailuresRetainStatusWithoutChangingSharedErrorSemantics() async throws {
+        for status in [401, 403, 404, 503] {
+            let body = Data(("<html><style>" + String(repeating: "error", count: 20000)).utf8)
+            MockURLProtocol.requestHandler = { request in
+                (try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: status,
+                                              httpVersion: nil, headerFields: nil)), body)
+            }
+            let request = CalibreProbeServerRequest(server: server, isPublic: false,
+                                                    updateLibrary: false, autoUpdateOnly: true)
+            let result = await service.probeServerReachability(serverInfo: .init(
+                server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
+                defaultLibrary: "", request: request))
+            XCTAssertFalse(result.reachable)
+            XCTAssertEqual(result.httpStatusCode, status)
+            XCTAssertEqual(result.error, status == 401 || status == 403 ? .authFailed : .httpStatus(status, body))
+            XCTAssertTrue(result.libraryMap.isEmpty)
+        }
+    }
+
     func testProbeServerReachabilitySuccess() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(

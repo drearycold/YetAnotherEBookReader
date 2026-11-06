@@ -209,6 +209,21 @@ class ServerViewModel: ObservableObject {
         performProbeServer(server: calibreServer, isAdd: true, completion: completion)
     }
     
+    var connectionStatus: ServerConnectionStatus {
+        if isProbing { return .init(title: "Connecting…", message: nil) }
+        guard let info = calibreServerInfo else {
+            return .init(title: "Connection Failed", message: "Check the server address and try again.")
+        }
+        return ServerConnectionStatus(info: info)
+    }
+
+    func editConnection() {
+        disableProbeServerCancellable()
+        serverCalibreInfoPresenting = false
+        dataAction = nil
+        // Preserve all form fields, including credentials, for correction and a fresh probe.
+    }
+
     var canConfirmServer: Bool {
         serverCalibreInfoPresenting && !isProbing && calibreServerInfo?.reachable == true
             && calibreServerInfo?.errorMsg == "Success"
@@ -467,5 +482,68 @@ class ServerViewModel: ObservableObject {
 
         container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
         helperStatus = nil
+    }
+}
+
+/// Presentation for connection setup only. Never render a server's untrusted error body here.
+struct ServerConnectionStatus {
+    let title: String
+    let message: String?
+
+    init(title: String, message: String?) {
+        self.title = title
+        self.message = message
+    }
+
+    init(info: CalibreServerInfo) {
+        if info.reachable && info.errorMsg == "Success" {
+            self.init(title: "Connected", message: nil)
+            return
+        }
+        var status = info.httpStatusCode
+        if case .httpStatus(let code, _) = info.error { status = code }
+        status = status.flatMap { (400...599).contains($0) ? $0 : nil }
+        let title = status.map { "Connection Failed (HTTP \($0))" } ?? "Connection Failed"
+        let message: String
+        if let status, status == 401 || status == 403 {
+            message = "Check Require, username, password and server access permissions, then retry."
+        } else if let status {
+            switch status {
+            case 404:
+                message = "Check the Calibre content server address and port, then retry."
+            case 500...599:
+                message = "The server or proxy could not complete the request. Check that the Calibre content server is running, then retry."
+            default:
+                message = "The server refused this request. Check the server address and access settings, then retry."
+            }
+        } else {
+            switch info.error {
+            case .authFailed:
+                message = "Check Require, username, password and server access permissions, then retry."
+            case .transport(let error):
+                switch error.code {
+                case .cancelled:
+                    message = "The connection was cancelled. If the server requires authentication, check Require, username and password, then retry."
+                case .userAuthenticationRequired, .userCancelledAuthentication:
+                    message = "Check Require, username and password, then retry."
+                case .timedOut:
+                    message = "The server did not respond in time. Check your network and that the Calibre content server is running, then retry."
+                case .notConnectedToInternet, .networkConnectionLost:
+                    message = "Check your network connection, then retry."
+                case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
+                     .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid:
+                    message = "A secure connection could not be established. Check the HTTPS address and server certificate, then retry."
+                default:
+                    message = "Cannot reach the server. Check the address, port and network, and that the Calibre content server is running."
+                }
+            case .decoding, .unsupportedPayload, .emptyResponse:
+                message = info.errorMsg == "Server has no library"
+                    ? "The server has no available libraries. Check libraries and access permissions in Calibre, then retry."
+                    : "This address did not return a Calibre library list. Check the Calibre content server address and port."
+            default:
+                message = "Check the Calibre content server address, port and network, then retry."
+            }
+        }
+        self.init(title: title, message: message)
     }
 }

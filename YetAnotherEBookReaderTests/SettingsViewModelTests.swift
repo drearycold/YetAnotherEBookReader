@@ -278,6 +278,76 @@ import Combine
         XCTAssertTrue(connection.calibreServerUrl.isEmpty)
     }
 
+    func testConnectionFailurePresentationNeverIncludesServerBodiesAndRetainsHTTPStatus() throws {
+        let connection = try stagedConnection(libraries: [:])
+        let body = Data(("<html><style>" + String(repeating: "CSS server error", count: 10000)).utf8)
+        for status in [400, 401, 403, 404, 429, 500, 503] {
+            var info = try XCTUnwrap(connection.calibreServerInfo)
+            info.reachable = false
+            info.errorMsg = String(decoding: body, as: UTF8.self)
+            info.error = status == 401 || status == 403 ? .authFailed : .httpStatus(status, body)
+            info.httpStatusCode = status
+            let display = ServerConnectionStatus(info: info)
+            XCTAssertTrue(display.title.contains("HTTP \(status)"))
+            XCTAssertLessThan((display.message ?? "").count, 180)
+            XCTAssertFalse((display.title + (display.message ?? "")).contains("<html>"))
+            XCTAssertEqual(info.error?.localizedDescription,
+                           status == 401 || status == 403 ? "Authentication Failed" : status == 404 ? "Deleted" : info.errorMsg)
+        }
+    }
+
+    func testConnectionMessagesDistinguishKnownCausesWithoutGuessingAuthentication() throws {
+        let connection = try stagedConnection(libraries: [:])
+        var info = try XCTUnwrap(connection.calibreServerInfo)
+        info.reachable = false
+        let cases: [(CalibreAPIError, String)] = [
+            (.transport(URLError(.cannotConnectToHost)), "address, port and network"),
+            (.transport(URLError(.timedOut)), "did not respond in time"),
+            (.transport(URLError(.notConnectedToInternet)), "network connection"),
+            (.transport(URLError(.serverCertificateUntrusted)), "server certificate"),
+            (.transport(URLError(.cancelled)), "If the server requires authentication"),
+            (.authFailed, "username, password"),
+            (.unsupportedPayload, "library list"),
+            (.unknown(NSError(domain: "<html>", code: 0)), "address, port and network")
+        ]
+        for (error, expected) in cases {
+            info.error = error
+            XCTAssertTrue(ServerConnectionStatus(info: info).message?.contains(expected) == true, "\(error)")
+        }
+        info.httpStatusCode = 200
+        info.error = .unsupportedPayload
+        XCTAssertTrue(ServerConnectionStatus(info: info).message?.contains("library list") == true)
+        info.errorMsg = "Server has no library"
+        XCTAssertTrue(ServerConnectionStatus(info: info).message?.contains("no available libraries") == true)
+        info.httpStatusCode = 401
+        info.error = .transport(URLError(.cancelled))
+        XCTAssertTrue(ServerConnectionStatus(info: info).title.contains("HTTP 401"))
+        XCTAssertFalse(ServerConnectionStatus(info: info).message?.contains("cancelled") == true)
+    }
+
+    func testEditConnectionPreservesAllInputAndCannotSaveAnOldSuccess() throws {
+        let connection = try stagedConnection(libraries: ["a": "Library"])
+        connection.calibreServerName = "My Calibre"
+        connection.calibreServerUrl = "http://localhost:8080/"
+        connection.calibreServerUrlPublic = "https://example.com/"
+        connection.calibreServerSetPublicAddress = true
+        connection.calibreServerNeedAuth = true
+        connection.calibreUsername = "user"
+        connection.calibrePassword = "password"
+        connection.editConnection()
+        XCTAssertEqual(connection.calibreServerName, "My Calibre")
+        XCTAssertEqual(connection.calibreServerUrl, "http://localhost:8080/")
+        XCTAssertEqual(connection.calibreServerUrlPublic, "https://example.com/")
+        XCTAssertTrue(connection.calibreServerSetPublicAddress)
+        XCTAssertTrue(connection.calibreServerNeedAuth)
+        XCTAssertEqual(connection.calibreUsername, "user")
+        XCTAssertEqual(connection.calibrePassword, "password")
+        XCTAssertFalse(connection.serverCalibreInfoPresenting)
+        XCTAssertNil(connection.calibreServerInfo)
+        XCTAssertNil(connection.dataAction)
+        XCTAssertFalse(connection.canConfirmServer)
+    }
+
     private func stagedConnection(libraries: [String: String]) throws -> ServerViewModel {
         let server = TestFixtures.makeServer(baseUrl: "http://127.0.0.1:1")
         let connection = ServerViewModel(container: mockAppContainer, server: nil)
