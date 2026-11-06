@@ -12,7 +12,24 @@ import SwiftUI
 class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
     @Published var previewViewModel = BookPreviewViewModel()
-    @Published var calibreBook: CalibreBook?
+    enum PageState: Equatable { case loading, content, unavailable }
+    enum RefreshState: Equatable {
+        case idle, refreshing, synced, local, unavailable, failed(String)
+    }
+    @Published private(set) var pageState: PageState = .loading
+    @Published private(set) var refreshState: RefreshState = .idle
+    @Published private(set) var calibreBook: CalibreBook?
+    @Published private(set) var hasReadableFile = false
+    @Published private(set) var readingProgressSummary: ReadingProgressSummary?
+    @Published private(set) var hasHistory = false
+    private var helperConfiguration: CalibreDSReaderHelperConfiguration?
+    private var positionObserverTask: Task<Void, Never>?
+    private var observationID = UUID()
+    private var refreshID: UUID?
+    private let bookRepository: BookRepositoryProtocol
+    private let readingPositionRepository: ReadingPositionRepositoryProtocol
+    private let refreshMetadata: (CalibreBooksMetadataRequest) async -> [Int32: BookMetadataRefreshResult]
+    private let fileExists: (URL) -> Bool
     private var bookObserverTask: Task<Void, Never>?
     
     @Published var alertItem: AlertItem?
@@ -46,129 +63,192 @@ class BookDetailViewModel: ObservableObject {
         return container?.deviceName ?? ""
     }
 
-    var updatingMetadataStatus: String {
-        return container?.updatingMetadataStatus ?? ""
-    }
-    
-    var sharedAppContainer: AppContainer? {
-        return container
-    }
-    
-    init(container: AppContainer? = AppContainer.shared, targetWorkspaceID: UUID? = nil) {
+    var sharedAppContainer: AppContainer? { container }
+
+    init(container: AppContainer, targetWorkspaceID: UUID? = nil,
+         bookRepository: BookRepositoryProtocol? = nil,
+         readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,
+         refreshMetadata: ((CalibreBooksMetadataRequest) async -> [Int32: BookMetadataRefreshResult])? = nil,
+         fileExists: @escaping (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }) {
         self.container = container
         self.targetWorkspaceID = targetWorkspaceID
-        print("BookDetailViewModel INIT")
+        self.bookRepository = bookRepository ?? container.bookRepository
+        self.readingPositionRepository = readingPositionRepository ?? container.readingPositionRepository
+        self.refreshMetadata = refreshMetadata ?? { [bookManager = container.bookManager] request in
+            await bookManager.getBooksMetadata(request: request)
+        }
+        self.fileExists = fileExists
     }
-    
+
     deinit {
         fetchTask?.cancel()
         activeDownloadsTask?.cancel()
         bookObserverTask?.cancel()
+        positionObserverTask?.cancel()
         dismissTask?.cancel()
     }
-    
-    /// Loads the book and refreshes its metadata, except when coming back from Reading History,
-    /// which would otherwise hit the server on every pop.
+
+    /// Returning from History reattaches local observations without another network refresh.
     func onAppear(bookId: String, targetWorkspaceID: UUID?) {
         self.targetWorkspaceID = targetWorkspaceID
-        let isReturningFromHistory = self.isReturningFromHistory
-        self.isReturningFromHistory = false
-        guard !(isReturningFromHistory && loadedBookId == bookId) else { return }
-        guard setup(bookId: bookId), let calibreBook else { return }
-        loadedBookId = bookId
-        fetchMetadata(book: calibreBook)
+        let fromHistory = isReturningFromHistory && loadedBookId == bookId
+        isReturningFromHistory = false
+        guard setup(bookId: bookId), let book = calibreBook else { return }
+        if !fromHistory { fetchMetadata(book: book) }
     }
 
     func onDisappear() {
         pendingReading = nil
+        cancelRefresh()
+        stopObserving()
     }
-    
+
+    private func stopObserving() {
+        observationID = UUID()
+        bookObserverTask?.cancel()
+        bookObserverTask = nil
+        positionObserverTask?.cancel()
+        positionObserverTask = nil
+        activeDownloadsTask?.cancel()
+        activeDownloadsTask = nil
+        dismissTask?.cancel()
+        dismissTask = nil
+    }
+
     @discardableResult
     func setup(bookId: String) -> Bool {
-        guard let container = self.container else {
-            print("Warning: BookDetailViewModel setup called before container was set")
+        let sameBook = loadedBookId == bookId
+        stopObserving()
+        cancelRefresh()
+        loadedBookId = bookId
+        pendingReading = nil
+        if !sameBook {
+            clearContent()
+            refreshState = .idle
+            alertItem = nil
+            isReadingPositionHistoryActive = false
+            isReturningFromHistory = false
+            presentingPreviewSheet = false
+            activityListViewPresenting = false
+        }
+        guard let container else {
+            clearContent()
             return false
         }
-        
-        if calibreBook?.inShelfId != bookId { pendingReading = nil }
-        activeDownloadsTask?.cancel()
-        activeDownloadsTask = Task { [weak self, weak container] in
-            guard let container else { return }
-            for await snapshot in container.downloadManager.downloadSnapshots() {
-                guard !Task.isCancelled else { return }
+        let id = observationID
+        if let book = bookRepository.getBook(id: bookId), book.inShelfId == bookId {
+            applyBookUpdate(book, container: container)
+            observePositions(for: book, observationID: id)
+        } else {
+            clearContent()
+        }
+
+        // Register streams before scheduling consumers, so immediate changes aren't missed.
+        let bookUpdates = bookRepository.observeBook(id: bookId)
+        bookObserverTask = Task { [weak self, weak container] in
+            for await book in bookUpdates {
+                guard !Task.isCancelled, let self, let container,
+                      self.observationID == id, self.loadedBookId == bookId else { return }
+                guard let book else {
+                    self.cancelRefresh()
+                    self.clearContent()
+                    continue
+                }
+                guard book.inShelfId == bookId else { continue }
+                self.applyBookUpdate(book, container: container)
+                if self.positionObserverTask == nil { self.observePositions(for: book, observationID: id) }
+            }
+        }
+        let downloadSnapshots = container.downloadManager.downloadSnapshots()
+        activeDownloads = container.downloadManager.activeDownloads
+        activeDownloadsTask = Task { [weak self] in
+            for await snapshot in downloadSnapshots {
+                guard !Task.isCancelled, self?.observationID == id else { return }
                 self?.applyDownloadSnapshot(snapshot)
             }
         }
-        dismissTask?.cancel()
         let dismissEvents = container.dismissAllEvents()
         dismissTask = Task { [weak self] in
             for await _ in dismissEvents {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self?.observationID == id else { return }
                 self?.pendingReading = nil
             }
         }
-        
-        guard let calibreBook = container.bookRepository.getBook(id: bookId) else {
-            print("Error: CalibreBook not found for primary key \(bookId)")
-            return false
-        }
-        self.calibreBook = calibreBook
-        
-        if self.listVM == nil {
-            self.listVM = ReadingPositionListViewModel(
-                container: container, book: calibreBook, positions: container.readingPositionRepository.getPositions(for: calibreBook)
-            )
-        } else {
-            self.listVM?.book = calibreBook
-            self.listVM?.positions = container.readingPositionRepository.getPositions(for: calibreBook)
-        }
-        
-        bookObserverTask?.cancel()
-        let bookUpdates = container.bookRepository.observeBook(id: bookId)
-        bookObserverTask = Task { [weak self, weak container] in
-            guard let container else { return }
-            for await updatedCalibreBook in bookUpdates {
-                guard !Task.isCancelled, let updatedCalibreBook else { continue }
-                await MainActor.run { [weak self, weak container] in
-                    guard let self, let container else { return }
-                    self.applyBookUpdate(updatedCalibreBook, container: container)
-                }
+        return calibreBook != nil
+    }
+
+    private func clearContent() {
+        calibreBook = nil
+        pageState = .unavailable
+        listVM = nil
+        refreshState = .idle
+        helperConfiguration = nil
+        readingProgressSummary = nil
+        hasHistory = false
+        hasReadableFile = false
+        pendingReading = nil
+        positionObserverTask?.cancel()
+        positionObserverTask = nil
+    }
+
+    private func observePositions(for book: CalibreBook, observationID: UUID) {
+        let updates = readingPositionRepository.observePositions(for: book)
+        positionObserverTask = Task { [weak self] in
+            for await positions in updates {
+                guard !Task.isCancelled, let self, self.observationID == observationID,
+                      let currentBook = self.calibreBook, currentBook.inShelfId == book.inShelfId else { return }
+                self.applyPositions(positions, book: currentBook)
             }
         }
-        return true
     }
-    
-    func fetchMetadata(book: CalibreBook) {
-        guard let container = container else { return }
+
+    func cancelRefresh() {
+        refreshID = nil
         fetchTask?.cancel()
-        fetchTask = Task { [weak self, weak container] in
-            guard let self, let container else { return }
-            await container.bookManager.getBooksMetadata(
-                request: .init(
-                    library: book.library,
-                    books: [book.id],
-                    getAnnotations: true
-                )
-            )
-            guard !Task.isCancelled else { return }
-            container.refreshDatabase()
-            guard let updatedBook = container.bookRepository.getBook(id: book.inShelfId) else { return }
-            self.applyBookUpdate(updatedBook, container: container)
-        }
+        fetchTask = nil
+        if refreshState == .refreshing { refreshState = .idle }
     }
-    
-    func refresh(book: CalibreBook) {
-        guard let container = container else { return }
-        if container.updatingMetadata {
-            // TODO cancel logic if needed
-        } else {
-            if let coverUrl = book.coverURL {
-                container.coverCache.removeCover(for: coverUrl)
+
+    func fetchMetadata(book: CalibreBook) {
+        guard loadedBookId == book.inShelfId, calibreBook != nil else { return }
+        cancelRefresh()
+        if book.library.server.isLocal {
+            refreshState = .local
+            return
+        }
+        let requestID = UUID()
+        refreshID = requestID
+        refreshState = .refreshing
+        let refresh = refreshMetadata
+        fetchTask = Task { [weak self] in
+            let results = await refresh(.init(library: book.library, books: [book.id], getAnnotations: true))
+            guard !Task.isCancelled, let self, self.refreshID == requestID,
+                  self.loadedBookId == book.inShelfId else { return }
+            self.refreshID = nil
+            self.fetchTask = nil
+            guard let updatedBook = self.bookRepository.getBook(id: book.inShelfId),
+                  updatedBook.inShelfId == book.inShelfId,
+                  let container = self.container else {
+                self.clearContent()
+                self.refreshState = .idle
+                return
             }
-            fetchMetadata(book: book)
+            self.applyBookUpdate(updatedBook, container: container)
+            switch results[book.id] ?? .failed("The server did not return this book's details.") {
+            case .updated: self.refreshState = .synced
+            case .unavailable: self.refreshState = .unavailable
+            case .failed(let message): self.refreshState = .failed(message)
+            case .cancelled: self.refreshState = .idle
+            }
         }
     }
-    
+
+    func refresh(book: CalibreBook) {
+        guard loadedBookId == book.inShelfId else { return }
+        if let coverURL = book.coverURL { container?.coverCache.removeCover(for: coverURL) }
+        fetchMetadata(book: book)
+    }
+
     func downloadOrClearCache(book: CalibreBook) {
         guard let container = container else { return }
         pendingReading = nil
@@ -180,7 +260,8 @@ class BookDetailViewModel: ObservableObject {
     }
 
     func readBook(book: CalibreBook) {
-        guard let container, pendingReading == nil else { return }
+        guard let container, pendingReading == nil,
+              loadedBookId == nil || loadedBookId == book.inShelfId else { return }
         alertItem = nil
 
         if let info = cachedReaderInfo(for: book) {
@@ -258,7 +339,7 @@ class BookDetailViewModel: ObservableObject {
 
     func isWaitingToRead(_ book: CalibreBook) -> Bool { pendingReading?.bookID == book.inShelfId }
 
-    func canRead(_ book: CalibreBook) -> Bool { cachedReaderInfo(for: book) != nil }
+    func canRead(_ book: CalibreBook) -> Bool { calibreBook?.inShelfId == book.inShelfId && hasReadableFile }
 
     func readActionTitle(for book: CalibreBook) -> String {
         isWaitingToRead(book) ? "Downloading…" : (canRead(book) ? "Read" : "Download and Read")
@@ -292,10 +373,10 @@ class BookDetailViewModel: ObservableObject {
             guard let candidate = Format(rawValue: raw), format == nil || format == candidate,
                   info.cached, container.sessionManager.getPreferredReader(for: candidate) != .UNSUPPORTED,
                   let url = getSavedUrl(book: book, format: candidate) else { return false }
-            return FileManager.default.fileExists(atPath: url.path)
+            return fileExists(url)
         }
         guard !readyBook.formats.isEmpty else { return nil }
-        let positions = container.readingPositionRepository.getPositions(for: book).filter {
+        let positions = readingPositionRepository.getPositions(for: book).filter {
             guard let reader = ReaderType(rawValue: $0.readerName) else { return false }
             return readyBook.formats[reader.format.rawValue] != nil
         }
@@ -305,6 +386,7 @@ class BookDetailViewModel: ObservableObject {
 
     private func applyDownloadSnapshot(_ snapshot: [URL: BookFormatDownload]) {
         activeDownloads = snapshot
+        updateReadableFile()
         guard let pending = pendingReading else { return }
         guard container?.downloadManager.activeDownloads.values.contains(where: { $0.id == pending.downloadID }) == true else {
             pendingReading = nil
@@ -316,7 +398,7 @@ class BookDetailViewModel: ObservableObject {
         pendingReading = nil
         switch completion {
         case .succeeded:
-            guard let book = container?.bookRepository.getBook(id: pending.bookID),
+            guard let book = bookRepository.getBook(id: pending.bookID),
                   calibreBook?.inShelfId == pending.bookID,
                   let info = cachedReaderInfo(for: book, format: pending.format) else {
                 alertItem = AlertItem(id: "Cannot locate book file", msg: "Please download the book again.")
@@ -330,13 +412,22 @@ class BookDetailViewModel: ObservableObject {
     }
 
     private func applyBookUpdate(_ book: CalibreBook, container: AppContainer) {
+        guard book.inShelfId == loadedBookId else { return }
         calibreBook = book
+        pageState = .content
+        helperConfiguration = container.serverManager.queryServerDSReaderHelper(server: book.library.server)?.configuration
+        if listVM == nil {
+            listVM = ReadingPositionListViewModel(container: container, book: book,
+                positions: readingPositionRepository.getPositions(for: book))
+        }
         listVM?.book = book
-        listVM?.positions = container.readingPositionRepository.getPositions(for: book)
+        applyPositions(readingPositionRepository.getPositions(for: book), book: book)
+        updateReadableFile()
     }
     
     func showReadingPositionHistory(book: CalibreBook) {
         pendingReading = nil
+        cancelRefresh()
         prepareReadingPositionHistory(book: book)
         isReturningFromHistory = true
         isReadingPositionHistoryActive = true
@@ -356,6 +447,7 @@ class BookDetailViewModel: ObservableObject {
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
         pendingReading = nil
+        cancelRefresh()
         guard let container = container else { return false }
         guard let reader = container.sessionManager.formatReaderMap[format]?.first else { return false }
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
@@ -432,9 +524,7 @@ class BookDetailViewModel: ObservableObject {
         )
     }
 
-    var updatingMetadata: Bool {
-        return container?.updatingMetadata ?? false
-    }
+    var updatingMetadata: Bool { refreshState == .refreshing }
 
     func parseTOCNode(node: NSDictionary, level: Int) -> String {
         guard let childrenNode = node["children"] as? NSArray else {
@@ -456,25 +546,39 @@ class BookDetailViewModel: ObservableObject {
         case goodreadsProgress(String)
         case localProgress(percent: Double, device: String)
     }
-    
-    func getReadingProgressSummary(for book: CalibreBook) -> ReadingProgressSummary? {
-        guard let repository = container?.readingPositionRepository else { return nil }
-        let goodreadsSync = goodreadsSyncPreferences(for: book.library)
-        
-        if let readDateGR = book.readDateGRByLocale(pluginGoodreadsSync: goodreadsSync) {
-            return .goodreadsReadDate(readDateGR)
-        } else if let readProgressGR = book.readProgressGRDescription(pluginGoodreadsSync: goodreadsSync) {
-            return .goodreadsProgress(readProgressGR)
-        } else if let position = repository.getPosition(for: book, policy: .latestForDevice(deviceName))
-                    ?? repository.getPosition(for: book, policy: .latest) {
-            return .localProgress(percent: position.lastProgress, device: position.id)
-        } else {
-            return nil
+
+    private func updateReadableFile() {
+        guard let book = calibreBook, let container else { hasReadableFile = false; return }
+        hasReadableFile = book.formats.contains { raw, info in
+            guard info.cached, let format = Format(rawValue: raw),
+                  container.sessionManager.getPreferredReader(for: format) != .UNSUPPORTED,
+                  let url = getSavedUrl(book: book, format: format) else { return false }
+            return fileExists(url)
         }
     }
 
+    private func applyPositions(_ positions: [BookDeviceReadingPosition], book: CalibreBook) {
+        listVM?.positions = positions
+        hasHistory = !positions.isEmpty
+        let goodreadsSync = goodreadsSyncPreferences(for: book.library)
+        if let date = book.readDateGRByLocale(pluginGoodreadsSync: goodreadsSync) {
+            readingProgressSummary = .goodreadsReadDate(date)
+        } else if let progress = book.readProgressGRDescription(pluginGoodreadsSync: goodreadsSync) {
+            readingProgressSummary = .goodreadsProgress(progress)
+        } else if let position = ReadingPositionSelectionPolicy.latestForDevice(deviceName).select(from: positions)
+                    ?? ReadingPositionSelectionPolicy.latest.select(from: positions) {
+            readingProgressSummary = .localProgress(percent: position.lastProgress, device: position.id)
+        } else {
+            readingProgressSummary = nil
+        }
+    }
+
+    func getReadingProgressSummary(for book: CalibreBook) -> ReadingProgressSummary? {
+        calibreBook?.inShelfId == book.inShelfId ? readingProgressSummary : nil
+    }
+
     func dsReaderHelperConfiguration(for library: CalibreLibrary) -> CalibreDSReaderHelperConfiguration? {
-        container?.serverManager.queryServerDSReaderHelper(server: library.server)?.configuration
+        calibreBook?.library.id == library.id ? helperConfiguration : nil
     }
 
     func goodreadsSyncPreferences(for library: CalibreLibrary) -> CalibreGoodreadsSyncPrefs.PluginPrefs {
@@ -501,8 +605,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func hasReadingHistory(for book: CalibreBook) -> Bool {
-        guard let repository = container?.readingPositionRepository else { return false }
-        return !repository.getPositions(for: book).isEmpty
+        calibreBook?.inShelfId == book.inShelfId && hasHistory
     }
     
     func isFormatDownloading(book: CalibreBook, format: Format) -> Bool {
@@ -519,13 +622,22 @@ class BookDetailViewModel: ObservableObject {
     
     func getFormatStatusText(formatInfo: FormatInfo) -> String {
         if formatInfo.cached {
+            if remoteFreshnessUnknown { return "Downloaded" }
             return formatInfo.cacheUptoDate ? "Up to date" : "Server has update"
         } else {
             return "Not cached"
         }
     }
     
+    private var remoteFreshnessUnknown: Bool {
+        switch refreshState {
+        case .failed, .unavailable: return true
+        default: return false
+        }
+    }
+
     func getFormatStatusIcon(formatInfo: FormatInfo) -> String {
+        if formatInfo.cached && remoteFreshnessUnknown { return "checkmark.circle" }
         return formatInfo.cacheUptoDate ? "hand.thumbsup" : "hand.thumbsdown"
     }
 }

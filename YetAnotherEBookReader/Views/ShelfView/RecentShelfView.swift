@@ -10,6 +10,7 @@ import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct RecentShelfView: View {
+    @Environment(\.appContainer) var container
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     @ObservedObject var viewModel: RecentShelfViewModel
@@ -315,7 +316,7 @@ struct RecentShelfView: View {
     private var routeDestination: some View {
         switch viewModel.displayedRoute {
         case .bookDetail(let bookId):
-            BookDetailView(bookId: bookId, viewMode: .SHELF)
+            BookDetailView(bookId: bookId, viewMode: .SHELF, container: container)
                 .navigationBarTitleDisplayMode(.inline)
                 .id(bookId)
         case .readingHistory(let bookId):

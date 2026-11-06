@@ -316,6 +316,12 @@ class MockBookRepository: BookRepositoryProtocol {
 }
 
 class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
+    let positionsBroadcaster = TestAsyncStreamBroadcaster<[BookDeviceReadingPosition]>()
+    @MainActor
+    func observePositions(for book: CalibreBook) -> AsyncStream<[BookDeviceReadingPosition]> {
+        positionsBroadcaster.stream(initialValue: getPositionsReturn)
+    }
+
     var getPositionCalled = false
     var getPositionBookIdParam: String?
     var getPositionPolicyParam: ReadingPositionSelectionPolicy?

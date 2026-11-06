@@ -10,6 +10,7 @@ import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct SectionShelfView: View {
+    @Environment(\.appContainer) var container
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     @ObservedObject var viewModel: SectionShelfViewModel
@@ -334,7 +335,7 @@ struct SectionShelfView: View {
             )
         ) {
             if let bookId = viewModel.displayedBookDetailId {
-                BookDetailView(bookId: bookId, viewMode: .SHELF)
+                BookDetailView(bookId: bookId, viewMode: .SHELF, container: container)
                     .navigationBarTitleDisplayMode(.inline)
                     .id(bookId)
             }

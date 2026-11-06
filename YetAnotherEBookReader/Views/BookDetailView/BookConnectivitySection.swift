@@ -15,37 +15,36 @@ struct BookConnectivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if viewModel.updatingMetadataStatus == "Success" {
-                HStack {
-                    metadataIcon(systemName: "checkmark.shield")
-                    Text("In Sync with Server")
-                }
-            } else if viewModel.updatingMetadataStatus == "Local File" {
-                HStack {
-                    metadataIcon(systemName: "doc")
-                    Text("Local File")
-                }
-            } else if viewModel.updatingMetadataStatus == "Deleted" {
-                HStack {
-                    metadataIcon(systemName: "xmark.shield")
-                    Text("Been Deleted on Server")
-                }
-            } else if viewModel.updatingMetadataStatus == "Updating" {
-                HStack {
+            HStack {
+                switch viewModel.refreshState {
+                case .idle:
+                    metadataIcon(systemName: "arrow.clockwise")
+                    Text("Details Saved on This Device")
+                case .refreshing:
                     metadataIcon(systemName: "arrow.clockwise")
                     Text("Syncing with Server")
-                }
-            } else {
-                VStack(alignment: .trailing, spacing: 4) {
-                    Button(action:{
-                        alertItem = AlertItem(id: "Sync Error", msg: viewModel.updatingMetadataStatus)
-                    }) {
-                        HStack {
-                            metadataIcon(systemName: "exclamationmark.shield")
-                            Text("Sync Error Encounted")
-                        }
+                case .synced:
+                    metadataIcon(systemName: "checkmark.shield")
+                    Text("In Sync with Server")
+                case .local:
+                    metadataIcon(systemName: "doc")
+                    Text("Local File")
+                case .unavailable:
+                    metadataIcon(systemName: "xmark.shield")
+                    Text("Unavailable on Server")
+                case .failed(let message):
+                    metadataIcon(systemName: "exclamationmark.shield")
+                    Button("Refresh Failed") {
+                        alertItem = AlertItem(id: "Refresh Failed", msg: message)
                     }
                 }
+            }
+            if viewModel.refreshState == .unavailable {
+                Text("The server cannot provide this book. Downloaded files remain available to read.")
+                    .font(.caption)
+            }
+            if case .failed = viewModel.refreshState {
+                Button("Retry Refresh") { viewModel.refresh(book: book) }
             }
             HStack {
                 metadataIcon(systemName: "scroll")

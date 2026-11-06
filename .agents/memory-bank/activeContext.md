@@ -5,6 +5,70 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Book Detail Modernization BD1 (2026-11-06, branch)
+
+`codex/book-detail-bd1` starts from main `ed117bc2df708e8433ce77c1a2c0045346d5d360`,
+including first-book P1–4. The connected GitHub API reverified main after shell
+DNS failed. The pre-existing uncommitted Folio layered-image analysis is
+preserved separately from this commit. BD1 and its review fix are recorded on this branch.
+
+Book Detail receives its container explicitly and owns loading/content/local
+unavailable plus per-request refresh states. Full book identity, refresh UUIDs
+and observer generations reject late/cancelled answers. Leaving cancels refresh
+and observations; History return reattaches local data without a network fetch.
+`CalibreBookManager.getBooksMetadata` returns per-book results while retaining
+legacy persistence/broadcasts/callers. Server null preserves readable caches;
+HTTP failure messages retain status without rendering response bodies.
+
+Reading availability, progress/history and helper configuration are event-driven
+snapshots. Rendering does no repository/file queries or ReaderInfo preparation.
+Read clicks still confirm files and reuse ReadingSessionManager's format/device
+position policy. Repository-owned, main-actor position streams publish values,
+not Realm objects. The list model now honors its supplied position snapshot.
+P3's full ID/download UUID/originating workspace, one successful ready-file open,
+retry, pause/resume and cancel/leave/history/preview intent revocation are kept.
+Unavailable/failed refreshes label cached formats Downloaded. The iOS 15 native
+journey reproduced frozen download/refresh toolbar labels even after content
+updated; one hosted observing View inside toolbar items fixes both, retains the
+history button, and always uses the model's current book.
+
+Pre-review verification: **999 unit tests** (22 skips, two existing expected PDFKit
+failures) and **five regular UI journeys** pass on iPhone 17 / iOS 26.5.
+Related **206-unit** runs pass on both systems; after the toolbar fix, **107**
+iOS 15 units pass, then the final **54 BookDetail units + two Recent/Browse UI
+journeys** pass. All **four real-Calibre native journeys** (BD1 + P3 on iPhone 17
+and iPhone 7 / iOS 15.5), final Catalyst build, changed-Swift parse and diff checks
+pass. Native executable/debug-dylib hashes match the final product. The old
+availability test now expects Readium PDF on iOS 15, honoring the existing iOS 16
+YabrPDF boundary. Red missing/deleted-book and stale-toolbar proofs are retained.
+Evidence, summaries and source/binary hashes: `/tmp/YabrBookDetailBD1/verification.json`.
+
+Boundary: no physical device, iPad, Catalyst interaction, HTTPS/Digest or large-file
+stress run. Native reading uses EPUB/Folio and local resume; PDF/CBZ, pause/resume
+and multi-workspace/open-once invariants have unit coverage. The existing read-only
+proxy does not forward sync POSTs (501), so native remote position/annotation
+writes are unverified. BD2 layout, BD3 format/preview request ownership and BD4
+WebView/auxiliary cleanup remain separate; preview manifest task ownership is
+unchanged. No package pins, Realm schema, app version or build number changed.
+
+### BD1 review follow-up: cancellation after persistence (2026-11-06)
+
+Confirmed the review finding with two deterministic real-Realm regressions:
+cancellation before the queued write commits and after commit both left stale
+shelf values; clearing cache then overwrote the new title. Once persistence is
+queued, the manager now completes snapshot/status reconciliation and notifications
+before returning cancelled. Cancellation prevents new annotation work, uploads
+and retries, including uploads after an already-running annotation sync finishes.
+Book notifications prefer the committed snapshot because the main Realm may not
+yet have advanced to the background commit.
+
+Both red cases reproduce on the previous implementation. Final **104 focused
+unit tests** pass (BookDetailViewModel, CalibreBookManager, BookMetadataSyncWorker,
+BookDownloadManager), including notification content and preserving metadata
+through cache clearing. Swift parse and diff checks pass. This follow-up did not
+repeat the full suite, native UI journeys or Catalyst; the results above describe
+the pre-review state. Evidence: `/tmp/YabrBD1CancelReview/verification.json`.
+
 ## First Book Connection Recovery P4 (2026-11-06, branch)
 
 `codex/first-book-connection-recovery` starts at latest main `7d2c442c`,

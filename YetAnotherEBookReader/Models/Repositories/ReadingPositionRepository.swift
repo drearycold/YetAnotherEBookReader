@@ -11,6 +11,7 @@ import OSLog
 
 protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
+    @MainActor func observePositions(for book: CalibreBook) -> AsyncStream<[BookDeviceReadingPosition]>
     func getPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
     func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
@@ -142,6 +143,28 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             .filter(NSPredicate(format: "bookId == %@", bookId))
             .sorted(byKeyPath: "epoch", ascending: false)
         return objects.map { $0.toDomain() }
+    }
+
+    /// Subscribe on the main actor; only detached domain values cross the stream boundary.
+    @MainActor
+    func observePositions(for book: CalibreBook) -> AsyncStream<[BookDeviceReadingPosition]> {
+        guard let realm = getRealm(server: book.library.server) else {
+            return AsyncStream { $0.yield([]); $0.finish() }
+        }
+        let positions = realm.objects(BookDeviceReadingPositionRealm.self)
+            .filter("bookId == %@", book.bookPrefId)
+            .sorted(byKeyPath: "epoch", ascending: false)
+        return AsyncStream { continuation in
+            let token = positions.observe(on: .main) { change in
+                switch change {
+                case .initial(let values), .update(let values, _, _, _):
+                    continuation.yield(values.map { $0.toDomain() })
+                case .error:
+                    continuation.finish()
+                }
+            }
+            continuation.onTermination = { _ in token.invalidate() }
+        }
     }
 
     func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition] {

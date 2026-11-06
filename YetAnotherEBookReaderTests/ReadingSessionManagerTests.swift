@@ -48,7 +48,11 @@ final class ReadingSessionManagerTests: XCTestCase {
     
     func testFormatReaderMap_storesPreference() {
         XCTAssertEqual(manager.formatReaderMap[.EPUB], [.YabrEPUB, .ReadiumEPUB])
-        XCTAssertEqual(manager.formatReaderMap[.PDF], [.YabrPDF, .ReadiumPDF])
+        if #available(iOS 16.0, macCatalyst 16.0, *) {
+            XCTAssertEqual(manager.formatReaderMap[.PDF], [.YabrPDF, .ReadiumPDF])
+        } else {
+            XCTAssertEqual(manager.formatReaderMap[.PDF], [.ReadiumPDF])
+        }
         XCTAssertEqual(manager.formatReaderMap[.CBZ], [.ReadiumCBZ])
     }
 

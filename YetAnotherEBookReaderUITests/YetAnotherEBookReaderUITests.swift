@@ -985,6 +985,61 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("p3-explicit-read-after-return")
     }
 
+    func testDetailRefreshKeepsCachedReadAndHistoryReturn() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DETAIL_REFRESH_CONTROL_URL"] == nil,
+                      "Requires the BD1 metadata-control proxy")
+        try configureFixture("success", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
+        try downloadMode("success")
+        connect(name: "BD1 Detail Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        element("browse.book.mock").tap()
+        waitForReadLabel("Download and Read")
+        element("book-detail.download-only").tap()
+        waitForReadLabel("Read")
+        XCTAssertTrue(app.buttons["Clear Downloaded Files"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.buttons["Refresh Book Details"].waitForExistence(timeout: 3), app.debugDescription)
+
+        try configureFixture("failed", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
+        element("book-detail.refresh").tap()
+        let retry = app.buttons["Retry Refresh"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 20), app.debugDescription)
+        waitForReadLabel("Read")
+        capture("bd1-refresh-failed-cache-readable")
+        try configureFixture("success", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
+        for _ in 0..<6 {
+            if retry.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(retry.isHittable, app.debugDescription)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["In Sync with Server"].waitForExistence(timeout: 20), app.debugDescription)
+
+        try configureFixture("unavailable", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
+        element("book-detail.refresh").tap()
+        XCTAssertTrue(app.staticTexts["Unavailable on Server"].waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Downloaded"].exists, app.debugDescription)
+        capture("bd1-server-unavailable-cache-retained")
+        let read = element("book-detail.read")
+        for _ in 0..<6 {
+            if read.isHittable { break }
+            app.swipeDown()
+        }
+        waitForReadLabel("Read")
+        read.tap()
+        element("reader.folio.content")
+        closeReaderWorkspace()
+        element("book-detail.history").tap()
+        element("screen.reading-history")
+        back()
+        element("screen.book-detail")
+        waitForReadLabel("Read")
+        XCTAssertTrue(app.staticTexts["Unavailable on Server"].exists, app.debugDescription)
+        capture("bd1-history-return-preserves-detail")
+        try configureFixture("success", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
+    }
+
     private func waitForVisibleBody(_ body: XCUIElement) {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: body)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, app.debugDescription)
@@ -1029,7 +1084,11 @@ final class CalibreOnboardingUITests: XCTestCase {
     }
 
     private func downloadMode(_ mode: String) throws {
-        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["YABR_DOWNLOAD_READ_CONTROL_URL"])
+        try configureFixture(mode, environmentKey: "YABR_DOWNLOAD_READ_CONTROL_URL")
+    }
+
+    private func configureFixture(_ mode: String, environmentKey: String) throws {
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment[environmentKey])
         let url = try XCTUnwrap(URL(string: base + "?mode=" + mode))
         let configured = expectation(description: "Configure download transport")
         URLSession.shared.dataTask(with: url) { _, response, error in
