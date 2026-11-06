@@ -6,6 +6,52 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **BD1 cancellation review fix (2026-11-06):** Reproduced cancellation on
+  either side of the real Realm metadata commit leaving old shelf snapshots and
+  allowing clearCache to overwrite refreshed metadata. Queued persistence now
+  completes memory/status reconciliation and notifications before returning
+  cancelled; subsequent annotation work/uploads/retries remain cancellation-gated.
+  Notifications use the committed book value when available, avoiding an old
+  main-Realm read. Both new red regressions pass after the fix; all **104 focused
+  tests** and Swift parse/diff checks pass. Full/UI/Catalyst results below precede
+  this follow-up and were not rerun. Evidence: `/tmp/YabrBD1CancelReview/verification.json`.
+
+- **Book Detail Modernization BD1 (2026-11-06, branch):**
+  `codex/book-detail-bd1` is based on reverified main `ed117bc2` after P1–4.
+  Pre-existing Folio image analysis is kept outside this commit.
+  - Explicit container injection, local page/refresh states, full book ID +
+    request UUID and scoped observer generations isolate books/retries/cancellation.
+    Missing/deleted local books clear content/history instead of spinning or
+    retaining another book. Manager per-book outcomes preserve existing callers;
+    server null leaves caches readable and HTTP errors have bounded status text.
+  - Reading/file availability, progress/history and helper config are snapshots
+    updated by book/download/position events. Realm position observation stays
+    in its repository and publishes values. Body/title/icon evaluation never
+    queries repositories/files or prepares ReaderInfo; actual reading checks the
+    file and reuses the session policy. History return reconnects observers without
+    refreshing remotely. The list initializer uses the passed position snapshot.
+  - P3 full ID/download UUID/original workspace, one successful ready-file open,
+    retry/pause/resume, cancel/leave/history/preview revocation remain verified.
+    Unavailable/failed server refreshes say Downloaded for saved formats. A native
+    iOS 15 regression reproduced stale ToolbarContent labels (Download Only and
+    Cancel Refresh after success). A single private hosted observing View fixes
+    both toolbar placements and reads the current book; the clock stays visible.
+  - Final iPhone 17: **999 units**, 22 skips, two existing expected PDFKit failures,
+    zero unexpected failures, and **five regular UI journeys** pass. Related
+    **206-unit** runs pass on both systems; post-toolbar iOS 15 **107 units**, then
+    final **54 BookDetail units + two regular detail/history UI journeys** pass.
+    **Four real-Calibre BD1/P3 native journeys**, on iPhone 17/iOS 26.5 and iPhone
+    7/iOS 15.5, and final Catalyst build pass. Native code hashes match the product.
+    Swift parse/diff/persistence-boundary checks pass. The availability-test
+    expectation is corrected for the already-supported iOS 15 Readium PDF fallback.
+  - No physical-device, iPad, Catalyst interaction, HTTPS/Digest or large-file
+    stress verification. Native EPUB/Folio/local resume; PDF/CBZ, pause/resume and
+    workspace/open-once have unit coverage. Existing read-only fixture returns 501
+    for sync POSTs, so native remote position/annotation writes are unverified.
+    BD2–4 remain separate; preview manifest ownership, pins/schema/version/build
+    are unchanged. Earlier harness failures and red regressions are retained.
+    Complete evidence: `/tmp/YabrBookDetailBD1/verification.json`.
+
 - **Persistent Active Reader Restore (2026-07-09, complete):** Added lightweight persistence for open reader tabs across app restarts. `ReadingSessionManager` now writes `ReaderPresentationSnapshot` records (presentation id, book shelf id, format, reader type, source, order, active flag) through an injectable `ReaderPresentationPersistenceStore`; production uses `UserDefaults`, while mock/test containers use an in-memory store to avoid cross-test leakage. Restore is one-shot after database readiness: snapshots are resolved through `bookRepository`, invalid/deleted/missing-file entries are skipped and cleaned up, and `ReaderInfo` is rebuilt with the saved format/reader while reading position comes from the current device's latest same-reader repository position. `MainViewModel` attaches restored presentations to the first ready reader workspace, restores the persisted active tab, and shows the reader overlay. Close removes persisted snapshots; hide, temporary unmount, and transfer do not. Validation passed: `git diff --check`, `xcrun simctl shutdown all`, focused `MainViewModelTests` + `ReadingSessionManagerTests` (46 tests), and standard iOS Simulator build.
 - **Reader Tab Hot-Mount Position Restore (2026-07-09, complete):** Optimized reader tab switching after the active-only mount review fix. `ReaderWorkspaceViewModel` now keeps a bounded hot-mount LRU set (active reader plus the two most recent inactive readers), while `ReaderWorkspaceView` renders only those mounted presentations and keeps inactive readers hidden, non-hit-testable, and inaccessible. Added per-presentation lifecycle events so tab switches, hides, scene backgrounding, temporary LRU unmounts, confirmed transfers, and real closes are distinguishable; `YabrEBookReaderNavigationController` now flushes/end sessions on deactivate/background/unmount without treating tab switches or temporary unmounts as reader closes. `ReadingSessionManager` records latest positions per `ReaderPresentation` and resolves fresh `ReaderInfo` for remounts so LRU cache misses restore the last known position without changing reader format/type. Validation passed: `git diff --check`, `xcrun simctl shutdown all`, focused `MainViewModelTests` + `ReadingSessionManagerTests` (37 tests), and reader-related `FolioReaderProviderBookIdTests` + `YabrPDFViewControllerTests` + `YabrReadiumReaderViewControllerTests` (43 tests).
 - **Reader Workspace iPad Multi-Window Review Fixes (2026-07-09, complete):** Removed ambiguous global workspace routing from user-driven reader opens by adding explicit `targetWorkspaceID` support to `AppContainer.openReader(...)` and threading the initiating `ReaderWorkspaceViewModel.id` through Recent Shelf, Book Detail, Reading Position, and import-result open paths. Added a SwiftUI `readerWorkspaceID` environment value for view-created view models. `ReaderWorkspaceView` now mounts only the active `ReaderPresentation` instead of keeping hidden reader controllers alive for inactive tabs, while the tab list still tracks all registered presentations. Reader move-to-new-window now waits for destination scene attachment before source detach: destination scene handling publishes a transfer-completion event, non-target workspaces detach only after that event, and transfer marking happens at actual detach time so close handling is skipped only for confirmed transfers. Hardened `ReaderWorkspaceViewModel` attach/registry handling so scene activity attach cannot be overwritten by stale queued registry snapshots. Validation passed: `git diff --check`, `xcrun simctl shutdown all`, and focused `xcodebuild test ... -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests` (31 tests).

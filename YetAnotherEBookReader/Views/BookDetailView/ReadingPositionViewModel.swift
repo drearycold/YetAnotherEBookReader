@@ -26,7 +26,7 @@ class ReadingPositionListViewModel: ObservableObject {
     init(container: AppContainer, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.container = container
         self.book = book
-        self.positions = container.readingPositionRepository.getPositions(for: book)
+        self.positions = positions
 
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1

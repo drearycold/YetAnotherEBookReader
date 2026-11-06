@@ -5,7 +5,9 @@ Run against a calibre server containing its Quick Start Guide (book ID 1):
     python3 .github/scripts/calibre-download-proxy.py --upstream http://127.0.0.1:8080
 
 Use http://127.0.0.1:18082 as YABR_ONBOARDING_SINGLE_URL and append /p3-control
-for YABR_DOWNLOAD_READ_CONTROL_URL. Other onboarding tests use their usual setup.
+for YABR_DOWNLOAD_READ_CONTROL_URL. BD1 uses /bd1-control as
+YABR_DETAIL_REFRESH_CONTROL_URL, with success/failed/unavailable metadata modes.
+Other onboarding tests use their usual setup.
 The proxy forwards read requests; its control endpoint changes only fixture state.
 """
 
@@ -20,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 def serve(upstream, port):
-    state = {"mode": "success", "attempts": 0}
+    state = {"mode": "success", "attempts": 0, "detail_mode": "success"}
     lock = threading.Lock()
     # A system proxy must never send these loopback requests to another machine.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -40,6 +42,25 @@ def serve(upstream, port):
                     body = json.dumps(state).encode()
                 self.reply(200, body, "application/json")
                 return
+            if parsed.path == "/bd1-control":
+                mode = urllib.parse.parse_qs(parsed.query).get("mode", ["success"])[0]
+                if mode not in ("success", "failed", "unavailable"):
+                    self.reply(400, b"Unknown detail mode", "text/plain")
+                    return
+                with lock:
+                    state["detail_mode"] = mode
+                self.reply(200, b"{}", "application/json")
+                return
+            if parsed.path.startswith("/ajax/books/"):
+                with lock:
+                    detail_mode = state["detail_mode"]
+                if detail_mode == "failed":
+                    self.reply(503, b"Temporarily unavailable", "text/plain")
+                    return
+                if detail_mode == "unavailable":
+                    ids = urllib.parse.parse_qs(parsed.query).get("ids", [""])[0].split(",")
+                    self.reply(200, json.dumps({book_id: None for book_id in ids}).encode(), "application/json")
+                    return
             if parsed.path.startswith("/get/EPUB/"):
                 with lock:
                     state["attempts"] += 1

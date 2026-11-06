@@ -22,6 +22,14 @@ struct CalibreBooksMetadataRequest {
     let getAnnotations: Bool
 }
 
+/// The answer for one book in this request; independent of the service's legacy global status.
+enum BookMetadataRefreshResult: Equatable {
+    case updated
+    case unavailable
+    case failed(String)
+    case cancelled
+}
+
 struct CalibreBooksTask {
     let request: CalibreBooksMetadataRequest
     var library: CalibreLibrary {

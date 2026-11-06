@@ -112,6 +112,372 @@ class BookDetailViewModelTests: XCTestCase {
         }
     }
 
+    func testMissingBookClearsPreviousDetail() throws {
+        XCTAssertFalse(viewModel.setup(bookId: "missing-book"))
+        XCTAssertNil(viewModel.calibreBook)
+        XCTAssertNil(viewModel.listVM)
+    }
+
+    func testDeletedBookClearsObservedDetail() async throws {
+        mockAppContainer.bookRepository.deleteBook(id: mockCalibreBook.inShelfId)
+        await waitUntil { self.viewModel.calibreBook == nil }
+        XCTAssertNil(viewModel.calibreBook)
+        XCTAssertNil(viewModel.listVM)
+    }
+
+    func testConcurrentRefreshesUseEachBooksOwnResult() async throws {
+        let controller = DetailRefreshController()
+        let firstBook = try XCTUnwrap(mockCalibreBook)
+        let secondBook = CalibreBook(id: firstBook.id,
+            library: CalibreLibrary(server: firstBook.library.server, key: "other", name: "Other"))
+        let firstRepo = MockBookRepository()
+        firstRepo.getBookReturn = firstBook
+        let secondRepo = MockBookRepository()
+        secondRepo.getBookReturn = secondBook
+        let first = BookDetailViewModel(container: mockAppContainer, bookRepository: firstRepo,
+            refreshMetadata: controller.refresh)
+        let second = BookDetailViewModel(container: mockAppContainer, bookRepository: secondRepo,
+            refreshMetadata: controller.refresh)
+        first.onAppear(bookId: firstBook.inShelfId, targetWorkspaceID: nil)
+        second.onAppear(bookId: secondBook.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 2 }
+        XCTAssertEqual(controller.requests.map { $0.library.id }, [firstBook.library.id, secondBook.library.id])
+        controller.complete(1, with: .updated)
+        await waitUntil { second.refreshState == .synced }
+        XCTAssertEqual(first.refreshState, .refreshing)
+        mockAppContainer.updatingMetadataStatus = "Deleted"
+        controller.complete(0, with: .failed("First server failed"))
+        await waitUntil { first.refreshState == .failed("First server failed") }
+        XCTAssertEqual(second.refreshState, .synced)
+        XCTAssertEqual(first.calibreBook?.inShelfId, firstBook.inShelfId)
+        XCTAssertEqual(second.calibreBook?.inShelfId, secondBook.inShelfId)
+        first.onDisappear()
+        second.onDisappear()
+    }
+
+    func testRetryIgnoresLateFailureAndKeepsReadableCacheWhenRemoteUnavailable() async throws {
+        var book = try makeDownloadReadBook()
+        book.formats["EPUB"]?.cached = true
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try Data("EPUB".utf8).write(to: url)
+        mockAppContainer.bookRepository.saveBook(book)
+        let controller = DetailRefreshController()
+        let model = BookDetailViewModel(container: mockAppContainer, refreshMetadata: controller.refresh)
+        model.onAppear(bookId: book.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 1 }
+        model.refresh(book: book)
+        await waitUntil { controller.requests.count == 2 }
+        controller.complete(1, with: .unavailable)
+        await waitUntil { model.refreshState == .unavailable }
+        controller.complete(0, with: .failed("Late failure"))
+        await Task.yield()
+        XCTAssertEqual(model.refreshState, .unavailable)
+        XCTAssertEqual(model.getFormatStatusText(formatInfo: try XCTUnwrap(book.formats["EPUB"])), "Downloaded")
+        XCTAssertEqual(model.getFormatStatusIcon(formatInfo: try XCTUnwrap(book.formats["EPUB"])), "checkmark.circle")
+        XCTAssertEqual(model.pageState, .content)
+        XCTAssertEqual(model.readActionTitle(for: book), "Read")
+        model.readBook(book: book)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, book.inShelfId)
+        model.onDisappear()
+    }
+
+    func testSwitchingLibrariesIgnoresOldRequestAndBookObservation() async throws {
+        let book = try XCTUnwrap(mockCalibreBook)
+        var other = CalibreBook(id: book.id,
+            library: CalibreLibrary(server: book.library.server, key: "second", name: "Second"))
+        other.title = "Second Book"
+        let repository = MockBookRepository()
+        repository.getBookReturn = book
+        let controller = DetailRefreshController()
+        let model = BookDetailViewModel(container: mockAppContainer, bookRepository: repository,
+            refreshMetadata: controller.refresh)
+        model.onAppear(bookId: book.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 1 }
+        repository.getBookReturn = other
+        model.onAppear(bookId: other.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 2 }
+        controller.complete(0, with: .unavailable)
+        repository.sendObservedBook(book)
+        await Task.yield()
+        XCTAssertEqual(model.calibreBook?.inShelfId, other.inShelfId)
+        XCTAssertEqual(model.refreshState, .refreshing)
+        controller.complete(1, with: .updated)
+        await waitUntil { model.refreshState == .synced }
+        XCTAssertEqual(model.calibreBook?.title, "Second Book")
+        model.onDisappear()
+    }
+
+    func testCancelledRefreshAndDetachedObservationsCannotChangeDetail() async throws {
+        let book = try XCTUnwrap(mockCalibreBook)
+        let repository = MockBookRepository()
+        repository.getBookReturn = book
+        let controller = DetailRefreshController()
+        let model = BookDetailViewModel(container: mockAppContainer, bookRepository: repository,
+            refreshMetadata: controller.refresh)
+        model.onAppear(bookId: book.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 1 }
+        model.cancelRefresh()
+        controller.complete(0, with: .unavailable)
+        await Task.yield()
+        XCTAssertEqual(model.refreshState, .idle)
+        model.refresh(book: book)
+        await waitUntil { controller.requests.count == 2 }
+        model.onDisappear()
+        repository.sendObservedBook(nil)
+        controller.complete(1, with: .failed("Late result after leaving"))
+        await Task.yield()
+        XCTAssertEqual(model.pageState, .content)
+        XCTAssertEqual(model.refreshState, .idle)
+        XCTAssertEqual(model.calibreBook?.inShelfId, book.inShelfId)
+    }
+
+    func testMissingObservedBookCanReappearWithoutStaleHistory() async throws {
+        let repository = MockBookRepository()
+        let book = try XCTUnwrap(mockCalibreBook)
+        let model = BookDetailViewModel(container: mockAppContainer, bookRepository: repository)
+        XCTAssertFalse(model.setup(bookId: book.inShelfId))
+        XCTAssertEqual(model.pageState, .unavailable)
+        repository.sendObservedBook(book)
+        await waitUntil { model.pageState == .content }
+        XCTAssertEqual(model.calibreBook?.inShelfId, book.inShelfId)
+        repository.sendObservedBook(nil)
+        await waitUntil { model.pageState == .unavailable }
+        XCTAssertNil(model.calibreBook)
+        XCTAssertNil(model.listVM)
+        XCTAssertFalse(model.hasHistory)
+        model.onDisappear()
+    }
+
+    func testPositionEventsUpdateProgressWithoutBookMetadataChanges() async throws {
+        let positions = MockReadingPositionRepository()
+        let book = try XCTUnwrap(mockCalibreBook)
+        let model = BookDetailViewModel(container: mockAppContainer, readingPositionRepository: positions)
+        model.setup(bookId: book.inShelfId)
+        let savedPosition = BookDeviceReadingPosition(id: mockAppContainer.deviceName,
+            readerName: ReaderType.YabrEPUB.rawValue, lastReadPage: 9, lastProgress: 45, epoch: 123)
+        positions.getPositionsReturn = [savedPosition]
+        positions.positionsBroadcaster.send([savedPosition])
+        await waitUntil { model.hasHistory }
+        XCTAssertEqual(model.readingProgressSummary, .localProgress(percent: 45, device: mockAppContainer.deviceName))
+        positions.getPositionsReturn = []
+        positions.positionsBroadcaster.send([])
+        await waitUntil { !model.hasHistory }
+        XCTAssertNil(model.readingProgressSummary)
+        model.onDisappear()
+    }
+
+    func testPersistedPositionChangesUpdateDetailWithoutMetadataChanges() async throws {
+        let position = BookDeviceReadingPosition(id: mockAppContainer.deviceName,
+            readerName: ReaderType.YabrEPUB.rawValue, lastReadPage: 17, lastProgress: 68, epoch: Date().timeIntervalSince1970)
+        mockAppContainer.readingPositionRepository.savePosition(position, for: mockCalibreBook)
+        await waitUntil { self.viewModel.hasHistory }
+        XCTAssertEqual(viewModel.readingProgressSummary, .localProgress(percent: 68, device: mockAppContainer.deviceName))
+        mockAppContainer.readingPositionRepository.removePosition(deviceName: position.id, for: mockCalibreBook)
+        await waitUntil { !self.viewModel.hasHistory }
+        XCTAssertFalse(viewModel.hasHistory)
+        XCTAssertNil(viewModel.readingProgressSummary)
+    }
+
+    func testRenderingAndPresentationGettersDoNotQueryRepositoriesFilesOrPrepareReader() async throws {
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats["EPUB"] = FormatInfo(selected: true, filename: "render.epub", serverSize: 10,
+            serverMTime: Date(), cached: true, cacheSize: 10, cacheMTime: Date(), manifest: nil)
+        let repository = MockBookRepository()
+        repository.getBookReturn = book
+        let positions = MockReadingPositionRepository()
+        var fileQueries = 0
+        let model = BookDetailViewModel(container: mockAppContainer, bookRepository: repository,
+            readingPositionRepository: positions, fileExists: { _ in fileQueries += 1; return true })
+        model.setup(bookId: book.inShelfId)
+        // Drain initial stream snapshots before measuring rendering itself.
+        await Task.yield()
+        await Task.yield()
+        repository.getBookCalled = false
+        positions.getPositionsCalled = false
+        positions.createInitialCalled = false
+        let queriesBefore = fileQueries
+        let host = UIHostingController(rootView: NavigationView {
+            BookDetailContentView(viewModel: model, book: book, isCompat: true)
+                .toolbar { BookDetailToolbar(viewModel: model) }
+        })
+        host.loadViewIfNeeded()
+        host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        host.view.layoutIfNeeded()
+        for _ in 0..<50 {
+            XCTAssertEqual(model.readActionTitle(for: book), "Read")
+            XCTAssertTrue(model.canRead(book))
+            _ = model.hasReadingHistory(for: book)
+            _ = model.getReadingProgressSummary(for: book)
+            _ = model.getActiveDownload(book: book, format: .EPUB)
+            _ = model.countPagesConfiguration(for: book.library)
+        }
+        XCTAssertFalse(repository.getBookCalled)
+        XCTAssertFalse(positions.getPositionsCalled)
+        XCTAssertFalse(positions.createInitialCalled)
+        XCTAssertEqual(fileQueries, queriesBefore)
+        model.onDisappear()
+    }
+
+    func testRefreshDoesNotKeepViewModelAlive() async throws {
+        let controller = DetailRefreshController()
+        var model: BookDetailViewModel? = BookDetailViewModel(container: mockAppContainer,
+            refreshMetadata: controller.refresh)
+        model?.onAppear(bookId: mockCalibreBook.inShelfId, targetWorkspaceID: nil)
+        await waitUntil { controller.requests.count == 1 }
+        let weakModel = { [weak model] in model }
+        model = nil
+        XCTAssertNil(weakModel())
+        controller.complete(0, with: .updated)
+        await Task.yield()
+    }
+
+    func testPreviewDiscardsPendingRead() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        _ = viewModel.previewAction(book: book, format: .EPUB, formatInfo: try XCTUnwrap(book.formats["EPUB"]))
+        XCTAssertFalse(viewModel.isWaitingToRead(book))
+        try await completeReadDownload(download)
+        await Task.yield()
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testCachedReadRechecksFileAtClickTime() throws {
+        var book = try makeDownloadReadBook()
+        book.formats["EPUB"]?.cached = true
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try Data("EPUB".utf8).write(to: url)
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.setup(bookId: book.inShelfId)
+        XCTAssertTrue(viewModel.canRead(book))
+        try FileManager.default.removeItem(at: url)
+        viewModel.readBook(book: book)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+        XCTAssertTrue(viewModel.isWaitingToRead(book))
+        viewModel.cancelReadDownload(book: book)
+    }
+
+    func testSwitchingBooksRevokesTheOldDownloadReadIntent() async throws {
+        let book = try makeDownloadReadBook()
+        viewModel.readBook(book: book)
+        let download = try controlledDownload(for: book)
+        var other = CalibreBook(id: book.id,
+            library: CalibreLibrary(server: book.library.server, key: "other", name: "Other"))
+        other.title = "Other Book"
+        mockAppContainer.serverManager.addServer(server: other.library.server, libraries: [book.library, other.library])
+        mockAppContainer.bookRepository.saveBook(other)
+        XCTAssertTrue(viewModel.setup(bookId: other.inShelfId))
+        XCTAssertFalse(viewModel.isWaitingToRead(book))
+        try await completeReadDownload(download)
+        await Task.yield()
+        XCTAssertEqual(viewModel.calibreBook?.inShelfId, other.inShelfId)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
+    }
+
+    func testCancellationWhileMetadataWriteIsPendingKeepsCommittedStateConsistent() async throws {
+        try await assertCancelledMetadataWriteConsistency(blockAfterCommit: false)
+    }
+
+    func testCancellationAfterMetadataCommitKeepsCommittedStateConsistent() async throws {
+        try await assertCancelledMetadataWriteConsistency(blockAfterCommit: true)
+    }
+
+    private func assertCancelledMetadataWriteConsistency(blockAfterCommit: Bool) async throws {
+        var book = try makeDownloadReadBook()
+        book.inShelf = true
+        book.formats["EPUB"]?.cached = true
+        mockAppContainer.bookRepository.saveBook(book)
+        var entry = CalibreBookEntry()
+        entry.title = "Committed New Title"
+        entry.formats = ["epub"]
+        entry.format_metadata = ["epub": .init(size: 1024, mtime: "2026-11-06T00:00:00Z")]
+        let payload = try JSONEncoder().encode([String(book.id): entry])
+        configureMetadataResponse(body: try XCTUnwrap(String(data: payload, encoding: .utf8)))
+
+        let reachedBoundary = expectation(description: "metadata persistence boundary reached")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let repository = PausingMetadataBookRepository(databaseService: mockAppContainer.databaseService,
+            libraryResolver: mockAppContainer)
+        repository.blockAfterCommit = blockAfterCommit
+        repository.atBoundary = {
+            reachedBoundary.fulfill()
+            _ = release.wait(timeout: .now() + 10)
+        }
+        let manager = CalibreBookManager(container: mockAppContainer,
+            databaseService: mockAppContainer.databaseService, bookRepository: repository)
+        manager.booksInShelf[book.inShelfId] = book
+        var status = CalibreSyncStatus(library: book.library)
+        status.del = [book.id]
+        mockAppContainer.librarySyncStatus[book.library.id] = status
+        let notified = expectation(description: "committed book update published")
+        let updates = mockAppContainer.calibreUpdates()
+        let observer = Task { @MainActor in
+            for await signal in updates {
+                if case .book(let updated) = signal,
+                   updated.inShelfId == book.inShelfId, updated.title == entry.title {
+                    notified.fulfill()
+                    return
+                }
+            }
+        }
+        defer { observer.cancel() }
+        let refresh = Task { await manager.getBooksMetadata(
+            request: .init(library: book.library, books: [book.id], getAnnotations: false)) }
+        await fulfillment(of: [reachedBoundary], timeout: 5)
+        refresh.cancel()
+        release.signal()
+        let result = await refresh.value
+        mockAppContainer.refreshDatabase()
+        XCTAssertEqual(result[book.id], .cancelled)
+        XCTAssertEqual(repository.getBook(id: book.inShelfId)?.title, entry.title)
+        XCTAssertEqual(manager.booksInShelf[book.inShelfId]?.title, entry.title)
+        XCTAssertFalse(mockAppContainer.librarySyncStatus[book.library.id]?.del.contains(book.id) ?? true)
+        await fulfillment(of: [notified], timeout: 2)
+        manager.clearCache(inShelfId: book.inShelfId)
+        XCTAssertEqual(repository.getBook(id: book.inShelfId)?.title, entry.title,
+                       "Clearing cache must not overwrite committed metadata with the old shelf snapshot")
+    }
+
+    private func configureMetadataResponse(status: Int = 200, body: String) {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        for timeout in [10.0, 600.0] {
+            let key = CalibreServerURLSessionKey(server: mockCalibreBook.library.server, timeout: timeout, qos: .default)
+            mockAppContainer.calibreServerService.metadataSessions[key] = session
+        }
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url),
+                statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"]))
+            return (response, Data(body.utf8))
+        }
+    }
+
+    func testManagerReturnsUnavailableWithoutDeletingLocalBook() async throws {
+        configureMetadataResponse(body: "{\"123\":null}")
+        let result = await mockAppContainer.bookManager.getBooksMetadata(
+            request: .init(library: mockCalibreBook.library, books: [123], getAnnotations: false))
+        XCTAssertEqual(result[123], .unavailable)
+        XCTAssertNotNil(mockAppContainer.bookRepository.getBook(id: mockCalibreBook.inShelfId))
+    }
+
+    func testManagerReturnsRefreshFailure() async throws {
+        configureMetadataResponse(status: 503, body: "<html>" + String(repeating: "Proxy failed ", count: 10_000) + "</html>")
+        let result = await mockAppContainer.bookManager.getBooksMetadata(
+            request: .init(library: mockCalibreBook.library, books: [123], getAnnotations: false))
+        XCTAssertEqual(result[123], .failed("The server could not refresh book details (HTTP 503). Please try again."))
+    }
+
+    func testManagerReturnsCancelledForCancelledRequest() async throws {
+        let request = CalibreBooksMetadataRequest(library: mockCalibreBook.library, books: [123], getAnnotations: false)
+        let manager = mockAppContainer.bookManager
+        let task = Task { await manager.getBooksMetadata(request: request) }
+        task.cancel()
+        let result = await task.value
+        XCTAssertEqual(result[123], .cancelled)
+    }
+
     func testViewModelSetup() throws {
         XCTAssertNotNil(viewModel.listVM)
         XCTAssertEqual(viewModel.listVM?.book.id, 123)
@@ -244,6 +610,8 @@ class BookDetailViewModelTests: XCTestCase {
             readerName: ReaderType.ReadiumEPUB.rawValue, lastReadPage: 12, lastProgress: 42,
             epoch: Date().timeIntervalSince1970)
         mockAppContainer.readingPositionRepository.savePosition(position, for: book)
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.setup(bookId: book.inShelfId)
         XCTAssertEqual(viewModel.readActionTitle(for: book), "Read")
         viewModel.readBook(book: book)
         XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.readerInfo.position.lastReadPage, 12)
@@ -261,6 +629,7 @@ class BookDetailViewModelTests: XCTestCase {
         await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
         XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
         let cached = try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId))
+        await waitUntil { self.viewModel.canRead(cached) }
         XCTAssertEqual(viewModel.readActionTitle(for: cached), "Read")
     }
 
@@ -497,7 +866,9 @@ class BookDetailViewModelTests: XCTestCase {
     func testUpdatingMetadata() throws {
         XCTAssertFalse(viewModel.updatingMetadata)
         mockAppContainer.updatingMetadata = true
-        XCTAssertTrue(viewModel.updatingMetadata)
+        mockAppContainer.updatingMetadataStatus = "another book failed"
+        XCTAssertFalse(viewModel.updatingMetadata)
+        XCTAssertEqual(viewModel.refreshState, .idle)
     }
 
     private func setupMockGoodreadsSync(dateReadColumn: String = "#date_read", readingProgressColumn: String = "#progress") {
@@ -557,6 +928,8 @@ class BookDetailViewModelTests: XCTestCase {
         dateFormatter.locale = Locale.autoupdatingCurrent
         let expectedString = dateFormatter.string(from: expectedDate)
         
+        mockAppContainer.bookRepository.saveBook(mockCalibreBook)
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .goodreadsReadDate(expectedString))
     }
@@ -565,6 +938,8 @@ class BookDetailViewModelTests: XCTestCase {
         setupMockGoodreadsSync(readingProgressColumn: "#progress")
         mockCalibreBook.userMetadatas = ["progress": 85]
         
+        mockAppContainer.bookRepository.saveBook(mockCalibreBook)
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .goodreadsProgress("85"))
     }
@@ -605,6 +980,8 @@ class BookDetailViewModelTests: XCTestCase {
         )
         mockAppContainer.readingPositionRepository.savePosition(otherPosition, for: mockCalibreBook)
         
+        mockAppContainer.bookRepository.saveBook(mockCalibreBook)
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .localProgress(percent: 75.0, device: viewModel.deviceName))
     }
@@ -636,6 +1013,8 @@ class BookDetailViewModelTests: XCTestCase {
         )
         mockAppContainer.readingPositionRepository.savePosition(otherPosition, for: mockCalibreBook)
         
+        mockAppContainer.bookRepository.saveBook(mockCalibreBook)
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .localProgress(percent: 30.0, device: "other-device"))
     }
@@ -658,6 +1037,8 @@ class BookDetailViewModelTests: XCTestCase {
             }
         }
         
+        mockAppContainer.bookRepository.saveBook(mockCalibreBook)
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertNil(summary)
     }
@@ -671,27 +1052,37 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.listVM?.book.inShelfId, mockCalibreBook.inShelfId)
     }
 
-    func testOnAppearSkipsReloadOnlyWhenReturningFromHistory() throws {
+    func testOnAppearSkipsNetworkRefreshOnlyWhenReturningFromHistory() async throws {
         let workspaceID = UUID()
         let bookId = try XCTUnwrap(mockBookRealm.primaryKey)
-        let detailViewModel = BookDetailViewModel(container: mockAppContainer)
-
+        var refreshCount = 0
+        let realm = try XCTUnwrap(mockAppContainer.databaseService.realm)
+        let detailViewModel = BookDetailViewModel(container: mockAppContainer, refreshMetadata: { request in
+            refreshCount += 1
+            return [request.books[0]: .updated]
+        })
         detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
-        XCTAssertEqual(detailViewModel.calibreBook?.title, "Test Book")
-        XCTAssertEqual(detailViewModel.targetWorkspaceID, workspaceID)
-
-        // Coming back from Reading History must not reload over a newer value.
+        await waitUntil { refreshCount == 1 }
         let book = try XCTUnwrap(detailViewModel.calibreBook)
         detailViewModel.showReadingPositionHistory(book: book)
-        detailViewModel.calibreBook?.title = "Edited In Place"
+        detailViewModel.onDisappear()
+        try realm.write { mockBookRealm.title = "Edited In History" }
         detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
-        XCTAssertEqual(detailViewModel.calibreBook?.title, "Edited In Place")
-
-        // Any other appearance (a tab switch back) reloads the book.
+        XCTAssertEqual(detailViewModel.calibreBook?.title, "Edited In History")
+        XCTAssertEqual(detailViewModel.targetWorkspaceID, workspaceID)
+        await Task.yield()
+        XCTAssertEqual(refreshCount, 1)
+        try realm.write { mockBookRealm.title = "Observed After Return" }
+        await waitUntil { detailViewModel.calibreBook?.title == "Observed After Return" }
+        XCTAssertEqual(detailViewModel.calibreBook?.title, "Observed After Return")
+        XCTAssertEqual(refreshCount, 1)
+        detailViewModel.onDisappear()
         detailViewModel.onAppear(bookId: bookId, targetWorkspaceID: workspaceID)
-        XCTAssertEqual(detailViewModel.calibreBook?.title, "Test Book")
+        await waitUntil { refreshCount == 2 }
+        XCTAssertEqual(refreshCount, 2)
+        detailViewModel.onDisappear()
     }
-    
+
     func testHasReadingHistory() throws {
         XCTAssertFalse(viewModel.hasReadingHistory(for: mockCalibreBook))
         
@@ -704,6 +1095,7 @@ class BookDetailViewModelTests: XCTestCase {
         )
         mockAppContainer.readingPositionRepository.savePosition(position, for: mockCalibreBook)
         
+        viewModel.setup(bookId: mockCalibreBook.inShelfId)
         XCTAssertTrue(viewModel.hasReadingHistory(for: mockCalibreBook))
     }
     
@@ -911,6 +1303,9 @@ class BookDetailViewModelTests: XCTestCase {
                 }
             }
             """
+            if request.url?.path.contains("book-get-annotations") == true {
+                return (response, Data("{}".utf8))
+            }
             return (response, bookEntryJson.data(using: .utf8)!)
         }
         
@@ -927,12 +1322,31 @@ class BookDetailViewModelTests: XCTestCase {
             return
         }
         
+        await waitUntil { self.viewModel.refreshState == .synced }
+        XCTAssertEqual(viewModel.refreshState, .synced)
         XCTAssertEqual(viewModel.calibreBook?.title, "Refreshed Title")
         XCTAssertEqual(viewModel.listVM?.book.title, "Refreshed Title")
         XCTAssertEqual(
             realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: mockBookRealm.primaryKey!)?.title,
             "Refreshed Title"
         )
+    }
+}
+
+@MainActor
+private final class DetailRefreshController {
+    private(set) var requests: [CalibreBooksMetadataRequest] = []
+    private var continuations: [Int: CheckedContinuation<[Int32: BookMetadataRefreshResult], Never>] = [:]
+
+    func refresh(_ request: CalibreBooksMetadataRequest) async -> [Int32: BookMetadataRefreshResult] {
+        let index = requests.count
+        requests.append(request)
+        return await withCheckedContinuation { continuations[index] = $0 }
+    }
+
+    func complete(_ index: Int, with result: BookMetadataRefreshResult) {
+        guard requests.indices.contains(index) else { XCTFail("Request did not start"); return }
+        continuations.removeValue(forKey: index)?.resume(returning: [requests[index].books[0]: result])
     }
 }
 
@@ -1459,4 +1873,19 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     }
 
 
+}
+
+private final class PausingMetadataBookRepository: RealmBookRepository {
+    var blockAfterCommit = false
+    var atBoundary: () -> Void = {}
+
+    override func persistMetadataEntries(library: CalibreLibrary, bookIds: [Int32],
+                                        entries: [String: CalibreBookEntry?], json: NSDictionary,
+                                        includeAnnotationBooks: Bool) -> BookMetadataPersistenceResult {
+        if !blockAfterCommit { atBoundary() }
+        let result = super.persistMetadataEntries(library: library, bookIds: bookIds,
+            entries: entries, json: json, includeAnnotationBooks: includeAnnotationBooks)
+        if blockAfterCommit { atBoundary() }
+        return result
+    }
 }
