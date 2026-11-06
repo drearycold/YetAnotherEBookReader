@@ -5,6 +5,42 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## First Book Connection Recovery P4 (2026-11-06, branch)
+
+`codex/first-book-connection-recovery` starts at latest main `7d2c442c`,
+including P1 #132, P2 #133 and P3 #134; the initial worktree was clean.
+GitHub's connected API verified main after shell DNS failed; its exact signed
+merge commit was reconstructed and hash-verified, with the same tree as the
+local P3 tip. No existing work was replaced.
+
+Connection setup now presents bounded, actionable messages and HTTP status,
+with **Edit Connection** and **Retry** on the error's first screen. Raw server
+bodies never enter this UI; no technical-details panel is offered. Editing
+preserves all inputs. Probe staging propagates structured errors and per-probe
+HTTP context (including rejected authentication challenges), and probes use
+current addresses/credentials. Shared `CalibreAPIError` cases/descriptions stay
+unchanged. Same-configuration background probes retain last-known reachability
+until their answer; a failed probe clears its library result. Failed/cancelled
+probes still cannot confirm, save or browse.
+
+Final validation: **982 unit tests** (22 skips, two existing expected PDFKit
+failures), **five existing UI journeys**, **119 focused iOS 15.5 tests**, iOS
+Release and Catalyst builds pass. Complete **Release** native journeys pass on
+iPhone 17/iOS 26.5 and small-screen iPhone 7/iOS 15.5: ~100 KB HTML 503,
+HTTP 401/403, connection refusal, missing/wrong Basic credentials, correction,
+retry, no save after failure/relaunch, modification with retained input,
+update persistence and actual Calibre book lists after recovery. Edit/Retry
+are hittable and wholly on screen without scrolling each error page. The
+isolated app's executable hash matches the Release product. Tests use ordinary
+native controls, normal persistence/network and the existing consent skip.
+
+Boundary: authentication is a controlled real HTTP Basic challenge; successful
+read APIs forward to actual local anonymous Calibre. No physical device, iPad,
+live HTTPS/certificate or Digest run. No schema, pins or versions changed.
+Fixture: `.github/scripts/calibre-connection-proxy.py`. Evidence and retained
+harness attempts: `/tmp/YabrConnectionRecoveryP4/verification.json`; Chinese
+report: `/Users/peterlee/.codex/visualizations/2026/11/05/01a1ac66-6863-7f12-8f73-9410a22cf077/connection-recovery-p4/report.html`.
+
 ## First Book Download and Read P3 (2026-11-05, branch)
 
 Independent read-only review against `5b0aff44`, including staged, unstaged

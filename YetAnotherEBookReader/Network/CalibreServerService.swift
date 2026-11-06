@@ -324,6 +324,8 @@ struct CalibreServerInfo: Identifiable {
     var libraryMap: [String:String] = [:]
     
     var error: CalibreAPIError? = nil
+    // Probe-only context; shared API error cases retain their existing semantics.
+    var httpStatusCode: Int? = nil
 
     var request: CalibreProbeServerRequest
 }

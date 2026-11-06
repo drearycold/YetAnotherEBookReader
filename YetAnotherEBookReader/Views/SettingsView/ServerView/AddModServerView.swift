@@ -18,6 +18,7 @@ struct AddModServerView: View {
     @Binding var isActive: Bool
     var browseLibrary: ((CalibreLibrary) -> Void)? = nil
     
+    @State private var hasLoadedForm = false
     @State private var localLibraryImportBooksPicked = [URL]()
     @State private var localLibraryImportPresenting = false
     
@@ -81,7 +82,8 @@ struct AddModServerView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
-                        Text(viewModel.calibreServerInfo?.errorMsg ?? "Unknown")
+                        Text(viewModel.calibreServerInfo.map { ServerConnectionStatus(info: $0).title } ?? "Unknown")
+                            .lineLimit(2)
                     }
 
                     if let server = server, let reachable = container.serverManager.isServerReachable(server: server, isPublic: false) {
@@ -112,6 +114,8 @@ struct AddModServerView: View {
         }
         .accessibilityIdentifier("server.connection.form")
         .onAppear {
+            guard !hasLoadedForm else { return }
+            hasLoadedForm = true
             viewModel.resetStates(server: server)
         }
         .sheet(isPresented: $viewModel.serverCalibreInfoPresenting, onDismiss: {
@@ -177,14 +181,29 @@ struct AddModServerView: View {
     func serverCalibreInfoSheetView() -> some View {
         Form {
             Section(header: Text("Server Status")) {
-                if let serverInfo = viewModel.calibreServerInfo {
-                    Text(serverInfo.errorMsg)
-                } else {
-                    Text("Connecting")
+                Text(viewModel.connectionStatus.title)
+                    .font(.headline)
+                    .accessibilityIdentifier("server.connection.status.title")
+                if let message = viewModel.connectionStatus.message {
+                    Text(message)
+                        .accessibilityIdentifier("server.connection.status.message")
                 }
             }
             
             Section {
+                if !viewModel.isProbing && !viewModel.canConfirmServer {
+                    Button("Edit Connection") {
+                        viewModel.editConnection()
+                    }
+                    .accessibilityIdentifier("server.connection.edit")
+                }
+                if !viewModel.canConfirmServer {
+                    Button("Retry") {
+                        viewModel.processInputAction(server: server) {}
+                    }
+                    .accessibilityIdentifier("server.connection.retry")
+                    .disabled(viewModel.isProbing)
+                }
                 Button(action: {
                     viewModel.disableProbeServerCancellable()
                     viewModel.serverCalibreInfoPresenting = false
@@ -192,17 +211,6 @@ struct AddModServerView: View {
                     Text("Cancel")
                 }
                 .accessibilityIdentifier("server.connection.result.cancel")
-                
-                if viewModel.calibreServerInfo?.errorMsg != "Success" {
-                    Button {
-                        viewModel.calibreServerInfo?.errorMsg = "Connecting..."
-                        viewModel.processInputAction(server: server) {}
-                    } label: {
-                        Text("Retry")
-                    }
-                    .accessibilityIdentifier("server.connection.retry")
-                    .disabled(viewModel.isProbing)
-                }
                 
                 Button(action: {
                     if viewModel.dataAction == "Add" {
@@ -224,33 +232,35 @@ struct AddModServerView: View {
                 .disabled(!viewModel.canConfirmServer || (browseLibrary != nil && viewModel.libraryToBrowse == nil))
             }
             
-            Section(header: Text(browseLibrary == nil ? "Library List" : "Library to Browse"), footer: Text(
-                browseLibrary != nil && viewModel.librariesToAdd.count > 1
-                    ? "Choose a library to browse. All libraries will be added." : ""
-            )) {
-                if let serverInfo = viewModel.calibreServerInfo,
-                   serverInfo.errorMsg == "Success" {
-                    ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
-                        if browseLibrary != nil && viewModel.librariesToAdd.count > 1 {
-                            let libraryID = CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id
-                            Button {
-                                viewModel.browseLibraryID = libraryID
-                            } label: {
-                                HStack {
-                                    libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
-                                    Image(systemName: viewModel.browseLibraryID == libraryID ? "checkmark.circle.fill" : "circle")
+            if viewModel.canConfirmServer {
+                Section(header: Text(browseLibrary == nil ? "Library List" : "Library to Browse"), footer: Text(
+                    browseLibrary != nil && viewModel.librariesToAdd.count > 1
+                        ? "Choose a library to browse. All libraries will be added." : ""
+                )) {
+                    if let serverInfo = viewModel.calibreServerInfo,
+                       serverInfo.errorMsg == "Success" {
+                        ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
+                            if browseLibrary != nil && viewModel.librariesToAdd.count > 1 {
+                                let libraryID = CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id
+                                Button {
+                                    viewModel.browseLibraryID = libraryID
+                                } label: {
+                                    HStack {
+                                        libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
+                                        Image(systemName: viewModel.browseLibraryID == libraryID ? "checkmark.circle.fill" : "circle")
+                                    }
+                                    .contentShape(Rectangle())
                                 }
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("server.connection.library.\(libraryEntry.key)")
+                                .accessibilityAddTraits(viewModel.browseLibraryID == libraryID ? .isSelected : [])
+                            } else {
+                                libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("server.connection.library.\(libraryEntry.key)")
-                            .accessibilityAddTraits(viewModel.browseLibraryID == libraryID ? .isSelected : [])
-                        } else {
-                            libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
                         }
+                    } else {
+                        Text("Cannot Fetch Library List")
                     }
-                } else {
-                    Text("Cannot Fetch Library List")
                 }
             }
         }

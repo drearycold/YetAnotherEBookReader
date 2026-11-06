@@ -178,25 +178,24 @@ class CalibreServerManager {
     @discardableResult
     @MainActor
     func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
-        if var info = self.calibreServerInfoStaging[request.id] {
-            info.probing = true
-            info.errorMsg = "Connecting"
-            info.request = request
-            info.url = URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/")
-            self.calibreServerInfoStaging[request.id] = info
-        } else {
-            let info = CalibreServerInfo(
-                server: request.server,
-                isPublic: request.isPublic,
-                url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
-                probing: true,
-                errorMsg: "Connecting",
-                defaultLibrary: request.server.defaultLibrary,
-                request: request
-            )
-            self.calibreServerInfoStaging[request.id] = info
-        }
-        
+        // A retry must use this request's credentials and address, even for the same server ID.
+        let previousInfo = calibreServerInfoStaging[request.id]
+        let sameConnection = previousInfo?.server == request.server
+            && previousInfo?.server.password == request.server.password
+            && previousInfo?.url.absoluteString == (request.isPublic ? request.server.publicUrl : request.server.baseUrl)
+        let pendingInfo = CalibreServerInfo(
+            server: request.server,
+            isPublic: request.isPublic,
+            url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
+            reachable: sameConnection && previousInfo?.reachable == true,
+            probing: true,
+            errorMsg: "Connecting",
+            defaultLibrary: request.server.defaultLibrary,
+            libraryMap: sameConnection ? previousInfo?.libraryMap ?? [:] : [:],
+            request: request
+        )
+        self.calibreServerInfoStaging[request.id] = pendingInfo
+
         guard let info = self.calibreServerInfoStaging[request.id] else { return nil }
         
         guard let calibreServerService = container?.calibreServerService else { return nil }
@@ -205,9 +204,12 @@ class CalibreServerManager {
         guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return nil }
         serverInfo.probing = false
         serverInfo.errorMsg = newServerInfo.errorMsg
+        serverInfo.error = newServerInfo.error
+        serverInfo.httpStatusCode = newServerInfo.httpStatusCode
 
         if newServerInfo.libraryMap.isEmpty {
             serverInfo.reachable = false
+            serverInfo.libraryMap = [:]
             if serverInfo.errorMsg.isEmpty {
                 serverInfo.errorMsg = "Empty Server"
             }

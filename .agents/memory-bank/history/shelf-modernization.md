@@ -6,6 +6,51 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **First Book Connection Recovery, Priority 4 (2026-11-06, branch):**
+  `codex/first-book-connection-recovery` starts at main `7d2c442c`, after P1–3
+  merged (#132/#133/#134), from a clean worktree.
+  - Reproduced main's unbounded HTML/CSS error page with a controlled ~100 KB
+    HTTP 503. Structured errors were also lost in manager staging, and retries
+    of the same server retained old name/password; the red manager test fails
+    all three assertions before the fix.
+  - Connection-only presentation now uses bounded, actionable messages and
+    preserves HTTP status. Raw response bodies stay in the underlying error
+    for compatibility and never render here; no technical detail panel is
+    offered. Edit/Retry appear before the disabled confirmation and failed
+    library sections are omitted. Form initialization runs once so dismissing
+    the result for editing cannot erase input.
+  - Every probe uses its current request's server value. Staging propagates
+    structured errors and per-probe HTTP status, including the status observed
+    before URLSession cancels an authentication challenge. Shared API error
+    cases, error descriptions and HTTP-to-error mappings are unchanged.
+    Same-configuration background refresh keeps last-known reachability until
+    its answer; failed probes clear their library result.
+  - Final **982 units** pass (22 skips, two existing expected PDFKit failures),
+    **five existing UI journeys** pass, and **119 focused iOS 15.5 units** pass.
+    iOS Release and final Mac Catalyst builds pass with locked remote packages
+    from the existing `/tmp/YabrFolioVideoPin/SourcePackages` cache; no override,
+    changed package pin, schema or version. The default `/tmp/YabrSourcePackages`
+    cache was stale and failed to check out FolioReaderKit; it was not used.
+  - Complete native **Release** journeys pass on iPhone 17/iOS 26.5 and iPhone
+    7/iOS 15.5. Each checks 503, 401/403, connection refusal, absent/rejected
+    Basic credentials, corrected password, real book-list routing, failed-add
+    non-persistence, modification after 503, retained input, current-config
+    Retry, saved update after relaunch and continued browsing. Edit and Retry
+    remain hittable within the small-screen frame without scrolling errors.
+    Release executable SHA-256 is identical in the isolated app and product.
+  - Fixture `.github/scripts/calibre-connection-proxy.py` binds only loopback;
+    it controls library-info failures/authentication and forwards successful
+    reads to actual local Calibre. Credentials are test-only `contract:correct`.
+    Normal disk/network and existing consent skip are used. Earlier harness
+    attempts (SwiftUI switch AX differences, secure deletion/clear targeting)
+    remain in the evidence; final runs use ordinary native button taps and
+    assert password lengths before submission.
+  - Boundary: controlled real Basic challenges, anonymous real-Calibre reads;
+    no live HTTPS/certificate/Digest, physical-device or iPad validation.
+    Full record: `/tmp/YabrConnectionRecoveryP4/verification.json`. Chinese
+    report and screenshots:
+    `/Users/peterlee/.codex/visualizations/2026/11/05/01a1ac66-6863-7f12-8f73-9410a22cf077/connection-recovery-p4/report.html`.
+
 - **First Book Download and Read, Priority 3 (2026-11-05, branch):**
   `codex/first-book-download-read` is based on fetched main `5b0aff44`, including
   P1 #132 and P2 #133, from a clean worktree. Independent read-only review
