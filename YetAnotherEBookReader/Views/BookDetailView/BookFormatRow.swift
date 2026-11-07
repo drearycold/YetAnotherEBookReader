@@ -1,116 +1,57 @@
-//
-//  BookFormatRow.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
 struct BookFormatRow: View {
-    @ObservedObject var viewModel: BookDetailViewModel
-    var book: CalibreBook
-    var format: Format
-    var formatInfo: FormatInfo
-    
+    let format: Format
+    let formatInfo: FormatInfo
+    let download: BookFormatDownload?
+    let statusText: String
+    let statusIcon: String
+    let cache: () -> Void
+    let clear: () -> Void
+    let preview: () -> Void
+    let pauseOrResume: () -> Void
+    let cancel: () -> Void
+
     var body: some View {
-        HStack(alignment: .top, spacing: 4) {
-            metadataFormatIcon(format.rawValue)
-                .padding(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
-            
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .bottom, spacing: 24) {
-                    Text(format.rawValue)
-                        .font(.subheadline)
-                        .frame(minWidth: 48, alignment: .leading)
-                    
-                    cacheFormatButton
-                        .disabled(viewModel.isFormatDownloading(book: book, format: format))
-                    
-                    clearFormatButton
-                        .disabled(!formatInfo.cached)
-                    
-                    previewFormatButton
-                        .disabled(!formatInfo.cached)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(format.rawValue).font(.headline)
+                Spacer(minLength: 8)
+                Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.serverSize), countStyle: .file))
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            if let download {
+                ProgressView(value: download.progress)
+                    .progressViewStyle(LinearProgressViewStyle())
                 HStack {
-                    Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.serverSize), countStyle: .file))
-                    if let download = viewModel.getActiveDownload(book: book, format: format) {
-                        ProgressView(value: download.progress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                            .frame(maxWidth: 160)
-                        
-                        Button(action: {
-                            if download.isDownloading {
-                                viewModel.pauseDownload(book: book, format: format)
-                            } else {
-                                viewModel.resumeDownload(book: book, format: format)
-                            }
-                        }) {
-                            Image(systemName: download.isDownloading ? "pause" : "play")
-                        }
-                        .accessibilityLabel(download.isDownloading ? "Pause Download" : "Resume Download")
-                        
-                        Button(action:{
-                            viewModel.cancelDownload(book: book, format: format)
-                        }) {
-                            Image(systemName: "xmark")
-                                .foregroundColor(.red)
-                        }
-                        .accessibilityLabel("Cancel Download")
-                    } else if formatInfo.cached {
-                        Text(viewModel.getFormatStatusText(formatInfo: formatInfo))
-                        Image(systemName: viewModel.getFormatStatusIcon(formatInfo: formatInfo))
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Text("Not cached")
-                    }
+                    Text(download.isDownloading ? "Downloading…" : "Paused")
+                        .font(.subheadline)
+                    Spacer(minLength: 0)
+                    formatButton(download.isDownloading ? "pause" : "play",
+                                 label: download.isDownloading ? "Pause Download" : "Resume Download", action: pauseOrResume)
+                    formatButton("xmark", label: "Cancel Download", action: cancel)
                 }
-                .font(.caption)
+            } else {
+                Label(statusText, systemImage: statusIcon)
+                    .font(.subheadline).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 16) {
+                formatButton("tray.and.arrow.down", label: "Download \(format.rawValue) Only", action: cache)
+                    .disabled(download != nil)
+                formatButton("tray.and.arrow.up", label: "Clear \(format.rawValue) Download", action: clear)
+                    .disabled(!formatInfo.cached)
+                formatButton("doc.text.magnifyingglass", label: "Preview \(format.rawValue)", action: preview)
+                    .disabled(!formatInfo.cached)
             }
         }
+        .accessibilityElement(children: .contain)
     }
-    
-    private var cacheFormatButton: some View {
-        Button(action:{
-            viewModel.cacheFormat(book: book, format: format)
-        }) {
-            Image(systemName: "tray.and.arrow.down")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 24, height: 24)
+
+    private func formatButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.title3).frame(minWidth: 44, minHeight: 44)
         }
-        .accessibilityLabel("Download \(format.rawValue) Only")
-    }
-    
-    private var clearFormatButton: some View {
-        Button(action:{
-            viewModel.clearFormat(book: book, format: format)
-        }) {
-            Image(systemName: "tray.and.arrow.up")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 24, height: 24)
-        }
-    }
-    
-    private var previewFormatButton: some View {
-        Button(action: {
-            if viewModel.previewAction(book: book, format: format, formatInfo: formatInfo) {
-                viewModel.presentingPreviewSheet = true
-            }
-        }) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 24, height: 24)
-        }
-    }
-    
-    private func metadataFormatIcon(_ name: String) -> some View {
-        Image(name)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 24, height: 24)
+        .accessibilityLabel(Text(label))
     }
 }

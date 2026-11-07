@@ -6,6 +6,27 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **BD2 publication-date review fix (2026-11-06):** Compare the date's Gregorian
+  year with Calibre's sentinel year 101, preserving localized display. Japanese
+  pre-fix tests reproduce hidden valid dates; all 66 focused tests pass across
+  Gregorian/Japanese/ROC/Buddhist and Japanese on iOS 15.5. Catalyst, Swift parse
+  and diff checks pass. Earlier full/native/Release BD2 validation was not
+  repeated; `/tmp/YabrBD2CalendarReview/verification.json` records the follow-up.
+
+- **Book Detail Modernization BD2 (2026-11-06, branch):** `codex/book-detail-bd2`
+  starts at main `4493c21f` after BD1 #136 merged. Actual-width overview,
+  accessibility text, ordered detail sections, omitted missing metadata and
+  value/callback body components replace the fixed columns. Root owns routes
+  and sheets; the iOS 15 toolbar observer is retained deliberately. A real
+  metadata-refresh red case exposed identity-only CalibreBook equality hiding
+  publisher/tag updates; displayed-field projections fix it. Final 1001 units
+  plus five UI journeys, 158 iOS 15 units plus two UI journeys, native Release
+  metadata/P3/layout/iPadOS 18.5 split/local-book checks and iOS Release/Catalyst builds pass.
+  Description WebView behavior (400pt/internal scrolling), preview request
+  lifecycle and real-helper testing remain BD3/BD4 boundaries. No schema,
+  package, project or version changes. Details and exact boundaries are in
+  activeContext and `/tmp/YabrBookDetailBD2/verification.json`.
+
 - **BD1 cancellation review fix (2026-11-06):** Reproduced cancellation on
   either side of the real Realm metadata commit leaving old shelf snapshots and
   allowing clearCache to overwrite refreshed metadata. Queued persistence now

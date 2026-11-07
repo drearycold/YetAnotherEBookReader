@@ -1,27 +1,21 @@
-//
-//  BookCountPagesCorner.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
 struct BookCountPagesCorner: View {
-    var book: CalibreBook
-    var lastUpdated: Date
-    var countPage: CalibreCountPagesPrefs.LibraryConfig
-    var isCompat: Bool
+    let pages: String
+    let words: String
+    let readability: String
+
+    init(book: CalibreBook, countPage: CalibreCountPagesPrefs.LibraryConfig) {
+        pages = book.userMetadataNumberAsIntDescription(column: countPage.pageCountCN) ?? "not set"
+        words = book.userMetadataNumberAsIntDescription(column: countPage.wordCountCN) ?? "not set"
+        readability = "\(book.userMetadataNumberAsFloatDescription(column: countPage.fleschReadingEaseCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.fleschKincaidGradeCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.gunningFogIndexCN) ?? "not set")"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Count Pages Info Corner")
-            HStack {
-                Text("Pages \(book.userMetadataNumberAsIntDescription(column: countPage.pageCountCN) ?? "not set")")
-                Text("/").padding([.leading, .trailing], 16)
-                Text("Words \(book.userMetadataNumberAsIntDescription(column: countPage.wordCountCN) ?? "not set")")
-            }.font(.subheadline)
-            HStack {
-                Text("Readability \(book.userMetadataNumberAsFloatDescription(column: countPage.fleschReadingEaseCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.fleschKincaidGradeCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.gunningFogIndexCN) ?? "not set")")
-            }.font(.subheadline)
+        VStack(alignment: .leading, spacing: 16) {
+            BookMetadataValue(title: "Pages", value: pages)
+            BookMetadataValue(title: "Words", value: words)
+            BookMetadataValue(title: "Readability", value: readability)
         }
     }
 }

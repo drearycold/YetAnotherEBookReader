@@ -5,6 +5,76 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## BD2 review follow-up: publication date calendar (2026-11-06)
+
+Independent review found that comparing Calendar.current's year with Calibre's
+Gregorian sentinel year 101 hides valid dates under Japanese/ROC calendars and
+shows missing dates under Buddhist calendars. BookMetadataSection now uses a
+fixed Gregorian calendar only for validity; pubDateByLocale still formats the
+visible value with the user's locale/calendar.
+
+The pre-fix Japanese test host reproduces hidden 2024/2000 dates. Final pure
+value tests avoid AppContainer/Realm state and assert each process's actual
+preferred calendar. All **66 focused tests** pass: the full Book Detail class
+plus date tests under Gregorian, then date tests under Japanese, ROC and
+Buddhist; Japanese also passes on iPhone 7/iOS 15.5. Catalyst build, changed-Swift
+parse and diff checks pass. The full/native/Release BD2 records below precede
+this follow-up and were not rerun. Evidence:
+`/tmp/YabrBD2CalendarReview/verification.json`.
+
+## Book Detail Modernization BD2 (2026-11-06, branch)
+
+`codex/book-detail-bd2` starts at main `4493c21f`, verified through GitHub's API
+with BD1 #136 merged. The worktree was clean; the old planning worktree was not
+used. BD2 and its calendar-review fix are recorded on this branch for review.
+
+Book Detail now orders overview, reading progress, description, formats,
+metadata, optional Count Pages and sync/advanced information. The overview uses
+actual container width (two columns from 600pt, vertical below it); accessibility
+sizes use vertical layout. Content is capped at 960pt, without repeated 300pt
+columns. Long titles/authors wrap, the title appears once, absent publication
+fields are omitted, and Goodreads/Count Pages retain configuration gating.
+At accessibility sizes the main button uses text without the redundant icon,
+leaving enough width for Download. Normal sizes retain the icon.
+
+Body components store displayed fields and action callbacks, not the whole
+BookDetailViewModel. The page owns navigation, preview/activity sheets and
+alerts. Unused lastUpdated/isCompat/alertItem/viewMode parameters and Mode
+call sites are removed. CalibreBook equality is identity-only: a real native
+refresh initially changed the title/date while keeping old publisher/tags.
+Projection into actual display strings fixes that diffing issue; the old Release
+copy fails the new native regression at updated publisher, and final Release
+passes on iPhone 17 and iPhone 7/iOS 15.5. Count Pages and description also use
+actual display values rather than an identity-only book member.
+
+Final verification: **1001 unit tests + five regular UI journeys** pass (22
+unit skips, two existing expected PDFKit failures, no unexpected failures).
+The iOS 15 focused run passes **158 units + two detail/history UI journeys**.
+Native Release verification covers metadata refresh on both systems, P3 download
+and read/cached resume/download-only/retry/cancel/leave, iPhone 7 maximum
+accessibility text, iPad portrait/landscape and maximum text, an actual Safari
+split window on iPadOS 18.5, and a real coverless local EPUB through Read and History return.
+The pre-label-refinement P3/BD1 journeys on both systems also pass. Final iOS
+Release and Catalyst builds, Swift parse and diff checks pass. Native Release
+copy hashes match the built executable; complete phase-specific evidence:
+`/tmp/YabrBookDetailBD2/verification.json`. Chinese report and key screenshots:
+`/Users/peterlee/.codex/visualizations/2026/11/06/01a1b067-0d4c-7530-8d01-bbea42f9a4da/book-detail-bd2/report.html`.
+
+Boundaries: description retains its existing 400pt internally scrolling WebView;
+loading de-duplication/expansion is BD4. Format-operation and preview-request
+ownership remains BD3. The iOS 15 toolbar compatibility host intentionally
+still observes BookDetailViewModel. Catalyst interaction uses Debug; simulator
+native checks use Release and ordinary controls, with the existing consent gate
+only. Local validation seeds a CC0 EPUB in the isolated Local Library folder,
+then uses normal startup discovery/persistence and native controls. The iPadOS 26 split attempt did not narrow the window and the simulator
+screen API then timed out; it is not counted as passed. No physical
+device, HTTPS/Digest, large-file stress or real DSReader Helper interaction.
+PDF/CBZ, pause/resume and originating-workspace/open-once retain unit coverage.
+No schema, dependency pin, project membership or version/build change. Test-only
+scrolling attempts (lazy CollectionView/Table rows, overshoot and scroll-bar
+hit areas) are retained; the final helper checks frames and uses slow drags in
+the left card padding.
+
 ## Book Detail Modernization BD1 (2026-11-06, branch)
 
 `codex/book-detail-bd1` starts from main `ed117bc2df708e8433ce77c1a2c0045346d5d360`,

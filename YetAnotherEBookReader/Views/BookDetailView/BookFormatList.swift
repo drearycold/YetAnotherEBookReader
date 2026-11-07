@@ -1,33 +1,15 @@
-//
-//  BookFormatList.swift
-//  YetAnotherEBookReader
-//
-
 import SwiftUI
 
 struct BookFormatList: View {
-    @ObservedObject var viewModel: BookDetailViewModel
-    var book: CalibreBook
-    var lastUpdated: Date
-    var isCompat: Bool
+    let rows: [BookFormatRow]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(book.formats.sorted {
-                $0.key < $1.key
-            }.compactMap {
-                if let format = Format(rawValue: $0.key) {
-                    return (format, $0.value)
-                }
-                return nil
-            } as [(Format, FormatInfo)], id: \.0) { format, formatInfo in
-                BookFormatRow(viewModel: viewModel, book: book, format: format, formatInfo: formatInfo)
+        VStack(alignment: .leading, spacing: 16) {
+            if rows.isEmpty { Text("No supported formats available.").foregroundColor(.secondary) }
+            ForEach(rows, id: \.format) { row in
+                if row.format != rows.first?.format { Divider() }
+                row
             }
-        }
-        .sheet(isPresented: $viewModel.presentingPreviewSheet, onDismiss: {
-            viewModel.handlePreviewDismiss(book: book)
-        }) {
-            BookPreviewView(viewModel: viewModel.previewViewModel)
         }
     }
 }

@@ -985,6 +985,178 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("p3-explicit-read-after-return")
     }
 
+    func testDetailInActualIPadSplitWindow() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["YABR_DETAIL_SPLIT"] == "1",
+                          "Requires the isolated iPad Release fixture")
+        connect(name: "BD2 Split Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        let book = app.descendants(matching: .any).matching(identifier: "browse.book.mock").firstMatch
+        reveal(book)
+        book.tap()
+        element("book-detail.title")
+        capture("bd2-before-split")
+
+        // Ordinary system multitasking: reveal the Dock and drag Safari to the right edge.
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.998))
+        let dock = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        bottom.press(forDuration: 0.05, thenDragTo: dock, withVelocity: .slow, thenHoldForDuration: 0.1)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let safari = springboard.icons["Safari"].firstMatch
+        XCTAssertTrue(safari.waitForExistence(timeout: 10), springboard.debugDescription)
+        let icon = safari.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let right = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.995, dy: 0.5))
+        icon.press(forDuration: 0.5, thenDragTo: right, withVelocity: .slow, thenHoldForDuration: 1)
+        let resized = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.app.windows.firstMatch.frame.width < 600
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [resized], timeout: 15), .completed, app.debugDescription)
+        XCTAssertGreaterThan(app.windows.firstMatch.frame.width, 300)
+        capture("bd2-ipad-split-overview")
+        let read = element("book-detail.read")
+        reveal(read)
+        assertHorizontalBounds(read)
+        XCTAssertTrue(read.isHittable)
+        capture("bd2-ipad-split-read")
+    }
+
+    func testDetailMetadataRefreshUpdatesDisplayedValues() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DETAIL_METADATA_CONTROL_URL"] == nil,
+                      "Requires the BD2 real-Calibre metadata control fixture")
+        try configureFixture("original", environmentKey: "YABR_DETAIL_METADATA_CONTROL_URL")
+        connect(name: "BD2 Metadata Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("browse.book.mock").tap()
+        element("book-detail.title")
+        let information = app.staticTexts["Book Information"].firstMatch
+        reveal(information)
+        let original = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "BD2 Original Publisher")).firstMatch
+        XCTAssertTrue(original.waitForExistence(timeout: 15), app.debugDescription)
+        capture("bd2-metadata-before")
+
+        try configureFixture("updated", environmentKey: "YABR_DETAIL_METADATA_CONTROL_URL")
+        element("book-detail.refresh").tap()
+        let updatedTitle = app.staticTexts.matching(NSPredicate(format: "identifier == %@ AND label ENDSWITH %@", "book-detail.title", "— Refreshed")).firstMatch
+        XCTAssertTrue(updatedTitle.waitForExistence(timeout: 20), app.debugDescription)
+        let updatedPublisher = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "BD2 Updated Publisher")).firstMatch
+        XCTAssertTrue(updatedPublisher.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Updated Tag")).firstMatch.exists)
+        XCTAssertFalse(original.exists)
+        reveal(updatedPublisher)
+        capture("bd2-metadata-after")
+    }
+
+    /// Real-server layout fixture: book 1 has a long title, multiple authors and formats;
+    /// book 2 has no cover, publication data or description. Run with normal and accessibility text.
+    func testDetailAdaptiveLayoutAndSparseMetadata() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["YABR_DETAIL_LAYOUT"] == "1",
+                          "Requires the BD2 long/sparse real-Calibre fixture")
+        connect(name: "BD2 Layout Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        reveal(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        let book = element("browse.book.mock")
+        reveal(book)
+        book.tap()
+        element("screen.book-detail")
+        let title = element("book-detail.title")
+        XCTAssertGreaterThan(title.label.count, 100)
+        XCTAssertTrue(element("book-detail.authors").label.contains("Ada"))
+        assertHorizontalBounds(title)
+        capture("bd2-long-overview")
+        let read = element("book-detail.read")
+        reveal(read)
+        assertHorizontalBounds(read)
+        XCTAssertTrue(read.isHittable)
+        capture("bd2-long-read-action")
+        for heading in ["Reading Progress", "Description", "Files and Formats", "Book Information", "Sync and Advanced"] {
+            let item = app.staticTexts[heading].firstMatch
+            XCTAssertTrue(item.waitForExistence(timeout: 10), app.debugDescription)
+            reveal(item)
+            assertHorizontalBounds(item)
+            capture("bd2-section-" + heading.replacingOccurrences(of: " ", with: "-"))
+        }
+        let epub = app.buttons["Download EPUB Only"].firstMatch
+        reveal(epub, upward: false)
+        XCTAssertTrue(epub.isHittable)
+        assertHorizontalBounds(epub)
+        capture("bd2-format-actions")
+
+        if app.windows.firstMatch.frame.width >= 700 {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            reveal(title, upward: false)
+            assertHorizontalBounds(title)
+            capture("bd2-ipad-landscape")
+            XCUIDevice.shared.orientation = .portrait
+        }
+        back()
+        let sparse = app.descendants(matching: .any).matching(identifier: "browse.book.2").firstMatch
+        reveal(sparse)
+        sparse.tap()
+        element("book-detail.title")
+        capture("bd2-no-cover-sparse-overview")
+        XCTAssertFalse(app.staticTexts["Published"].exists)
+        XCTAssertFalse(app.staticTexts["Publisher"].exists)
+        XCTAssertFalse(app.staticTexts["Series"].exists)
+        XCTAssertFalse(app.staticTexts["Description"].exists)
+        let information = app.staticTexts["Book Information"].firstMatch
+        reveal(information)
+        capture("bd2-sparse-information")
+        back()
+        element("screen.browse.book-list")
+    }
+
+    private func reveal(_ item: XCUIElement, upward: Bool = true) {
+        for _ in 0..<20 {
+            let collection = app.collectionViews.firstMatch
+            let table = app.tables.firstMatch
+            let list = collection.exists ? collection : table
+            if item.exists && item.isHittable {
+                // A browse row can be taller than its list at accessibility sizes.
+                if list.exists { return }
+                let window = app.windows.firstMatch.frame
+                let tabBar = app.tabBars.firstMatch
+                let bottom = tabBar.exists && tabBar.frame.minY > window.midY ? tabBar.frame.minY : window.maxY - 20
+                let navigationBottom = app.navigationBars.firstMatch.frame.maxY
+                let frame = item.frame
+                let fits = frame.height <= bottom - navigationBottom
+                    ? frame.minY >= navigationBottom && frame.maxY <= bottom
+                    : frame.maxY > navigationBottom && frame.minY < bottom
+                if fits { return }
+            }
+            if list.exists {
+                if upward { list.swipeUp() } else { list.swipeDown() }
+                continue
+            }
+            // Small, position-aware drags avoid skipping a control at accessibility sizes.
+            // Use the card padding: avoid both the WebView and the system scroll indicator.
+            let window = app.windows.firstMatch.frame
+            let top = app.navigationBars.firstMatch.frame.maxY + 12
+            let tabBar = app.tabBars.firstMatch
+            let bottom = (tabBar.exists && tabBar.frame.minY > window.midY ? tabBar.frame.minY : window.maxY) - 12
+            let frame = item.exists ? item.frame : .zero
+            let moveUp = item.exists ? frame.maxY > bottom : upward
+            let remaining = moveUp ? frame.maxY - bottom : top - frame.minY
+            let distance = min(180, max(50, remaining + 12))
+            let middle = (top + bottom) / 2
+            let startY = middle + (moveUp ? distance / 2 : -distance / 2)
+            let endY = middle - (moveUp ? distance / 2 : -distance / 2)
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: 24, dy: startY))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: 24, dy: endY))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        }
+        XCTAssertTrue(item.isHittable, app.debugDescription)
+    }
+
+    private func assertHorizontalBounds(_ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let frame = item.frame
+        let window = app.windows.firstMatch.frame
+        XCTAssertGreaterThanOrEqual(frame.minX, window.minX, file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxX, window.maxX + 1, file: file, line: line)
+    }
+
     func testDetailRefreshKeepsCachedReadAndHistoryReturn() throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DETAIL_REFRESH_CONTROL_URL"] == nil,
                       "Requires the BD1 metadata-control proxy")
@@ -1138,5 +1310,55 @@ final class CalibreOnboardingUITests: XCTestCase {
         screenshot.name = name
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+}
+
+
+/// Uses only normal startup discovery of a CC0 EPUB in the isolated app's Local Library folder.
+final class BookDetailLocalFileUITests: XCTestCase {
+    func testLocalFileWithoutCoverReadsAndReturnsThroughHistory() throws {
+        let bundle = ProcessInfo.processInfo.environment["YABR_LOCAL_DETAIL_BUNDLE_ID"] ?? ""
+        try XCTSkipIf(bundle.isEmpty, "Requires an isolated Release app with a local EPUB fixture")
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: bundle)
+        app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/BD2LocalFileValidation"
+        app.launch()
+        let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.options.")).firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 30), app.debugDescription)
+        options.tap()
+        let details = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.details.")).firstMatch
+        XCTAssertTrue(details.waitForExistence(timeout: 10), app.debugDescription)
+        details.tap()
+        let title = app.staticTexts["book-detail.title"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 15), app.debugDescription)
+        let read = app.buttons["book-detail.read"].firstMatch
+        XCTAssertEqual(read.label, "Read")
+        XCTAssertTrue(app.staticTexts["Local File"].exists)
+        capture("bd2-local-no-cover-detail")
+        read.tap()
+        XCTAssertTrue(app.webViews["reader.folio.content"].waitForExistence(timeout: 30), app.debugDescription)
+        let chapter = app.staticTexts["The Compass and the Quiet Map"].firstMatch
+        XCTAssertTrue(chapter.waitForExistence(timeout: 20), app.debugDescription)
+        capture("bd2-local-actual-reader")
+        let close = app.buttons.matching(NSPredicate(format: "label == 'Close'"))
+        XCTAssertTrue(close.firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        guard let action = close.allElementsBoundByIndex.last else { return XCTFail("Missing workspace close") }
+        action.tap()
+        XCTAssertTrue(read.waitForExistence(timeout: 15))
+        let progressHistory = app.buttons["book-detail.progress-history"].firstMatch
+        XCTAssertTrue(progressHistory.waitForExistence(timeout: 15), app.debugDescription)
+        app.buttons["book-detail.history"].firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "screen.reading-history").firstMatch.waitForExistence(timeout: 15))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        XCTAssertEqual(read.label, "Read")
+        capture("bd2-local-history-return")
+
+        func capture(_ name: String) {
+            let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            image.name = name
+            image.lifetime = .keepAlways
+            add(image)
+        }
     }
 }
