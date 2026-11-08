@@ -2,6 +2,7 @@ import XCTest
 import SwiftUI
 import Combine
 import UIKit
+import WebKit
 import PDFKit
 import Zip
 import RealmSwift
@@ -118,14 +119,12 @@ class BookDetailViewModelTests: XCTestCase {
     func testMissingBookClearsPreviousDetail() throws {
         XCTAssertFalse(viewModel.setup(bookId: "missing-book"))
         XCTAssertNil(viewModel.calibreBook)
-        XCTAssertNil(viewModel.listVM)
     }
 
     func testDeletedBookClearsObservedDetail() async throws {
         mockAppContainer.bookRepository.deleteBook(id: mockCalibreBook.inShelfId)
         await waitUntil { self.viewModel.calibreBook == nil }
         XCTAssertNil(viewModel.calibreBook)
-        XCTAssertNil(viewModel.listVM)
     }
 
     func testConcurrentRefreshesUseEachBooksOwnResult() async throws {
@@ -246,7 +245,6 @@ class BookDetailViewModelTests: XCTestCase {
         repository.sendObservedBook(nil)
         await waitUntil { model.pageState == .unavailable }
         XCTAssertNil(model.calibreBook)
-        XCTAssertNil(model.listVM)
         XCTAssertFalse(model.hasHistory)
         model.onDisappear()
     }
@@ -492,9 +490,8 @@ class BookDetailViewModelTests: XCTestCase {
     }
 
     func testViewModelSetup() throws {
-        XCTAssertNotNil(viewModel.listVM)
-        XCTAssertEqual(viewModel.listVM?.book.id, 123)
-        XCTAssertEqual(viewModel.listVM?.book.title, "Test Book")
+        XCTAssertEqual(viewModel.calibreBook?.id, 123)
+        XCTAssertEqual(viewModel.calibreBook?.title, "Test Book")
     }
 
     func testSetupObservesBookValueTypeUpdates() async throws {
@@ -516,7 +513,6 @@ class BookDetailViewModelTests: XCTestCase {
 
         await fulfillment(of: [expectation], timeout: 2.0)
         XCTAssertEqual(viewModel.calibreBook?.title, "Updated Book")
-        XCTAssertEqual(viewModel.listVM?.book.title, "Updated Book")
     }
     
     func testReadBookWhenNotInShelf() throws {
@@ -1180,7 +1176,19 @@ class BookDetailViewModelTests: XCTestCase {
         viewModel.showReadingPositionHistory(book: mockCalibreBook)
 
         XCTAssertTrue(viewModel.isReadingPositionHistoryActive)
-        XCTAssertEqual(viewModel.listVM?.book.inShelfId, mockCalibreBook.inShelfId)
+        XCTAssertEqual(viewModel.readingHistoryViewModel?.library?.id, mockCalibreBook.library.id)
+        XCTAssertEqual(viewModel.readingHistoryViewModel?.bookId, mockCalibreBook.id)
+    }
+
+    func testReaderDismissesActivityEvenAfterDetailStopsObserving() async {
+        viewModel.showActivity(book: mockCalibreBook)
+        XCTAssertNotNil(viewModel.activityViewModel)
+        viewModel.onDisappear()
+
+        mockAppContainer.publishDismissAll("reader-opened")
+
+        await waitUntil { self.viewModel.activityViewModel == nil }
+        XCTAssertNil(viewModel.activityViewModel)
     }
 
     func testOnAppearSkipsNetworkRefreshOnlyWhenReturningFromHistory() async throws {
@@ -1527,7 +1535,6 @@ class BookDetailViewModelTests: XCTestCase {
         await waitUntil { self.viewModel.refreshState == .synced }
         XCTAssertEqual(viewModel.refreshState, .synced)
         XCTAssertEqual(viewModel.calibreBook?.title, "Refreshed Title")
-        XCTAssertEqual(viewModel.listVM?.book.title, "Refreshed Title")
         XCTAssertEqual(
             realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: mockBookRealm.primaryKey!)?.title,
             "Refreshed Title"
@@ -1575,6 +1582,7 @@ private final class DetailHoldingURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+@MainActor
 class ReadingPositionViewModelTests: XCTestCase {
     var mockAppContainer: AppContainer!
     var listViewModel: ReadingPositionListViewModel!
@@ -1598,7 +1606,7 @@ class ReadingPositionViewModelTests: XCTestCase {
     
     func testDetailViewModelInitialization() throws {
         let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
-        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
+        let detailVM = ReadingPositionDetailViewModel(listModel: listViewModel, position: position)
         
         XCTAssertEqual(detailVM.position.id, "device-1")
         XCTAssertEqual(detailVM.selectedFormatReader, .YabrEPUB)
@@ -1717,10 +1725,10 @@ class ReadingPositionViewModelTests: XCTestCase {
     func testDetailViewModelReadSelectedFormatHonorsReaderOverride() throws {
         try makeCachedEPUB()
         let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
-        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
+        let detailVM = ReadingPositionDetailViewModel(listModel: listViewModel, position: position)
         detailVM.selectedFormatReader = .ReadiumEPUB
 
-        detailVM.readSelectedFormat()
+        detailVM.readSelectedFormat(targetWorkspaceID: nil)
 
         XCTAssertNil(detailVM.alertItem, "readSelectedFormat raised alert: \(detailVM.alertItem?.id ?? "")")
         XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.readerInfo.readerType, .ReadiumEPUB)
@@ -1808,32 +1816,49 @@ class ReadingPositionViewModelTests: XCTestCase {
         let historyVM = makeHistoryViewModel(positions: [])
         let position = TestFixtures.makeReadingPosition(id: "device-1")
 
+        historyVM.start()
         historyVM.showDetail(for: position)
-        XCTAssertEqual(historyVM.detailPosition, position)
-        XCTAssertEqual(historyVM.displayedDetailPosition, position)
+        let detail = try XCTUnwrap(historyVM.displayedDetail)
+        XCTAssertTrue(historyVM.isDetailActive)
+        XCTAssertEqual(detail.position, position)
 
+        historyVM.stop()
         historyVM.dismissDetail()
-        XCTAssertNil(historyVM.detailPosition)
-        XCTAssertEqual(historyVM.displayedDetailPosition, position)
+        historyVM.start()
+        XCTAssertFalse(historyVM.isDetailActive)
+        XCTAssertTrue(historyVM.displayedDetail === detail)
+        historyVM.stop()
     }
 
     /// A reader above History or a finished download doesn't make the page appear again, so it
     /// reloads on book updates while shown.
     func testHistoryViewModelReloadsWhenBooksUpdate() async throws {
         let historyVM = makeHistoryViewModel(positions: [])
-        historyVM.loadData()
+        historyVM.start()
         XCTAssertTrue(historyVM.deviceSections.isEmpty)
-        await historyVM.observeChanges()
+        let list = try XCTUnwrap(historyVM.listViewModel)
 
         let repository = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
         repository.getPositionsReturn = [TestFixtures.makeReadingPosition(id: "device-1", lastReadChapter: "Chapter 6")]
-        await mockAppContainer.publishCalibreUpdate(.shelf)
+        mockAppContainer.publishCalibreUpdate(.shelf)
 
         let deadline = Date().addingTimeInterval(10)
         while historyVM.deviceSections.isEmpty && Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTAssertEqual(historyVM.deviceSections.first?.rows.first?.title, "Chapter 6")
+        XCTAssertTrue(historyVM.listViewModel === list)
+
+        historyVM.stop()
+        repository.getPositionsReturn = []
+        mockAppContainer.publishCalibreUpdate(.shelf)
+        await Task.yield()
+        XCTAssertEqual(historyVM.deviceSections.first?.rows.first?.title, "Chapter 6")
+
+        historyVM.start()
+        XCTAssertTrue(historyVM.deviceSections.isEmpty)
+        XCTAssertTrue(historyVM.listViewModel === list)
+        historyVM.stop()
     }
 
     func testHistoryViewModelStatisticsModeHasNoDeviceSections() throws {
@@ -1850,9 +1875,9 @@ class ReadingPositionViewModelTests: XCTestCase {
     func testDetailViewModelReadSelectedFormatOpensReaderPresentation() throws {
         let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
         try makeCachedEPUB()
-        let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
+        let detailVM = ReadingPositionDetailViewModel(listModel: listViewModel, position: position)
 
-        detailVM.readSelectedFormat()
+        detailVM.readSelectedFormat(targetWorkspaceID: nil)
 
         XCTAssertNil(detailVM.alertItem, "readSelectedFormat raised alert: \(detailVM.alertItem?.id ?? "")")
         let presentation = mockAppContainer.sessionManager.activeReaderPresentation
@@ -1893,25 +1918,9 @@ class ReadingPositionViewModelTests: XCTestCase {
     }
 }
 
+@MainActor
 class ActivityListViewModelTests: XCTestCase {
-    var mockAppContainer: AppContainer!
-    
-    override func setUpWithError() throws {
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ActivityListViewModelTests")
-    }
-    
-    override func tearDownWithError() throws {
-        mockAppContainer = nil
-    }
-    
-    func testInitialization() throws {
-        let repository = MockActivityLogRepository()
-        let viewModel = ActivityListViewModel(container: mockAppContainer, activityLogRepository: repository)
-        XCTAssertTrue(repository.fetchEntriesCalled)
-        XCTAssertEqual(viewModel.activities.count, 0)
-    }
-
-    func testInitializationUsesRepositoryAndReceivesUpdates() async throws {
+    func testActivityObservationFollowsVisibility() async throws {
         let repository = MockActivityLogRepository()
         let initialEntry = ActivityLogUIEntry(
             id: "1",
@@ -1930,12 +1939,15 @@ class ActivityListViewModelTests: XCTestCase {
         repository.fetchEntriesReturn = [initialEntry]
 
         let viewModel = ActivityListViewModel(
-            container: mockAppContainer,
+            repository: repository,
             libraryId: "library-id",
-            bookId: 7,
-            activityLogRepository: repository
+            bookId: 7
         )
 
+        XCTAssertFalse(repository.fetchEntriesCalled)
+        XCTAssertEqual(repository.observeEntriesSubscriberCount, 0)
+        viewModel.start()
+        viewModel.start()
         XCTAssertTrue(repository.fetchEntriesCalled)
         XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
         XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
@@ -1976,6 +1988,20 @@ class ActivityListViewModelTests: XCTestCase {
         }
 
         XCTAssertEqual(viewModel.activities, [updatedEntry])
+
+        viewModel.stop()
+        repository.sendObservedEntries([initialEntry])
+        let cancelDeadline = Date().addingTimeInterval(10)
+        while repository.observeEntriesSubscriberCount != 0 && Date() < cancelDeadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(repository.observeEntriesSubscriberCount, 0)
+        XCTAssertEqual(viewModel.activities, [updatedEntry])
+
+        viewModel.start()
+        XCTAssertEqual(viewModel.activities, [initialEntry])
+        XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
+        viewModel.stop()
     }
 }
 
@@ -2296,4 +2322,110 @@ private final class DeferredPreviewManifest {
     func load() async throws -> Data {
         try await withCheckedThrowingContinuation { requests.append($0) }
     }
+}
+
+@MainActor
+final class BookDescriptionWebViewTests: XCTestCase {
+    func testOnlyDocumentChangesReloadWebKitWhileLayoutChangesReflow() async throws {
+        let base = try XCTUnwrap(URL(string: "https://example.invalid/first/book"))
+        let html = "<p>\(String(repeating: "An ordinary description wraps at the container width. ", count: 18))</p>"
+            + "<a href='details'>Details</a>"
+        var measuredDocument: BookDescriptionDocument?
+        var height: CGFloat = 0
+        let coordinator = BookDescriptionWebView.Coordinator()
+        let webView = coordinator.makeWebView()
+        webView.frame = CGRect(x: 0, y: 0, width: 300, height: 140)
+        let root = UIViewController()
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        window.rootViewController = root
+        root.view.addSubview(webView)
+        window.isHidden = false
+        defer {
+            BookDescriptionWebView.dismantleUIView(webView, coordinator: coordinator)
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        func update(_ document: BookDescriptionDocument, size: CGFloat = 17) {
+            coordinator.update(BookDescriptionWebView(document: document, textSize: size,
+                openLink: { _ in }, onHeight: {
+                    measuredDocument = $0
+                    height = $1
+                }, revealAnchor: { _ in }), in: webView)
+        }
+
+        let initial = BookDescriptionDocument(html: html, baseURL: base)
+        update(initial)
+        try await waitFor { height > 140 }
+        let wideHeight = height
+        XCTAssertFalse(webView.scrollView.isScrollEnabled)
+        let token = try await documentToken(in: webView)
+        let originalLink = try await webView.evaluateJavaScript("document.querySelector('a').href") as? String
+        XCTAssertEqual(originalLink, "https://example.invalid/first/details")
+
+        update(initial) // Same inputs as a download-progress update.
+        webView.frame.size.width = 180
+        try await waitFor { height > wideHeight }
+        let narrowHeight = height
+        update(initial, size: 25)
+        try await waitFor { height > narrowHeight }
+        let reflowedToken = try await documentToken(in: webView)
+        XCTAssertEqual(reflowedToken, token)
+        XCTAssertEqual(webView.bounds.height, 140)
+
+        let otherBase = try XCTUnwrap(URL(string: "https://example.invalid/second/book"))
+        let moved = BookDescriptionDocument(html: html, baseURL: otherBase)
+        update(moved, size: 25)
+        try await waitFor { measuredDocument == moved }
+        let newBaseToken = try await documentToken(in: webView)
+        XCTAssertNotEqual(newBaseToken, token)
+        let updatedLink = try await webView.evaluateJavaScript("document.querySelector('a').href") as? String
+        XCTAssertEqual(updatedLink, "https://example.invalid/second/details")
+
+        let updated = BookDescriptionDocument(html: "<p>Updated description</p>", baseURL: otherBase)
+        update(updated, size: 25)
+        try await waitFor { measuredDocument == updated && (1..<140).contains(height) }
+        let newContentToken = try await documentToken(in: webView)
+        XCTAssertNotEqual(newContentToken, newBaseToken)
+        let updatedBody = try await webView.evaluateJavaScript("document.body.innerText.trim()") as? String
+        XCTAssertEqual(updatedBody, "Updated description")
+
+        let disclosure = BookDescriptionDocument(html: """
+            <details><summary>Synopsis</summary><p>\(String(repeating: "The synopsis continues. ", count: 20))</p></details>
+            """, baseURL: otherBase)
+        update(disclosure)
+        try await waitFor { measuredDocument == disclosure && !webView.isLoading }
+        let summaryHeight = height
+        XCTAssertTrue((1..<140).contains(summaryHeight))
+        let disclosureToken = try await documentToken(in: webView)
+        let toggleDisclosure = "document.querySelector('summary').click(); document.querySelector('details').open"
+
+        let isOpen = try await webView.evaluateJavaScript(toggleDisclosure) as? Bool
+        XCTAssertEqual(isOpen, true)
+        try await waitFor { height > 180 }
+        let isStillOpen = try await webView.evaluateJavaScript(toggleDisclosure) as? Bool
+        XCTAssertEqual(isStillOpen, false)
+        try await waitFor { height == summaryHeight }
+        let remeasuredToken = try await documentToken(in: webView)
+        XCTAssertEqual(remeasuredToken, disclosureToken)
+
+        let empty = BookDescriptionDocument(html: "<p><br>&nbsp;</p>", baseURL: nil)
+        update(empty)
+        try await waitFor { measuredDocument == empty }
+        XCTAssertEqual(height, 0)
+    }
+
+    private func documentToken(in webView: WKWebView) async throws -> String {
+        let token = try await webView.evaluateJavaScript("document.querySelector('meta[name=yabr-description]').content")
+        return try XCTUnwrap(token as? String)
+    }
+
+    private func waitFor(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = Date().addingTimeInterval(10)
+        while !condition(), Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(condition(), "WebKit did not report the expected layout", file: file, line: line)
+    }
+
 }

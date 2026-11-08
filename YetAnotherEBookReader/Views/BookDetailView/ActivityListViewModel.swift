@@ -8,35 +8,30 @@
 import Foundation
 import SwiftUI
 
-class ActivityListViewModel: ObservableObject {
-    @Published var activities: [ActivityLogUIEntry] = []
+@MainActor
+final class ActivityListViewModel: ObservableObject, Identifiable {
+    let id = UUID()
+    @Published private(set) var activities: [ActivityLogUIEntry] = []
     
     private var activitiesTask: Task<Void, Never>?
     private let libraryId: String?
     private let bookId: Int32?
     private let activityLogRepository: ActivityLogRepositoryProtocol
     
-    init(
-        container: AppContainer,
-        libraryId: String? = nil,
-        bookId: Int32? = nil,
-        activityLogRepository: ActivityLogRepositoryProtocol? = nil
-    ) {
+    init(repository: ActivityLogRepositoryProtocol, libraryId: String? = nil, bookId: Int32? = nil) {
         self.libraryId = libraryId
         self.bookId = bookId
-        self.activityLogRepository = activityLogRepository ?? container.activityLogRepository
-        
-        loadActivities()
+        self.activityLogRepository = repository
     }
 
     deinit {
         activitiesTask?.cancel()
     }
     
-    func loadActivities() {
+    func start() {
+        guard activitiesTask == nil else { return }
         let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
         activities = activityLogRepository.fetchEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
-        activitiesTask?.cancel()
         let activityUpdates = activityLogRepository.observeEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
         activitiesTask = Task { @MainActor [weak self] in
             for await entries in activityUpdates {
@@ -45,4 +40,9 @@ class ActivityListViewModel: ObservableObject {
             }
         }
     }
+    func stop() {
+        activitiesTask?.cancel()
+        activitiesTask = nil
+    }
+
 }

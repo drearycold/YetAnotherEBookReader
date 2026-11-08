@@ -10,7 +10,6 @@ import SwiftUI
 
 @MainActor
 class BookDetailViewModel: ObservableObject {
-    @Published var listVM: ReadingPositionListViewModel?
     @Published private(set) var previewViewModel: BookPreviewViewModel?
     enum PageState: Equatable { case loading, content, unavailable }
     enum RefreshState: Equatable {
@@ -37,11 +36,13 @@ class BookDetailViewModel: ObservableObject {
     @Published var alertItem: AlertItem?
     
     
-    @Published var activityListViewPresenting = false
+    @Published private(set) var activityViewModel: ActivityListViewModel?
+    private var activityDismissTask: Task<Void, Never>?
 
     /// Drives the push of Reading History. It is pushed, not a sheet, so a reader opened from it
     /// shows above it in the workspace overlay.
     @Published var isReadingPositionHistoryActive = false
+    @Published private(set) var readingHistoryViewModel: ReadingPositionHistoryViewModel?
     
     private weak var container: AppContainer?
     var targetWorkspaceID: UUID?
@@ -64,8 +65,6 @@ class BookDetailViewModel: ObservableObject {
         return container?.deviceName ?? ""
     }
 
-    var sharedAppContainer: AppContainer? { container }
-
     init(container: AppContainer, targetWorkspaceID: UUID? = nil,
          bookRepository: BookRepositoryProtocol? = nil,
          readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,
@@ -87,6 +86,7 @@ class BookDetailViewModel: ObservableObject {
         bookObserverTask?.cancel()
         positionObserverTask?.cancel()
         dismissTask?.cancel()
+        activityDismissTask?.cancel()
     }
 
     /// Returning from History reattaches local observations without another network refresh.
@@ -129,10 +129,10 @@ class BookDetailViewModel: ObservableObject {
             refreshState = .idle
             alertItem = nil
             isReadingPositionHistoryActive = false
+            readingHistoryViewModel = nil
             isReturningFromHistory = false
             closePreview()
             clearingFormat = nil
-            activityListViewPresenting = false
         }
         guard let container else {
             clearContent()
@@ -176,7 +176,6 @@ class BookDetailViewModel: ObservableObject {
                 guard !Task.isCancelled, self?.observationID == id else { return }
                 self?.pendingReading = nil
                 self?.closePreview()
-                self?.activityListViewPresenting = false
             }
         }
         return calibreBook != nil
@@ -185,7 +184,7 @@ class BookDetailViewModel: ObservableObject {
     private func clearContent() {
         calibreBook = nil
         pageState = .unavailable
-        listVM = nil
+        closeActivity()
         refreshState = .idle
         helperConfiguration = nil
         readingProgressSummary = nil
@@ -450,35 +449,42 @@ class BookDetailViewModel: ObservableObject {
         calibreBook = book
         pageState = .content
         helperConfiguration = container.serverManager.queryServerDSReaderHelper(server: book.library.server)?.configuration
-        if listVM == nil {
-            listVM = ReadingPositionListViewModel(container: container, book: book,
-                positions: readingPositionRepository.getPositions(for: book))
-        }
-        listVM?.book = book
         applyPositions(readingPositionRepository.getPositions(for: book), book: book)
         updateReadableFile()
     }
     
     func showReadingPositionHistory(book: CalibreBook) {
+        guard let container, book.inShelfId == loadedBookId else { return }
         pendingReading = nil
         cancelRefresh()
-        prepareReadingPositionHistory(book: book)
+        readingHistoryViewModel = ReadingPositionHistoryViewModel(container: container, library: book.library, bookId: book.id)
         isReturningFromHistory = true
         isReadingPositionHistoryActive = true
     }
-    
-    func prepareReadingPositionHistory(book: CalibreBook) {
-        guard let container = container else { return }
-        if listVM == nil {
-            listVM = ReadingPositionListViewModel(
-                container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book)
-            )
-        } else {
-            listVM?.book = book
-            listVM?.positions = container.readingPositionRepository.getPositions(for: book)
+
+    func showActivity(book: CalibreBook) {
+        guard let container, book.inShelfId == loadedBookId, activityViewModel == nil else { return }
+        let activity = ActivityListViewModel(repository: container.activityLogRepository,
+                                             libraryId: book.library.id, bookId: book.id)
+        let events = container.dismissAllEvents()
+        activityViewModel = activity
+        // The sheet owns its dismissal subscription even if Book Detail disappears underneath it.
+        activityDismissTask = Task { [weak self] in
+            for await _ in events {
+                guard !Task.isCancelled, self?.activityViewModel?.id == activity.id else { return }
+                self?.closeActivity()
+                return
+            }
         }
     }
-    
+
+    func closeActivity() {
+        activityDismissTask?.cancel()
+        activityDismissTask = nil
+        activityViewModel?.stop()
+        activityViewModel = nil
+    }
+
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
         pendingReading = nil
         cancelRefresh()
@@ -533,7 +539,6 @@ class BookDetailViewModel: ObservableObject {
     }
 
     private func applyPositions(_ positions: [BookDeviceReadingPosition], book: CalibreBook) {
-        listVM?.positions = positions
         hasHistory = !positions.isEmpty
         let goodreadsSync = goodreadsSyncPreferences(for: book.library)
         if let date = book.readDateGRByLocale(pluginGoodreadsSync: goodreadsSync) {

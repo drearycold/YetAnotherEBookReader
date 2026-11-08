@@ -7,7 +7,9 @@ Run against a calibre server containing its Quick Start Guide (book ID 1):
 Use http://127.0.0.1:18082 as YABR_ONBOARDING_SINGLE_URL and append /p3-control
 for YABR_DOWNLOAD_READ_CONTROL_URL. BD1 uses /bd1-control as
 YABR_DETAIL_REFRESH_CONTROL_URL, with success/failed/unavailable metadata modes.
-Other onboarding tests use their usual setup.
+BD4 uses /bd4-control as YABR_DESCRIPTION_CONTROL_URL to switch between long
+and short descriptions for book 1. Use a library with a second book for the
+empty-description case. Other onboarding tests use their usual setup.
 The proxy forwards read requests; its control endpoint changes only fixture state.
 """
 
@@ -23,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 def serve(upstream, port):
     state = {"mode": "success", "attempts": 0, "detail_mode": "success", "manifest_mode": "real"}
+    state["description_mode"] = None
     lock = threading.Lock()
     # A system proxy must never send these loopback requests to another machine.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -59,6 +62,20 @@ def serve(upstream, port):
                 with lock:
                     state["manifest_mode"] = mode
                 self.reply(200, b"{}", "application/json")
+                return
+            if parsed.path == "/bd4-control":
+                mode = urllib.parse.parse_qs(parsed.query).get("mode", ["long"])[0]
+                if mode not in ("long", "short"):
+                    self.reply(400, b"Unknown description mode", "text/plain")
+                    return
+                with lock:
+                    state["description_mode"] = mode
+                self.reply(200, b"{}", "application/json")
+                return
+            if parsed.path == "/get/1/bd4-illustration.svg":
+                self.reply(200, b'<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120">'
+                           b'<rect width="640" height="120" fill="#11747d"/>'
+                           b'<circle cx="320" cy="60" r="35" fill="#ffe9a2"/></svg>', "image/svg+xml")
                 return
             if parsed.path.startswith("/book-manifest/"):
                 with lock:
@@ -99,8 +116,27 @@ def serve(upstream, port):
                     time.sleep(7)
             try:
                 with opener.open(upstream + self.path, timeout=30) as response:
-                    self.reply(response.status, response.read(), response.headers.get(
-                        "Content-Type", "application/octet-stream"))
+                    body = response.read()
+                    if parsed.path.startswith("/ajax/books/"):
+                        with lock:
+                            description_mode = state["description_mode"]
+                        if description_mode:
+                            books = json.loads(body)
+                            if books.get("1"):
+                                if description_mode == "long":
+                                    books["1"]["comments"] = (
+                                        '<h2>BD4 Long Synopsis</h2><img src="bd4-illustration.svg" alt="Synopsis illustration">'
+                                        '<p><a href="#ending">Jump to the final paragraph</a></p>'
+                                        + "<p>A map brings the travelers back to a familiar shore. "
+                                          "They compare their notes and prepare to set out again.</p>" * 5
+                                        + '<p id="ending">BD4 Final Paragraph</p>'
+                                    )
+                                else:
+                                    books["1"]["comments"] = "<p>BD4 Short Synopsis</p>"
+                            if books.get("2"):
+                                books["2"]["comments"] = "<p><br>&nbsp;</p>"
+                            body = json.dumps(books).encode()
+                    self.reply(response.status, body, response.headers.get("Content-Type", "application/octet-stream"))
             except urllib.error.HTTPError as error:
                 self.reply(error.code, error.read(), error.headers.get("Content-Type", "text/plain"))
             except urllib.error.URLError:

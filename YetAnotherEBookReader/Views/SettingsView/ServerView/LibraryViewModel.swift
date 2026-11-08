@@ -33,6 +33,11 @@ class LibraryViewModel: ObservableObject {
     private var libraryObservationTask: Task<Void, Never>?
     private var syncStatusObservationTask: Task<Void, Never>?
     
+    @MainActor
+    func makeActivityListViewModel() -> ActivityListViewModel {
+        ActivityListViewModel(repository: container.activityLogRepository, libraryId: library.id)
+    }
+
     init(container: AppContainer, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
         self.container = container
         self.library = library

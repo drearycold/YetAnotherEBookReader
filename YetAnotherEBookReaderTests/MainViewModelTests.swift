@@ -518,19 +518,29 @@ import Combine
         let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
         XCTAssertFalse(readerInfo.missing)
 
-        let listViewModel = ReadingPositionListViewModel(container: mockAppContainer, book: book, positions: [])
-        let alert = listViewModel.continueReading(
-            at: readerInfo.position,
-            format: readerInfo.format,
-            readerType: readerInfo.readerType,
-            targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id
-        )
+        let history = ReadingPositionHistoryViewModel(container: mockAppContainer, library: book.library, bookId: book.id)
+        history.start()
+        defer { history.stop() }
+        history.continueReading(at: readerInfo.position, targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id)
 
-        XCTAssertNil(alert, "continueReading raised alert: \(alert?.id ?? "")")
+        XCTAssertNil(history.alertItem)
         let attachedToSecond = await waitUntil(timeout: 10) {
             secondViewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
         }
         XCTAssertTrue(attachedToSecond)
+        let firstID = try XCTUnwrap(secondViewModel.readerWorkspaceViewModel.activePresentation?.id)
+
+        history.showDetail(for: readerInfo.position)
+        let detail = try XCTUnwrap(history.displayedDetail)
+        history.stop()
+        detail.readSelectedFormat(targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id)
+
+        XCTAssertNil(detail.alertItem)
+        let replacedInSecond = await waitUntil(timeout: 10) {
+            guard let active = secondViewModel.readerWorkspaceViewModel.activePresentation else { return false }
+            return active.id != firstID && active.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(replacedInSecond)
         XCTAssertTrue(secondViewModel.readerWorkspaceViewModel.isPresented)
         XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
     }

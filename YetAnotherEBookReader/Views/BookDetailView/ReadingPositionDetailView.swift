@@ -19,7 +19,7 @@ struct ReadingPositionDetailView: View {
         List {
             Section {
                 Button(action: {
-                    viewModel.readSelectedFormat()
+                    viewModel.readSelectedFormat(targetWorkspaceID: readerWorkspaceID)
                 }) {
                     Label("Continue Reading", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
@@ -32,7 +32,11 @@ struct ReadingPositionDetailView: View {
                 .accessibilityIdentifier("reading-position.continue")
             } footer: {
                 if !viewModel.isSelectedFormatCached {
-                    Text("Download \(viewModel.selectedFormat.rawValue) first to continue from here.")
+                    if viewModel.selectedFormatReader == .UNSUPPORTED {
+                        Text("No reader can open this saved position.")
+                    } else {
+                        Text("Download \(viewModel.selectedFormat.rawValue) first to continue from here.")
+                    }
                 }
             }
 
@@ -55,7 +59,12 @@ struct ReadingPositionDetailView: View {
                 if viewModel.position.structuralStyle == 1, viewModel.position.lastReadBook.isEmpty == false {
                     row("Book", viewModel.position.lastReadBook)
                 }
-                row("Section", viewModel.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))
+                let chapter = viewModel.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)
+                if chapter.isEmpty {
+                    row("Page", viewModel.position.lastReadPage.description)
+                } else {
+                    row("Section", chapter)
+                }
                 HStack {
                     Text("Progress")
                     Spacer()
@@ -64,6 +73,7 @@ struct ReadingPositionDetailView: View {
                     Text(viewModel.percentFormatter.string(from: NSNumber(value: viewModel.position.lastProgress / 100)) ?? "")
                 }
                 row("Time", viewModel.dateFormatter.string(from: Date(timeIntervalSince1970: viewModel.position.epoch)))
+                row("Device", viewModel.position.id)
             }
 
 #if DEBUG
@@ -85,13 +95,10 @@ struct ReadingPositionDetailView: View {
 #endif
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(Text(viewModel.position.id))
+        .navigationTitle("Reading Position")
         .navigationBarTitleDisplayMode(.inline)
         .alert(item: $viewModel.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
-        }
-        .onAppear {
-            viewModel.targetWorkspaceID = readerWorkspaceID
         }
         .accessibilityIdentifier("screen.reading-position")
     }
@@ -121,7 +128,6 @@ struct ReadingPositionDetailView_Previews: PreviewProvider {
             NavigationView {
                 ReadingPositionDetailView(
                     viewModel: ReadingPositionDetailViewModel(
-                        container: container,
                         listModel: listModel,
                         position: position
                     )

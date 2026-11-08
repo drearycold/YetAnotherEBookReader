@@ -18,8 +18,8 @@ struct ReadingPositionHistoryView: View {
     @Environment(\.readerWorkspaceID) var readerWorkspaceID
     @StateObject private var viewModel: ReadingPositionHistoryViewModel
 
-    init(library: CalibreLibrary?, bookId: Int32?) {
-        self._viewModel = StateObject(wrappedValue: ReadingPositionHistoryViewModel(library: library, bookId: bookId))
+    init(viewModel: @autoclosure @escaping () -> ReadingPositionHistoryViewModel) {
+        self._viewModel = StateObject(wrappedValue: viewModel())
     }
 
     var body: some View {
@@ -44,10 +44,8 @@ struct ReadingPositionHistoryView: View {
         .alert(item: $viewModel.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
-        .onAppear {
-            viewModel.loadData()
-            viewModel.observeChanges()
-        }
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.stop() }
         .accessibilityIdentifier("screen.reading-history")
     }
 
@@ -117,17 +115,21 @@ struct ReadingPositionHistoryView: View {
                 Button(action: {
                     viewModel.showDetail(for: row.endPosition)
                 }) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.chapter)
-                            .lineLimit(2)
-                        Text("\(row.durationText) · \(row.dateText)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.chapter)
+                                .lineLimit(2)
+                            Text("\(row.durationText) · \(row.dateText)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        detailChevron
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityHint("Shows this session’s saved position")
             }
         }
     }
@@ -140,7 +142,7 @@ struct ReadingPositionHistoryView: View {
             }
             ForEach(viewModel.booksHistoryItems) { item in
                 NavigationLink(
-                    destination: LazyView(ReadingPositionHistoryView(library: item.book.library, bookId: item.book.id))
+                    destination: LazyView(ReadingPositionHistoryView(viewModel: viewModel.history(for: item.book)))
                 ) {
                     HStack {
                         Text(item.book.title)
@@ -203,6 +205,7 @@ struct ReadingPositionHistoryView: View {
                     Text(row.percentText)
                         .font(.subheadline.monospacedDigit())
                         .foregroundColor(.secondary)
+                    detailChevron
                 }
                 .contentShape(Rectangle())
             }
@@ -223,6 +226,13 @@ struct ReadingPositionHistoryView: View {
         }
     }
     
+    private var detailChevron: some View {
+        Image(systemName: "chevron.forward")
+            .font(.caption.weight(.semibold))
+            .foregroundColor(Color(uiColor: .tertiaryLabel))
+            .accessibilityHidden(true)
+    }
+
     /// The single hidden link for a position's detail, in book mode only. Settings mode has a
     /// NavigationLink per book, and iOS 15 pops a programmatic link that shares its view with
     /// another one.
@@ -231,7 +241,7 @@ struct ReadingPositionHistoryView: View {
         if viewModel.isBookMode {
             NavigationLink(
                 isActive: Binding(
-                    get: { viewModel.detailPosition != nil },
+                    get: { viewModel.isDetailActive },
                     set: { isActive in
                         if !isActive {
                             viewModel.dismissDetail()
@@ -239,9 +249,9 @@ struct ReadingPositionHistoryView: View {
                     }
                 )
             ) {
-                if let position = viewModel.displayedDetailPosition {
-                    positionDetail(position)
-                        .id(position)
+                if let detail = viewModel.displayedDetail {
+                    ReadingPositionDetailView(viewModel: detail)
+                        .id(detail.id)
                 }
             } label: {
                 EmptyView()
@@ -250,21 +260,7 @@ struct ReadingPositionHistoryView: View {
         }
     }
     
-    @ViewBuilder
-    private func positionDetail(_ position: BookDeviceReadingPosition) -> some View {
-        if let listViewModel = viewModel.listViewModel {
-            ReadingPositionDetailView(
-                viewModel: viewModel.detailViewModel(
-                    for: position,
-                    listViewModel: listViewModel,
-                    targetWorkspaceID: readerWorkspaceID
-                )
-            )
-        } else {
-            Text("This book is no longer in the library")
-                .foregroundColor(.secondary)
-        }
-    }
+
 }
 
 struct ReadingPositionHistoryView_Previews: PreviewProvider {
@@ -273,7 +269,8 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
     static var previews: some View {
         if let book = container.bookManager.booksInShelf.values.first {
             NavigationView {
-                ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                ReadingPositionHistoryView(viewModel: ReadingPositionHistoryViewModel(
+                    container: container, library: book.library, bookId: book.id))
             }
             .navigationViewStyle(.stack)
             .environment(\.appContainer, container)
