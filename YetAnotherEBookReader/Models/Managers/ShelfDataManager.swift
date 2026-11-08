@@ -539,7 +539,7 @@ final class YabrShelfDataModel {
             guard let book = booksInShelf[request.inShelfId],
                   let format = Format(rawValue: request.formatRawValue)
             else { continue }
-            container.downloadManager.requestDownload(book: book, format: format)
+            container.downloadManager.requestAutomaticDownload(book: book, format: format)
         }
 
         recentShelfItems = result.books

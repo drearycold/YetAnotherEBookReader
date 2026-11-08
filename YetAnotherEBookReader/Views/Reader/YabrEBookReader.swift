@@ -18,6 +18,7 @@ import ReadiumGCDWebServer
 struct YabrEBookReader: View {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let isPreview: Bool
     let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
 
@@ -25,16 +26,18 @@ struct YabrEBookReader: View {
         book: CalibreBook,
         readerInfo: ReaderInfo,
         presentationID: ReaderPresentation.ID? = nil,
+        isPreview: Bool = false,
         lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.isPreview = isPreview
         self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
     }
     
     var body: some View {
-        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, presentationID: presentationID, lifecycleEvents: lifecycleEvents)
+        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, presentationID: presentationID, isPreview: isPreview, lifecycleEvents: lifecycleEvents)
             .ignoresSafeArea()
     }
 }
@@ -44,6 +47,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let isPreview: Bool
     let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
     
@@ -56,10 +60,12 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         book: CalibreBook,
         readerInfo: ReaderInfo,
         presentationID: ReaderPresentation.ID? = nil,
+        isPreview: Bool = false,
         lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.isPreview = isPreview
         self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
         
@@ -72,6 +78,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             book: book,
             readerInfo: readerInfo,
             presentationID: presentationID,
+            isPreview: isPreview,
             lifecycleEvents: lifecycleEvents
         )
         nav.container = container
@@ -92,19 +99,23 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                 assetRetriever: assetRetriever,
                 httpServer: httpServer,
                 book: self.book,
-                readerPreferenceRepository: self.container.readerPreferenceRepository
+                readerPreferenceRepository: self.container.readerPreferenceRepository,
+                isPreview: isPreview
             )
             
             let publicationOpener = PublicationOpener(
                 parser: DefaultPublicationParser(httpClient: httpClient, assetRetriever: assetRetriever, pdfFactory: DefaultPDFDocumentFactory())
             )
             
-            Task {
-                guard let absoluteUrl = readerInfo.url.anyURL.absoluteURL,
+            context.coordinator.openingTask = Task {
+                guard !Task.isCancelled, let absoluteUrl = readerInfo.url.anyURL.absoluteURL,
                       let asset = try? await assetRetriever.retrieve(url: absoluteUrl).get() else { return }
                 
+                guard !Task.isCancelled else { return }
                 let result = await publicationOpener.open(asset: asset, allowUserInteraction: true)
+                guard !Task.isCancelled else { return }
                 DispatchQueue.main.async {
+                guard !context.coordinator.isUnmounted else { return }
                 do {
                     let publication = try result.get()
                     var initialLocation: Locator? = nil
@@ -175,10 +186,10 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         // Before iOS 16, ReaderInfo has already resolved PDFs to Readium PDF above.
         if readerInfo.format == Format.PDF, #available(iOS 16.0, macCatalyst 16.0, *) {
             let dictViewer = container.getCustomDictViewerNew(library: book.library)
-            _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
+            if !isPreview { _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString) }
             
             let pdfViewController = YabrPDFViewController()
-            let metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo)
+            let metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo, isPreview: isPreview)
             if dictViewer.0 {
                 metaSource.dictViewerItem = "Lookup"
                 metaSource.dictViewerNav.setViewControllers([metaSource.dictViewerTab], animated: false)
@@ -209,11 +220,11 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             if ret == 0 {
                 // Load and apply initial highlights for PDF, recovering the ones
                 // saved under the shelf identity first.
-                container.annotationRepository.refileHighlights(
+                if !isPreview { container.annotationRepository.refileHighlights(
                     fromBookId: book.inShelfId,
                     toBookId: book.bookPrefId,
                     readerName: ReaderType.YabrPDF.rawValue
-                )
+                ) }
                 let highlights = container.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
                 pdfViewController.applyHighlights(highlights)
                 
@@ -231,7 +242,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
 
             let dictViewer = container.getCustomDictViewerNew(library: book.library)
-            _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
+            if !isPreview { _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString) }
             
             readerConfiguration.enableMDictViewer = dictViewer.0
             readerConfiguration.userFontDescriptors = container.fontsManager.userFontInfos.mapValues { $0.descriptor }
@@ -249,6 +260,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
 
+            epubReaderContainer.isPreview = isPreview
             epubReaderContainer.container = container
             epubReaderContainer.calibreBook = book
             epubReaderContainer.readerInfo = readerInfo
@@ -291,18 +303,27 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         // print("EBookReader updateUIViewController \(context)")
     }
     
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        coordinator.isUnmounted = true
+        coordinator.openingTask?.cancel()
+        coordinator.openingTask = nil
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
     
     class Coordinator: NSObject, ReaderEngineDelegate {
         var parent: YabrEBookReaderRepresentable
+        var openingTask: Task<Void, Never>?
+        var isUnmounted = false
         
         init(_ parent: YabrEBookReaderRepresentable) {
             self.parent = parent
         }
         
         func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {
+            guard !parent.isPreview else { return }
             var dbPosition = parent.readerInfo.position
             dbPosition.id = parent.readerInfo.deviceName
             dbPosition.readerName = parent.readerInfo.readerType.rawValue
@@ -332,15 +353,18 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         }
         
         func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {
+            guard !parent.isPreview else { return }
             let bookHighlight = highlight.toBookHighlight()
             parent.container.annotationRepository.saveHighlight(bookHighlight)
         }
         
         func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {
+            guard !parent.isPreview else { return }
             parent.container.annotationRepository.removeHighlight(id: highlightId)
         }
         
         func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {
+            guard !parent.isPreview else { return }
             parent.container.readerPreferenceRepository.savePreferences(
                 prefs,
                 for: parent.book,

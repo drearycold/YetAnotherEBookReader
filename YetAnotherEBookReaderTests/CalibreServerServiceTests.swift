@@ -952,6 +952,8 @@ final class CalibreServerServiceTests: XCTestCase {
     }
 
     func testGetBookManifestAsyncSuccess() async throws {
+        // Manifest generation is polled by the user, so preview requests use the short session.
+        service.metadataSessions = service.metadataSessions.filter { $0.key.timeout == 10 }
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]

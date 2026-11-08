@@ -590,6 +590,93 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: savedURL.path))
     }
 
+    func testAutomaticDownloadDoesNotRestartFailedOrCancelledAttempts() throws {
+        let book = try makeDownloadableBook(id: 1020)
+        for outcome in [BookFormatDownload.Completion.failed("HTTP 503"), .cancelled] {
+            var download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false)
+            download.completion = outcome
+            manager.activeDownloads[download.sourceURL] = download
+            manager.requestAutomaticDownload(book: book, format: .EPUB)
+            XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.id, download.id)
+            XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.completion, outcome)
+            XCTAssertNil(manager.activeDownloads[download.sourceURL]?.downloadTask)
+        }
+    }
+
+    func testAutomaticDownloadDoesNotResumePausedAttemptButAllowsAnotherFormat() throws {
+        let book = try makeDownloadableBook(id: 1020, formats: [.EPUB, .PDF])
+        let paused = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false, isPaused: true)
+        manager.activeDownloads[paused.sourceURL] = paused
+        manager.requestAutomaticDownload(book: book, format: .EPUB)
+        XCTAssertEqual(manager.activeDownloads[paused.sourceURL]?.id, paused.id)
+        XCTAssertTrue(manager.activeDownloads[paused.sourceURL]?.isPaused == true)
+        manager.requestAutomaticDownload(book: book, format: .PDF)
+        XCTAssertTrue(manager.activeDownloads.values.contains { $0.format == .PDF && $0.isActive })
+        manager.cancelDownload(book, format: .PDF)
+    }
+
+    func testExplicitDownloadCanRetryAfterSuppressedAutomaticRequest() throws {
+        let book = try makeDownloadableBook(id: 1020)
+        removeSavedFile(for: book, format: .EPUB)
+        var failed = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false)
+        failed.completion = .failed("HTTP 503")
+        manager.activeDownloads[failed.sourceURL] = failed
+        manager.requestAutomaticDownload(book: book, format: .EPUB)
+        XCTAssertEqual(manager.activeDownloads[failed.sourceURL]?.id, failed.id)
+        XCTAssertNil(downloadStartError(from: manager.startDownload(book, format: .EPUB, overwrite: true)))
+        XCTAssertNotEqual(manager.activeDownloads[failed.sourceURL]?.id, failed.id)
+        manager.cancelDownload(book, format: .EPUB)
+    }
+
+    func testSuccessfulDownloadAtomicallyReplacesExistingCache() async throws {
+        let book = try makeDownloadableBook(id: 1020)
+        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        manager.activeDownloads[download.sourceURL] = download
+        try Data("Original EPUB".utf8).write(to: download.savedURL)
+        let temporary = try makeTempFile(name: "bd3-replacement", contents: Data("Updated EPUB".utf8))
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
+        let snapshot = snapshotExpectation { $0[download.sourceURL]?.completion == .succeeded }
+        delegate.urlSession(URLSession.shared, downloadTask: StubDownloadTask(request: URLRequest(url: download.sourceURL)), didFinishDownloadingTo: temporary)
+        XCTAssertEqual(try Data(contentsOf: download.savedURL), Data("Original EPUB".utf8))
+        delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL),
+            response: httpResponse(url: download.sourceURL, statusCode: 200)), didCompleteWithError: nil)
+        _ = await snapshot.value
+        XCTAssertEqual(try Data(contentsOf: download.savedURL), Data("Updated EPUB".utf8))
+    }
+
+    func testFailedDownloadCannotReplaceExistingCachedFile() async throws {
+        let book = try makeDownloadableBook(id: 1020)
+        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        manager.activeDownloads[download.sourceURL] = download
+        try Data("Original EPUB".utf8).write(to: download.savedURL)
+        let temporary = try makeTempFile(name: "bd3-http-error", contents: Data("HTTP Error".utf8))
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
+        delegate.urlSession(URLSession.shared, downloadTask: StubDownloadTask(request: URLRequest(url: download.sourceURL)), didFinishDownloadingTo: temporary)
+        delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL),
+            response: httpResponse(url: download.sourceURL, statusCode: 503)), didCompleteWithError: nil)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(try Data(contentsOf: download.savedURL), Data("Original EPUB".utf8))
+    }
+
+    func testCancelledDownloadCannotRecreateClearedFileFromLateFileCallback() async throws {
+        let book = try makeDownloadableBook(id: 1020)
+        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        manager.activeDownloads[download.sourceURL] = download
+        manager.cancelDownload(book, format: .EPUB)
+        removeSavedFile(for: book, format: .EPUB)
+        let temporary = try makeTempFile(name: "bd3-cancelled-late", contents: Data("Late EPUB".utf8))
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
+        delegate.urlSession(URLSession.shared, downloadTask: StubDownloadTask(request: URLRequest(url: download.sourceURL)), didFinishDownloadingTo: temporary)
+        delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL),
+            response: httpResponse(url: download.sourceURL, statusCode: 200)), didCompleteWithError: nil)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: download.savedURL.path))
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.completion, .cancelled)
+    }
+
     private func makeDownloadableBook(
         id: Int32,
         formats: [Format] = [.EPUB],

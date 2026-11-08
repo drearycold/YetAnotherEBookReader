@@ -41,10 +41,8 @@ struct BookDetailView: View {
         .alert(item: $viewModel.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
-        .sheet(isPresented: $viewModel.presentingPreviewSheet, onDismiss: {
-            if let book = viewModel.calibreBook { viewModel.handlePreviewDismiss(book: book) }
-        }) {
-            BookPreviewView(viewModel: viewModel.previewViewModel)
+        .sheet(item: Binding(get: { viewModel.previewViewModel }, set: { if $0 == nil { viewModel.closePreview() } })) { preview in
+            BookPreviewView(viewModel: preview).id(preview.id)
         }
         .sheet(isPresented: $viewModel.activityListViewPresenting) {
             NavigationView {
@@ -54,6 +52,19 @@ struct BookDetailView: View {
                 }
             }
         }
+        .confirmationDialog("Clear Downloaded File?", isPresented: Binding(
+            get: { viewModel.clearingFormat != nil },
+            set: { if !$0 { viewModel.clearingFormat = nil } }), titleVisibility: .visible) {
+                if let format = viewModel.clearingFormat, let book = viewModel.calibreBook {
+                    Button("Clear \(format.rawValue) Download", role: .destructive) {
+                        viewModel.clearFormat(book: book, format: format)
+                        viewModel.clearingFormat = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) { viewModel.clearingFormat = nil }
+            } message: {
+                Text("Removes this downloaded file from this device. You can download it again from the server. Reading history and annotations are kept. Clearing the last downloaded format also removes the book from Recent.")
+            }
         .background(readingHistoryLink)
         .onAppear { viewModel.onAppear(bookId: bookId, targetWorkspaceID: readerWorkspaceID) }
         .onChange(of: bookId) { id in
@@ -87,24 +98,18 @@ struct BookDetailView: View {
     }
 
     private func formatRows(for book: CalibreBook) -> [BookFormatRow] {
-        book.formats.sorted { $0.key < $1.key }.compactMap { raw, info in
-            guard let format = Format(rawValue: raw) else { return nil }
-            let download = viewModel.getActiveDownload(book: book, format: format)
-            return BookFormatRow(format: format, formatInfo: info, download: download,
-                statusText: viewModel.getFormatStatusText(formatInfo: info),
-                statusIcon: info.cached ? viewModel.getFormatStatusIcon(formatInfo: info) : "arrow.down.circle",
-                cache: { viewModel.cacheFormat(book: book, format: format) },
-                clear: { viewModel.clearFormat(book: book, format: format) },
-                preview: {
-                    if viewModel.previewAction(book: book, format: format, formatInfo: info) {
-                        viewModel.presentingPreviewSheet = true
-                    }
-                },
-                pauseOrResume: {
-                    if download?.isDownloading == true { viewModel.pauseDownload(book: book, format: format) }
+        viewModel.formatStates.map { state in
+            BookFormatRow(state: state,
+                cache: { if let format = state.format { viewModel.cacheFormat(book: book, format: format) } },
+                clear: { viewModel.clearingFormat = state.format },
+                preview: { if let format = state.format, let info = book.formats[state.id] {
+                    _ = viewModel.previewAction(book: book, format: format, formatInfo: info)
+                } },
+                pauseOrResume: { if let format = state.format {
+                    if state.download?.isDownloading == true { viewModel.pauseDownload(book: book, format: format) }
                     else { viewModel.resumeDownload(book: book, format: format) }
-                },
-                cancel: { viewModel.cancelDownload(book: book, format: format) })
+                } },
+                cancel: { if let format = state.format { viewModel.cancelDownload(book: book, format: format) } })
         }
     }
 

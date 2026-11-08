@@ -5,6 +5,76 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Book Detail Modernization BD3 (2026-11-07, branch)
+
+`codex/book-detail-bd3` starts at main `ca23e853`, with BD1 #136 and BD2 #137
+merged; GitHub and `ls-remote` verified the base, and the initial worktree was
+clean. The branch contains the BD3 implementation and verification notes.
+
+Files/Formats and the observing toolbar share `BookFormatState` snapshots and
+`BookFormatActions`, including format-specific labels, pausing/resuming,
+cancellation, failure/retry, actual-file checks, unsupported formats and preview.
+Clearing a downloaded format confirms its local-file/Recent effect and keeps
+history/annotations; imported local originals offer neither download nor cache
+clearing. Commands reconcile the download snapshot immediately, and existing P3
+full-book-ID/download-UUID/originating-workspace/open-once intent rules remain.
+
+Each preview owns immutable book and ReaderInfo values and its own identity.
+BookPreviewViewModel owns loading/contents/empty/generating/failure/retry and
+cancels requests and invalidates their generation on retry or close. Late
+answers cannot update a closed preview, a retry, or a different preview. Manifest requests use the existing service with a short
+10-second session. Nested titles are retained and malformed/aborted manifests
+are recoverable; local and offline contents use the existing Readium publication
+parser (EPUB/PDF/CBZ), without a reader/session. The sheet has explicit Close and
+a stable tab container; readers mount only after selecting Preview.
+
+Preview no longer prepares/restores the session manager's legacy ReaderInfo.
+The actual reader bridge/navigation, Folio position/bookmark/preference providers,
+PDF metadata source and Readium preference path suppress preview writes and
+session close handling. Folio keeps preview positions in memory; formal
+positions, annotations and preferences remain unchanged. The old comment about
+restoring a prepared preview session was not a reliable boundary.
+
+Download file callbacks now stage bytes privately, then validate HTTP success,
+current download UUID/task and cancellation before replacing the final file.
+Failed/cancelled/stale delivery cannot overwrite an older cache or recreate a
+cleared file. Completion and start use the latest repository book, preserving
+other formats' cache/selection flags and metadata refreshed during the download.
+Shelf rebuilds use requestAutomaticDownload, which never restarts known
+failed/cancelled/paused attempts in this session; explicit retries still create a
+new download. Native P3 reproduced the otherwise automatic second GET after 503.
+Deterministic red cases pin the file and snapshot failures before their fixes.
+
+Final validation: **1032 units + five regular UI journeys** pass (22 skips,
+two existing expected PDFKit failures, zero unexpected failures). iOS 15.5 passes
+**274 focused units + two detail/history UI journeys**. Five isolated
+**Release** native journeys pass: complete BD3 on iPhone 17/iOS 26.5 and iPhone
+7/iOS 15.5, iPad mini/iPadOS 26.5 portrait/landscape, the full P3 download/read
+journey on iPhone 17, and normal-startup local CC0 EPUB preview/read/history.
+These cover actual preview entry, original-chapter resume, empty/generating/bad
+manifest and retry, local/offline contents, close during response, clearing and
+real pause/resume. Final iOS Release/Catalyst builds, changed-Swift parse, Python
+compile and diff checks pass. Native copies match the final Release executable
+hash. The initial native pass caught a disappearing conditional empty tab; a
+stable ZStack fixes it. SwiftUI's Menu exposes an enclosing Other and Button
+with the same ID, so the UI driver matches the actual Button label. The reusable
+`.github/scripts/calibre-download-proxy.py` exposes `/bd3-control`
+for `YABR_PREVIEW_CONTROL_URL`; `YABR_PREVIEW_IPAD=1` selects EPUB using Files
+in the opt-in driver while keeping the tablet's normal PDF preference. Evidence:
+`/tmp/YabrBookDetailBD3/verification.json`; Chinese report and screenshots:
+`/Users/peterlee/.codex/visualizations/2026/11/07/01a1b3bf-a0e8-7cf2-837d-e4857d7aec36/book-detail-bd3/report.html`.
+
+Boundaries: no physical device, HTTPS/Digest, huge-file/disk-pressure stress,
+real DSReader Helper or Catalyst interaction. Native readers use EPUB/Folio;
+PDF/CBZ file parsing, engine position isolation and old-system PDF fallback have
+unit coverage, not native PDF/CBZ annotation/preference journeys. iPad checks are
+single-window portrait/landscape, not Split View. The GET proxy doesn't forward
+position/annotation POSTs, so real remote writes remain unverified. The original
+/tmp package cache was incomplete; builds use fresh `/tmp/YabrBD3Packages` and
+separate derived data, with locked versions. No schema, package pin, project
+membership or app version/build change. BD4 still owns description WebView
+loading/expansion and history/auxiliary internal cleanup.
+
 ## BD2 review follow-up: publication date calendar (2026-11-06)
 
 Independent review found that comparing Calendar.current's year with Calibre's

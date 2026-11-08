@@ -249,6 +249,20 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertFalse(didSeeEmptyPosition)
     }
 
+    func testPreviewPositionProviderKeepsProgressOnlyInMemory() throws {
+        let original = makePosition(page: 25)
+        container.readingPositionRepository.savePosition(original, for: book)
+        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo,
+            readingPositionRepository: container.readingPositionRepository, isReadOnly: true)
+        let previewPosition = makePosition(page: 3).toFolioReaderReadPosition()
+        var completed = false
+        provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId, set: previewPosition) { _ in completed = true }
+        XCTAssertTrue(completed)
+        XCTAssertEqual(provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)?.pageNumber, 3)
+        provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId, remove: original.toFolioReaderReadPosition())
+        XCTAssertEqual(container.readingPositionRepository.getPosition(for: book, policy: .latest)?.lastReadPage, 25)
+    }
+
     func testReadPositionProviderRejectsUnrelatedId() {
         let savedPosition = makePosition(page: 8)
         container.readingPositionRepository.savePosition(savedPosition, for: book)
@@ -307,6 +321,29 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.bookId, book.bookPrefId)
         XCTAssertEqual(results.first?.highlightId, "runtime-highlight")
+    }
+
+    func testPreviewBookmarkProviderDoesNotSaveOrRemoveBookmarks() {
+        let bookmark = makeBookmark(bookId: folioReaderBookId, page: 6, pos: "epubcfi(/6/6)")
+        let provider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo, isReadOnly: true)
+        var completed = false
+        provider.folioReaderBookmark(FolioReader(), added: bookmark) { _ in completed = true }
+        XCTAssertTrue(completed)
+        XCTAssertTrue(container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).isEmpty)
+        let formal = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
+        formal.folioReaderBookmark(FolioReader(), added: bookmark, completion: nil)
+        provider.folioReaderBookmark(FolioReader(), removed: "epubcfi(/6/6)")
+        provider.folioReaderBookmark(FolioReader(), updated: "epubcfi(/6/6)", title: "Changed in preview")
+        XCTAssertEqual(container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).count, 1)
+        XCTAssertNotEqual(container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).first?.title, "Changed in preview")
+    }
+
+    func testPreviewPreferencesDoNotCreateAPersistedFolioRow() {
+        let provider = FolioReaderDelegatePreferenceProvider(FolioReader(), delegate: nil, bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository, book: book, isReadOnly: true)
+        XCTAssertNil(container.readerPreferenceRepository.loadFolioPreferences(for: book))
+        provider.preference(setBool: true, for: "nightMode")
+        XCTAssertNil(container.readerPreferenceRepository.loadFolioPreferences(for: book))
     }
 
     func testBookmarkProviderCanonicalizesAddedFolioReaderBookmark() {

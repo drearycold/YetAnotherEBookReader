@@ -23,6 +23,7 @@ struct YabrReadiumEnvironment {
     let httpServer: GCDHTTPServer
     let book: CalibreBook?
     let readerPreferenceRepository: ReaderPreferenceRepositoryProtocol
+    var isPreview = false
 }
 
 extension YabrReadiumReaderViewController: UIPopoverPresentationControllerDelegate {
@@ -281,7 +282,7 @@ class YabrReadiumReaderViewController:
         ) { [weak self] updatedPreferences in
             guard let self = self else { return }
             self.applyReadiumPreferences(updatedPreferences)
-            if let book = self.environment.book {
+            if !self.environment.isPreview, let book = self.environment.book {
                 self.environment.readerPreferenceRepository.saveReadiumPreferences(updatedPreferences, for: book)
             }
             self.readerEngineDelegate?.readerEngine(self, didUpdatePreferences: updatedPreferences.toReaderEnginePreferences())

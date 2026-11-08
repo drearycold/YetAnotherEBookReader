@@ -21,9 +21,10 @@ extension EpubFolioReaderContainer {
                 folioReader,
                 delegate: self.readerEngineDelegate,
                 bookId: book.bookPrefId,
-                profileRepository: container?.folioReaderProfileRepository,
+                profileRepository: isPreview ? nil : container?.folioReaderProfileRepository,
                 preferenceRepository: container?.readerPreferenceRepository,
-                book: book
+                book: book,
+                isReadOnly: isPreview
             )
             self.folioReaderPreferenceProvider = preferenceProvider
             return preferenceProvider
@@ -59,7 +60,8 @@ extension EpubFolioReaderContainer {
                 book: book,
                 readerInfo: readerInfo,
                 readingPositionRepository: readingPositionRepository,
-                readerEngineDelegate: self.readerEngineDelegate
+                readerEngineDelegate: self.readerEngineDelegate,
+                isReadOnly: isPreview
             )
             self.folioReaderReadPositionProvider = provider
 
@@ -74,7 +76,7 @@ extension EpubFolioReaderContainer {
             guard let book = calibreBook,
                   let readerInfo
                   else { return FolioReaderNaiveBookmarkProvider() }
-            let bookmarkProvider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
+            let bookmarkProvider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo, isReadOnly: isPreview)
             self.folioReaderBookmarkProvider = bookmarkProvider
 
             return bookmarkProvider
@@ -151,6 +153,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     private let profileRepository: FolioReaderProfileRepositoryProtocol?
     private let preferenceRepository: ReaderPreferenceRepositoryProtocol?
     private let book: CalibreBook?
+    private let isReadOnly: Bool
 
     private var values = [String: Any]()
 
@@ -160,7 +163,8 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         bookId: String,
         profileRepository: FolioReaderProfileRepositoryProtocol? = nil,
         preferenceRepository: ReaderPreferenceRepositoryProtocol? = nil,
-        book: CalibreBook? = nil
+        book: CalibreBook? = nil,
+        isReadOnly: Bool = false
     ) {
         self.folioReader = folioReader
         self.delegate = delegate
@@ -168,6 +172,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         self.profileRepository = profileRepository
         self.preferenceRepository = preferenceRepository
         self.book = book
+        self.isReadOnly = isReadOnly
 
         values["nightMode"] = false
         values["themeMode"] = FolioReaderThemeMode.serpia.rawValue
@@ -314,7 +319,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     }
 
     private func saveCurrentPreferences() {
-        guard let book else { return }
+        guard !isReadOnly, let book else { return }
         let preferences = FolioReaderPreferenceValue(values: values, folioReader: folioReader)
         preferenceRepository?.saveFolioPreferences(preferences, for: book)
     }
@@ -558,6 +563,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     let readerInfo: ReaderInfo
     let bookIdentity: FolioReaderBookIdentity
     private let readingPositionRepository: ReadingPositionRepositoryProtocol
+    private let isReadOnly: Bool
     weak var readerEngineDelegate: ReaderEngineDelegate?
 
     /// Where this reader is: the position it opened at, then each one it saves. Saves arrive on
@@ -569,11 +575,13 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         book: CalibreBook,
         readerInfo: ReaderInfo,
         readingPositionRepository: ReadingPositionRepositoryProtocol,
-        readerEngineDelegate: ReaderEngineDelegate? = nil
+        readerEngineDelegate: ReaderEngineDelegate? = nil,
+        isReadOnly: Bool = false
     ) {
         self.book = book
         self.readerInfo = readerInfo
         self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
+        self.isReadOnly = isReadOnly
         self.readingPositionRepository = readingPositionRepository
         self.readerEngineDelegate = readerEngineDelegate
         self.currentPosition = readerInfo.position
@@ -596,6 +604,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
         guard bookIdentity.accepts(bookId) else { return nil }
 
+        if isReadOnly { return nil }
         return readingPositionRepository.getPositions(for: book)
             .filter({
                 $0.readerName == ReaderType.YabrEPUB.rawValue
@@ -617,6 +626,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         currentPositionLock.lock()
         currentPosition = bookDevPos
         currentPositionLock.unlock()
+        guard !isReadOnly else { return }
         let enginePos = ReaderEnginePosition(
             pageNumber: bookDevPos.lastReadPage,
             maxPage: bookDevPos.maxPage,
@@ -641,6 +651,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
         guard bookIdentity.accepts(bookId) else { return }
 
+        guard !isReadOnly else { return }
         readingPositionRepository.removePosition(
             position: readPosition.toBookDeviceReadingPosition(),
             for: book
@@ -655,16 +666,19 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
         guard bookIdentity.accepts(bookId) else { return [] }
 
+        if isReadOnly { return [] }
         return readingPositionRepository.getPositions(for: book).map { $0.toFolioReaderReadPosition() }
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
+        if isReadOnly { return [] }
         return readingPositionRepository.getPositions(for: book).map { $0.toFolioReaderReadPosition() }
     }
 
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
         guard bookIdentity.accepts(bookId) else { return [] }
 
+        if isReadOnly { return [] }
         return readingPositionRepository.sessions(for: book, list: nil).map { $0.toFolioReaderReadPositionHistory() }
     }
 
@@ -708,14 +722,17 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     let bookIdentity: FolioReaderBookIdentity
+    private let isReadOnly: Bool
 
-    init(book: CalibreBook, readerInfo: ReaderInfo) {
+    init(book: CalibreBook, readerInfo: ReaderInfo, isReadOnly: Bool = false) {
+        self.isReadOnly = isReadOnly
         self.book = book
         self.readerInfo = readerInfo
         self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
     }
 
     public func folioReaderBookmark(_ folioReader: FolioReader, added bookmark: FolioReaderBookmark, completion: Completion?) {
+        guard !isReadOnly else { completion?(nil); return }
         var error: FolioReaderBookmarkError? = nil
         defer {
             completion?(error as NSError?)
@@ -747,10 +764,12 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     }
 
     public func folioReaderBookmark(_ folioReader: FolioReader, removed bookmarkPos: String) {
+        guard !isReadOnly else { return }
         AppContainer.shared?.annotationRepository.removeBookmark(pos: bookmarkPos, bookId: bookIdentity.canonicalBookId)
     }
 
     public func folioReaderBookmark(_ folioReader: FolioReader, updated bookmarkPos: String, title: String) {
+        guard !isReadOnly else { return }
         if let existing = AppContainer.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: bookIdentity.canonicalBookId) {
             var updated = existing
             updated.title = title

@@ -87,7 +87,7 @@ struct BookOverviewView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(waitingToRead)
+            .disabled(waitingToRead || (isLocal && !canRead))
             .accessibilityLabel(Text(readActionTitle))
             .accessibilityIdentifier("book-detail.read")
 
@@ -95,7 +95,7 @@ struct BookOverviewView: View {
                 Button("Cancel Download", action: cancelDownload)
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("book-detail.cancel-download")
-            } else if !canRead {
+            } else if !canRead && !isLocal {
                 Button("Download Only", action: downloadOnly)
                     .frame(minHeight: 44)
                     .disabled(hasActiveDownload)

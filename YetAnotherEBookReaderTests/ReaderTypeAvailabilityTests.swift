@@ -36,8 +36,11 @@ final class ReaderTypeAvailabilityTests: XCTestCase {
         XCTAssertEqual(info.readerType, ReaderType.YabrPDF.resolved())
     }
 
-    func testThisSystemSupportsYabrPDF() {
-        // The test host runs a current simulator.
-        XCTAssertTrue(ReaderType.isYabrPDFAvailable)
+    func testPDFReaderChoicesRespectTheRunningSystem() {
+        if #available(iOS 16.0, macCatalyst 16.0, *) {
+            XCTAssertEqual(ReaderType.readers(for: .PDF), [.YabrPDF, .ReadiumPDF])
+        } else {
+            XCTAssertEqual(ReaderType.readers(for: .PDF), [.ReadiumPDF])
+        }
     }
 }

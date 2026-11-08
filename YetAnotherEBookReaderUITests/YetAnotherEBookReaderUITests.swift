@@ -985,6 +985,132 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("p3-explicit-read-after-return")
     }
 
+    func testPreviewLifecycleAndFormatActionsPreserveReadingPosition() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_PREVIEW_CONTROL_URL"] == nil,
+                      "Requires the BD3 loopback manifest fixture")
+        connect(name: "BD3 Preview Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        element("browse.book.mock").tap()
+        try downloadMode("success")
+        let isIPadFixture = ProcessInfo.processInfo.environment["YABR_PREVIEW_IPAD"] == "1"
+        if isIPadFixture {
+            // The tablet defaults to PDF. Select EPUB through the same per-format action as a user.
+            openFilesMenu()
+            element("Download EPUB Only").tap()
+            waitForReadLabel("Read")
+        }
+        element("book-detail.read").tap()
+        element("reader.folio.content")
+        let body = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "e-book management tool")).firstMatch
+        for _ in 0..<10 {
+            if body.exists && body.isHittable { break }
+            app.collectionViews["reader.folio.screen"].firstMatch.swipeLeft()
+        }
+        waitForVisibleBody(body)
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+
+        try previewMode("success")
+        openPreview()
+        element("Preview Chapter\n  Nested Chapter\n")
+        capture("bd3-preview-nested-contents")
+        if ProcessInfo.processInfo.environment["YABR_PREVIEW_IPAD"] == "1" {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            XCTAssertTrue(element("book-preview.close").isHittable, app.debugDescription)
+            capture("bd3-ipad-preview-landscape")
+            XCUIDevice.shared.orientation = .portrait
+        }
+        // Ordinary preview reader controls exercise the actual Folio integration.
+        app.buttons["Preview"].firstMatch.tap()
+        element("reader.folio.content")
+        capture("bd3-isolated-preview-reader")
+        element("book-preview.close").tap()
+        waitForReadLabel("Read")
+        element("book-detail.read").tap()
+        element("reader.folio.content")
+        waitForVisibleBody(body)
+        capture("bd3-resume-original-chapter-after-preview")
+        closeReaderWorkspace()
+
+        for (mode, text) in [("empty", "No table of contents in this book."),
+                             ("waiting", "The server is generating the table of contents. Try again shortly."),
+                             ("invalid", "The server returned an invalid table of contents. Please try again.")] {
+            try previewMode(mode)
+            openPreview()
+            element(text)
+            capture("bd3-preview-" + mode)
+            if mode != "empty" {
+                try previewMode("success")
+                element("book-preview.retry").tap()
+                element("Preview Chapter\n  Nested Chapter\n")
+                capture("bd3-retry-" + mode)
+            }
+            element("book-preview.close").tap()
+            waitForReadLabel("Read")
+        }
+        try previewMode("offline")
+        openPreview()
+        let contents = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Introduction")).firstMatch
+        XCTAssertTrue(contents.waitForExistence(timeout: 20), app.debugDescription)
+        capture("bd3-offline-downloaded-contents")
+        element("book-preview.close").tap()
+        try previewMode("slow")
+        openPreview()
+        element("book-preview.close").tap()
+        waitForReadLabel("Read")
+        XCTAssertFalse(app.staticTexts["Late Chapter\n"].waitForExistence(timeout: 6))
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "screen.book-preview").firstMatch.exists)
+        capture("bd3-dismiss-rejects-late-manifest")
+        clearDownloadedFiles()
+        capture("bd3-confirmed-cache-removal")
+        try downloadMode("slow")
+        if isIPadFixture {
+            openFilesMenu()
+            element("Download EPUB Only").tap()
+        } else {
+            element("book-detail.read").tap()
+        }
+        openFilesMenu()
+        element("Pause EPUB Download").tap()
+        openFilesMenu()
+        let resume = element("Resume EPUB Download")
+        waitForEnabled(resume)
+        capture("bd3-paused-format-download")
+        resume.tap()
+        if isIPadFixture {
+            waitForReadLabel("Read")
+            XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+            element("book-detail.read").tap()
+        }
+        element("reader.folio.content")
+        waitForVisibleBody(body)
+        capture("bd3-resumed-download-opens-saved-position")
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+    }
+
+    private func openFilesMenu() {
+        let snapshot = XCTAttachment(string: app.debugDescription)
+        snapshot.name = "bd3-toolbar-before-menu"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+        let button = app.buttons["Files and Formats"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10), app.debugDescription)
+        button.tap()
+    }
+
+    private func openPreview() {
+        openFilesMenu()
+        element("Preview EPUB").tap()
+        element("screen.book-preview")
+    }
+
+    private func previewMode(_ mode: String) throws {
+        try configureFixture(mode, environmentKey: "YABR_PREVIEW_CONTROL_URL")
+    }
+
     func testDetailInActualIPadSplitWindow() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["YABR_DETAIL_SPLIT"] == "1",
                           "Requires the isolated iPad Release fixture")
@@ -1233,25 +1359,10 @@ final class CalibreOnboardingUITests: XCTestCase {
     }
 
     private func clearDownloadedFiles() {
-        let clear = app.buttons["Clear Downloaded Files"].firstMatch
-        if clear.waitForExistence(timeout: 2) {
-            clear.tap()
-        } else {
-            // Older SwiftUI toolbars can retain the original Download Only label after caching.
-            // The format row's ordinary removal action remains available.
-            let formatClear = app.buttons["Outbox"].firstMatch
-            for _ in 0..<5 {
-                if formatClear.exists && formatClear.isHittable { break }
-                app.swipeUp()
-            }
-            XCTAssertTrue(formatClear.exists && formatClear.isHittable, app.debugDescription)
-            formatClear.tap()
-            let read = element("book-detail.read")
-            for _ in 0..<5 {
-                if read.isHittable { break }
-                app.swipeDown()
-            }
-        }
+        openFilesMenu()
+        element("Clear EPUB Download").tap()
+        element("Clear Downloaded File?")
+        element("Clear EPUB Download").tap()
         waitForReadLabel("Download and Read")
     }
 
@@ -1335,6 +1446,21 @@ final class BookDetailLocalFileUITests: XCTestCase {
         XCTAssertEqual(read.label, "Read")
         XCTAssertTrue(app.staticTexts["Local File"].exists)
         capture("bd2-local-no-cover-detail")
+        app.buttons["Files and Formats"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["Clear EPUB Download"].exists)
+        XCTAssertFalse(app.buttons["Download EPUB Only"].exists)
+        let preview = app.buttons["Preview EPUB"].firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 10), app.debugDescription)
+        preview.tap()
+        let localContents = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "The Compass and the Quiet Map")).firstMatch
+        XCTAssertTrue(localContents.waitForExistence(timeout: 20), app.debugDescription)
+        capture("bd3-local-contents-without-server")
+        app.buttons["Preview"].firstMatch.tap()
+        XCTAssertTrue(app.webViews["reader.folio.content"].waitForExistence(timeout: 30), app.debugDescription)
+        capture("bd3-local-preview-reader")
+        app.buttons["book-preview.close"].firstMatch.tap()
+        XCTAssertTrue(read.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertFalse(app.buttons["book-detail.progress-history"].exists, "Preview must not create reading history")
         read.tap()
         XCTAssertTrue(app.webViews["reader.folio.content"].waitForExistence(timeout: 30), app.debugDescription)
         let chapter = app.staticTexts["The Compass and the Quiet Map"].firstMatch
