@@ -628,6 +628,43 @@ final class BookDownloadManagerTests: XCTestCase {
         manager.cancelDownload(book, format: .EPUB)
     }
 
+    func testBatchDownloadRestartsTerminalAttemptsForSelectedFormats() throws {
+        let book = try makeRemoteBatchBook(reachable: true)
+        for outcome in [BookFormatDownload.Completion.succeeded, .failed("HTTP 503"), .cancelled] {
+            var previous = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false)
+            previous.completion = outcome
+            manager.activeDownloads[previous.sourceURL] = previous
+
+            manager.startBatchDownload(books: [book], formats: ["EPUB"])
+
+            let attempt = try XCTUnwrap(manager.activeDownloads[previous.sourceURL])
+            XCTAssertNotEqual(attempt.id, previous.id, "A batch download should retry \(outcome)")
+            XCTAssertTrue(attempt.isDownloading)
+            XCTAssertEqual(container.bookRepository.getBook(id: book.inShelfId)?.formats["EPUB"]?.selected, true)
+            XCTAssertFalse(manager.activeDownloads.values.contains { $0.format == .PDF })
+            manager.startBatchDownload(books: [book], formats: ["EPUB"])
+            XCTAssertEqual(manager.activeDownloads[previous.sourceURL]?.id, attempt.id)
+            manager.cancelDownload(book, format: .EPUB)
+        }
+    }
+
+    func testOfflineBatchRetryWaitsForShelfToResumeAtReconnect() throws {
+        let book = try makeRemoteBatchBook(reachable: false)
+        var previous = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false)
+        previous.completion = .failed("Offline")
+        manager.activeDownloads[previous.sourceURL] = previous
+
+        manager.startBatchDownload(books: [book], formats: ["EPUB"])
+
+        XCTAssertNil(manager.activeDownloads[previous.sourceURL])
+        let queued = try XCTUnwrap(container.bookRepository.getBook(id: book.inShelfId))
+        XCTAssertEqual(queued.formats["EPUB"]?.selected, true)
+        container.calibreServerInfoStaging[book.library.server.id]?.reachable = true
+        manager.requestAutomaticDownload(book: queued, format: .EPUB)
+        XCTAssertEqual(manager.activeDownloads[previous.sourceURL]?.isDownloading, true)
+        manager.cancelDownload(book, format: .EPUB)
+    }
+
     func testSuccessfulDownloadAtomicallyReplacesExistingCache() async throws {
         let book = try makeDownloadableBook(id: 1020)
         let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
@@ -677,12 +714,32 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.completion, .cancelled)
     }
 
+    private func makeRemoteBatchBook(reachable: Bool) throws -> CalibreBook {
+        let library = TestFixtures.makeLibrary(key: UUID().uuidString)
+        let server = library.server
+        container.calibreLibraries[library.id] = library
+        let request = CalibreProbeServerRequest(server: server, isPublic: false,
+            updateLibrary: false, autoUpdateOnly: false)
+        container.calibreServerInfoStaging[server.id] = CalibreServerInfo(
+            server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
+            reachable: reachable, probing: false, errorMsg: "",
+            defaultLibrary: library.id, libraryMap: [library.id: library.name], request: request)
+        let book = try makeDownloadableBook(id: 1020, formats: [.EPUB, .PDF], library: library)
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        addTeardownBlock { [container] in
+            container?.bookRepository.deleteBook(id: book.inShelfId)
+            try? FileManager.default.removeItem(at: url)
+        }
+        return book
+    }
+
     private func makeDownloadableBook(
         id: Int32,
         formats: [Format] = [.EPUB],
-        filenamePrefix: String = "test"
+        filenamePrefix: String = "test",
+        library: CalibreLibrary? = nil
     ) throws -> CalibreBook {
-        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let library = try library ?? XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: id, library: library)
         book.title = "Download Test \(id)"
         for format in formats {

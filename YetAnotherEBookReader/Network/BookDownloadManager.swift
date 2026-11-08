@@ -218,7 +218,9 @@ class BookDownloadManager {
             return .failure(.fileAlreadyExists)
         }
         
-        if activeDownloads[url]?.isActive == true && !overwrite {
+        if !overwrite && (activeDownloads[url]?.isActive == true || activeDownloads.values.contains(where: {
+            $0.book.inShelfId == book.inShelfId && $0.format == format && $0.isActive
+        })) {
             return .failure(.downloadAlreadyActive)
         }
         
@@ -273,14 +275,34 @@ class BookDownloadManager {
 
     @MainActor
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
-        books.forEach { book in
+        guard let container else { return }
+        for requestedBook in books {
+            let book = container.bookRepository.getBook(id: requestedBook.inShelfId) ?? requestedBook
             let downloadFormats = formats.compactMap { format -> Format? in
                 guard let f = Format(rawValue: format),
+                      f != .UNKNOWN,
                       let formatInfo = book.formats[format],
                       formatInfo.serverSize > 0 else { return nil }
                 return f
             }
-            container?.bookManager.addToShelf(book: book, formats: downloadFormats)
+            container.bookManager.addToShelf(book: book, formats: downloadFormats)
+            let server = book.library.server
+            guard !server.isLocal, !downloadFormats.isEmpty else { continue }
+            guard container.calibreServerService.getServerUrlByReachability(server: server) != nil else {
+                // The shelf retains the selection until the server is reachable. Retire terminal
+                // results for the formats the user just queued so they can download at that point.
+                let previousCount = activeDownloads.count
+                activeDownloads = activeDownloads.filter { _, download in
+                    download.isActive || download.book.inShelfId != book.inShelfId
+                        || !downloadFormats.contains(download.format)
+                }
+                if activeDownloads.count != previousCount { publishDownloadSnapshot() }
+                continue
+            }
+            // A confirmed batch is an explicit download, including retries after a terminal result.
+            for format in downloadFormats {
+                requestDownload(book: book, format: format)
+            }
         }
     }
 }

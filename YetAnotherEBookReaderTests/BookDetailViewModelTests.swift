@@ -1309,6 +1309,39 @@ class BookDetailViewModelTests: XCTestCase {
         viewModel.activeDownloads.removeAll()
     }
     
+    func testFormatSnapshotUsesActiveAttemptThenNewestResultAcrossServerAddresses() async throws {
+        let book = try makeDownloadReadBook()
+        let savedURL = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        let originalURL = try XCTUnwrap(URL(string: "http://localhost/get/EPUB/123/lib1"))
+        let changedURL = try XCTUnwrap(URL(string: "http://localhost:8080/get/EPUB/123/lib1"))
+        var downloads = Dictionary(uniqueKeysWithValues: [originalURL, changedURL].map { url in
+            (url, BookFormatDownload(completion: .failed("Connection failed"), book: book, format: .EPUB,
+                startDatetime: .distantPast, sourceURL: url, savedURL: savedURL, modificationDate: .distantPast))
+        })
+        // Exercise the ordering that previously picked the failed record.
+        let retryURL = try XCTUnwrap(Array(downloads.keys).last)
+        downloads[retryURL]?.isDownloading = true
+        downloads[retryURL]?.completion = nil
+        downloads[retryURL]?.startDatetime = Date()
+        let retryID = try XCTUnwrap(downloads[retryURL]?.id)
+        mockAppContainer.downloadManager.activeDownloads = downloads
+        viewModel.setup(bookId: book.inShelfId)
+        defer { viewModel.onDisappear() }
+        await waitUntil { self.viewModel.formatStates.first?.download != nil }
+
+        let transferring = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertEqual(transferring.download?.id, retryID)
+        XCTAssertTrue(transferring.isTransferring)
+        XCTAssertFalse(transferring.canDownload)
+
+        viewModel.cancelDownload(book: book, format: .EPUB)
+
+        let cancelled = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertEqual(cancelled.download?.id, retryID)
+        XCTAssertEqual(cancelled.download?.completion, .cancelled)
+        XCTAssertTrue(cancelled.canDownload)
+    }
+
     func testFormatSnapshotUsesCurrentFileAndServerFreshness() throws {
         var available = false
         let model = BookDetailViewModel(container: mockAppContainer, fileExists: { _ in available })

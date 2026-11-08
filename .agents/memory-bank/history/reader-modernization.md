@@ -6,6 +6,13 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **BD3 review follow-up (2026-11-08):** Browse batch confirmation starts the
+  selected formats and retries completed, failed or cancelled attempts. Offline
+  requests stay queued for reconnect. Format controls prefer an active transfer
+  across server addresses and show the latest attempt when idle. Verification
+  includes 177 iPhone 17 units and the Browse batch UI journey, 100 iOS 15.5
+  units, and the Mac Catalyst build. See activeContext and `/tmp/YabrBD3Followup`.
+
 - **Book Detail Modernization BD3 (2026-11-07, branch):** `codex/book-detail-bd3`
   starts at merged BD2 main `ca23e853` and contains the BD3 implementation.
   Shared format/action snapshots replace toolbar cache toggling. Local originals

@@ -5,6 +5,27 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## BD3 review follow-up (2026-11-08)
+
+Browse batch confirmation starts the selected remote formats directly when the
+server is reachable. An explicit batch can replace a finished attempt after
+cache removal, failure, or cancellation. Offline selection remains queued for
+the shelf when the server reconnects. Only an explicit batch retires the old
+terminal results for those queued formats. Existing files and active downloads
+are reused, including transfers already active at another address.
+
+Book Detail's format row and toolbar display an active attempt ahead of older
+records for the same full book ID and format. When the format is idle, they
+display the most recently started attempt. Regressions cover all three terminal
+results, the offline retry path, and the status and controls across an address
+change.
+
+Verification: 177 focused units and the Browse batch selection UI journey passed
+on iPhone 17. The two affected test classes passed 100 units on iPhone 7 /
+iOS 15.5. The Mac Catalyst build, Swift parsing, and diff checks passed. Logs
+and results are in `/tmp/YabrBD3Followup`. The full suite and native Release
+journeys below describe the initial BD3 implementation.
+
 ## Book Detail Modernization BD3 (2026-11-07, branch)
 
 `codex/book-detail-bd3` starts at main `ca23e853`, with BD1 #136 and BD2 #137

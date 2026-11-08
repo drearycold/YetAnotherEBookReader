@@ -588,7 +588,14 @@ class BookDetailViewModel: ObservableObject {
         formatStates = book.formats.sorted { $0.key < $1.key }.map { raw, info in
             let format = Format(rawValue: raw).flatMap { ReaderType.readers(for: $0).isEmpty ? nil : $0 }
             let available = info.cached && (format.flatMap { getSavedUrl(book: book, format: $0) }.map(fileExists) ?? false)
-            let download = activeDownloads.values.first { $0.book.inShelfId == book.inShelfId && $0.format.rawValue == raw }
+            let download = format.flatMap { format in
+                activeDownloads.values.lazy
+                    .filter { $0.book.inShelfId == book.inShelfId && $0.format == format }
+                    .max { first, second in
+                        if first.isActive != second.isActive { return second.isActive }
+                        return first.startDatetime < second.startDatetime
+                    }
+            }
             let text: String
             let icon: String
             if format == nil { text = "This format is not supported."; icon = "doc.badge.ellipsis" }
