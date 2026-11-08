@@ -77,7 +77,7 @@ struct LibraryInfoBatchDownloadSheet: View {
                     Button(action: {
                         presenting = false
                         
-                        container.downloadManager.startBatchDownload(books: selectedFormatBooks, formats: Array(selectedFormats.keys))
+                        container.downloadManager.startBatchDownload(books: selectedFormatBooks, formats: selected.sorted())
                         
                         downloadBookList.removeAll()
                     }) {

@@ -13,6 +13,7 @@ import PDFKit
 class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let isPreview: Bool
     private let preferenceRepository: ReaderPreferenceRepositoryProtocol
     
     var dictViewerItem = ""
@@ -26,10 +27,12 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     init(
         book: CalibreBook,
         readerInfo: ReaderInfo,
-        preferenceRepository: ReaderPreferenceRepositoryProtocol? = nil
+        preferenceRepository: ReaderPreferenceRepositoryProtocol? = nil,
+        isPreview: Bool = false
     ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.isPreview = isPreview
         self.preferenceRepository = preferenceRepository
             ?? AppContainer.shared?.readerPreferenceRepository
             ?? RealmReaderPreferenceRepository()
@@ -38,7 +41,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         } else {
             let defaultPreferences = PDFPreferenceValue()
             self.pdfPreferences = defaultPreferences
-            self.preferenceRepository.savePDFPreferences(defaultPreferences, for: book)
+            if !isPreview { self.preferenceRepository.savePDFPreferences(defaultPreferences, for: book) }
         }
     }
     
@@ -47,7 +50,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         case "Title":
             return book.title
         case "Author":
-            return book.authors.first!
+            return book.authors.first
         case "Key":
             return book.inShelfId
         case "PrefId":
@@ -111,7 +114,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFPreferenceValue) {
         pdfPreferences = options
-        preferenceRepository.savePDFPreferences(options, for: book)
+        if !isPreview { preferenceRepository.savePDFPreferences(options, for: book) }
         updateDictViewerStyle(options: options)
     }
     
@@ -124,6 +127,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
+        guard !isPreview else { return }
         guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
@@ -131,6 +135,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
+        guard !isPreview else { return }
         guard let repository = AppContainer.shared?.annotationRepository else { return }
         // Match the location, not its encoding: a bookmark from another device may encode it
         // differently.
@@ -148,6 +153,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
+        guard !isPreview else { return }
         guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         
@@ -155,6 +161,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
+        guard !isPreview else { return }
         guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         

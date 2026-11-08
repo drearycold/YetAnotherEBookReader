@@ -25,6 +25,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
     
     var yabrFolioReaderPageDelegate: YabrFolioReaderPageDelegate!
     
+    var isPreview = false
     var folioReaderPreferenceProvider: FolioReaderPreferenceProvider?
     var folioReaderHighlightProvider: FolioReaderHighlightProvider?
     var folioReaderReadPositionProvider: FolioReaderReadPositionProvider?

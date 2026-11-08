@@ -30,6 +30,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let isPreview: Bool
     let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
     
@@ -43,11 +44,13 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         book: CalibreBook,
         readerInfo: ReaderInfo,
         presentationID: ReaderPresentation.ID?,
+        isPreview: Bool = false,
         lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent>
     ) {
         self.container = container
         self.book = book
         self.readerInfo = readerInfo
+        self.isPreview = isPreview
         self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
         
@@ -80,6 +83,8 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     }
     
     override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard !isPreview else { return }
         activityTask?.cancel()
         let activities = lifecycleEvents()
         activityTask = Task { @MainActor [weak self] in
@@ -91,6 +96,8 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     }
     
     override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        guard !isPreview else { return }
         activityTask?.cancel()
         activityTask = nil
 

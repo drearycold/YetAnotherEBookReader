@@ -6,6 +6,30 @@ Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries
 
 ## Recent Changes & Decisions
 
+- **BD3 review follow-up (2026-11-08):** Browse batch confirmation starts the
+  selected formats and retries completed, failed or cancelled attempts. Offline
+  requests stay queued for reconnect. Format controls prefer an active transfer
+  across server addresses and show the latest attempt when idle. Verification
+  includes 177 iPhone 17 units and the Browse batch UI journey, 100 iOS 15.5
+  units, and the Mac Catalyst build. See activeContext and `/tmp/YabrBD3Followup`.
+
+- **Book Detail Modernization BD3 (2026-11-07, branch):** `codex/book-detail-bd3`
+  starts at merged BD2 main `ca23e853` and contains the BD3 implementation.
+  Shared format/action snapshots replace toolbar cache toggling. Local originals
+  aren't cleared as caches. Immutable preview parameters, per-preview/request
+  identity and cancellation, recoverable contents states and local Readium parsing
+  isolate requests; actual Folio/Readium/PDF write paths suppress preview writes.
+  Downloads stage before successful current-task commit and reconcile latest
+  repository metadata, preserving parallel formats and refreshed titles. Shelf
+  auto downloads honor failed, cancelled and paused attempts and leave retries
+  to user actions. Native verification exposed and fixed the conditional empty preview tab. Final 1032 units
+  + five UI journeys, 274 iOS 15 units + two UI journeys, five isolated
+  Release native journeys (iPhone 17/7, iPad portrait/landscape, P3 and local EPUB),
+  iOS Release/Catalyst builds and parse/diff checks pass. Scope/limits and evidence
+  are in activeContext and `/tmp/YabrBookDetailBD3/verification.json`. BD4's
+  description and history/auxiliary work remains separate; no schema/pin/version
+  change.
+
 - **BD2 publication-date review fix (2026-11-06):** Compare the date's Gregorian
   year with Calibre's sentinel year 101, preserving localized display. Japanese
   pre-fix tests reproduce hidden valid dates; all 66 focused tests pass across

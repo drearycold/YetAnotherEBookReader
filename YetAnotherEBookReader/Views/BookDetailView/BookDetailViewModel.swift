@@ -11,7 +11,7 @@ import SwiftUI
 @MainActor
 class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
-    @Published var previewViewModel = BookPreviewViewModel()
+    @Published private(set) var previewViewModel: BookPreviewViewModel?
     enum PageState: Equatable { case loading, content, unavailable }
     enum RefreshState: Equatable {
         case idle, refreshing, synced, local, unavailable, failed(String)
@@ -20,6 +20,8 @@ class BookDetailViewModel: ObservableObject {
     @Published private(set) var refreshState: RefreshState = .idle
     @Published private(set) var calibreBook: CalibreBook?
     @Published private(set) var hasReadableFile = false
+    @Published private(set) var formatStates: [BookFormatState] = []
+    @Published var clearingFormat: Format?
     @Published private(set) var readingProgressSummary: ReadingProgressSummary?
     @Published private(set) var hasHistory = false
     private var helperConfiguration: CalibreDSReaderHelperConfiguration?
@@ -34,7 +36,6 @@ class BookDetailViewModel: ObservableObject {
     
     @Published var alertItem: AlertItem?
     
-    @Published var presentingPreviewSheet = false
     
     @Published var activityListViewPresenting = false
 
@@ -98,6 +99,7 @@ class BookDetailViewModel: ObservableObject {
     }
 
     func onDisappear() {
+        previewViewModel?.cancel()
         pendingReading = nil
         cancelRefresh()
         stopObserving()
@@ -128,7 +130,8 @@ class BookDetailViewModel: ObservableObject {
             alertItem = nil
             isReadingPositionHistoryActive = false
             isReturningFromHistory = false
-            presentingPreviewSheet = false
+            closePreview()
+            clearingFormat = nil
             activityListViewPresenting = false
         }
         guard let container else {
@@ -172,6 +175,8 @@ class BookDetailViewModel: ObservableObject {
             for await _ in dismissEvents {
                 guard !Task.isCancelled, self?.observationID == id else { return }
                 self?.pendingReading = nil
+                self?.closePreview()
+                self?.activityListViewPresenting = false
             }
         }
         return calibreBook != nil
@@ -186,6 +191,9 @@ class BookDetailViewModel: ObservableObject {
         readingProgressSummary = nil
         hasHistory = false
         hasReadableFile = false
+        formatStates = []
+        clearingFormat = nil
+        closePreview()
         pendingReading = nil
         positionObserverTask?.cancel()
         positionObserverTask = nil
@@ -240,6 +248,7 @@ class BookDetailViewModel: ObservableObject {
             case .failed(let message): self.refreshState = .failed(message)
             case .cancelled: self.refreshState = .idle
             }
+            self.updateFormatStates()
         }
     }
 
@@ -247,16 +256,6 @@ class BookDetailViewModel: ObservableObject {
         guard loadedBookId == book.inShelfId else { return }
         if let coverURL = book.coverURL { container?.coverCache.removeCover(for: coverURL) }
         fetchMetadata(book: book)
-    }
-
-    func downloadOrClearCache(book: CalibreBook) {
-        guard let container = container else { return }
-        pendingReading = nil
-        if book.inShelf {
-            container.bookManager.clearCache(inShelfId: book.inShelfId)
-        } else {
-            downloadOnly(book: book)
-        }
     }
 
     func readBook(book: CalibreBook) {
@@ -269,6 +268,10 @@ class BookDetailViewModel: ObservableObject {
             openReader(for: book, info: info, workspaceID: targetWorkspaceID)
             return
         }
+        guard !book.library.server.isLocal else {
+            alertItem = AlertItem(id: "Cannot locate book file", msg: "Please import the original file again.")
+            return
+        }
         guard let format = preferredReadableFormat(for: book) else {
             alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             return
@@ -279,18 +282,24 @@ class BookDetailViewModel: ObservableObject {
         guard let download = activeDownload(for: book, format: format) else { return }
         pendingReading = PendingReading(bookID: book.inShelfId, format: format,
             downloadID: download.id, workspaceID: targetWorkspaceID)
-        if download.isPaused {
+        if download.isPaused && !download.isPausing {
             container.downloadManager.resumeDownload(book, format: format)
         }
     }
 
     func downloadOnly(book: CalibreBook) {
         pendingReading = nil
+        guard !book.library.server.isLocal else {
+            alertItem = AlertItem(id: "Cannot locate book file", msg: "Please import the original file again.")
+            return
+        }
         guard let format = preferredReadableFormat(for: book) else {
             alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             return
         }
-        if activeDownload(for: book, format: format) == nil { _ = startCaching(book: book, format: format) }
+        if let download = activeDownload(for: book, format: format) {
+            if download.isPaused && !download.isPausing { resumeDownload(book: book, format: format) }
+        } else { _ = startCaching(book: book, format: format) }
     }
 
     func cacheFormat(book: CalibreBook, format: Format) {
@@ -299,15 +308,22 @@ class BookDetailViewModel: ObservableObject {
     }
 
     private func startCaching(book: CalibreBook, format: Format) -> Bool {
-        guard let container else { return false }
-        var book = book
+        guard let container, !book.library.server.isLocal, format != .UNKNOWN,
+              book.formats[format.rawValue] != nil,
+              activeDownload(for: book, format: format) == nil else { return false }
+        var currentBook = bookRepository.getBook(id: book.inShelfId) ?? book
+        if currentBook.formats[format.rawValue] == nil { currentBook = book }
+        var book = currentBook
         if !book.inShelf || book.formats[format.rawValue]?.selected != true {
             container.bookManager.addToShelf(book: book, formats: [format])
             book.inShelf = true
             book.formats[format.rawValue]?.selected = true
         }
         switch container.downloadManager.startDownload(book, format: format, overwrite: true) {
-        case .success: return true
+        case .success:
+            activeDownloads = container.downloadManager.activeDownloads
+            updateReadableFile()
+            return true
         case .failure(let error):
             alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
             return false
@@ -316,15 +332,23 @@ class BookDetailViewModel: ObservableObject {
 
     func pauseDownload(book: CalibreBook, format: Format) {
         container?.downloadManager.pauseDownload(book, format: format)
+        synchronizeDownloads()
     }
 
     func resumeDownload(book: CalibreBook, format: Format) {
         container?.downloadManager.resumeDownload(book, format: format)
+        synchronizeDownloads()
     }
 
     func cancelDownload(book: CalibreBook, format: Format) {
         if pendingReading?.bookID == book.inShelfId, pendingReading?.format == format { pendingReading = nil }
         container?.downloadManager.cancelDownload(book, format: format)
+        synchronizeDownloads()
+    }
+
+    private func synchronizeDownloads() {
+        activeDownloads = container?.downloadManager.activeDownloads ?? [:]
+        updateReadableFile()
     }
 
     func cancelReadDownload(book: CalibreBook) {
@@ -334,7 +358,14 @@ class BookDetailViewModel: ObservableObject {
 
     func clearFormat(book: CalibreBook, format: Format) {
         pendingReading = nil
-        container?.bookManager.clearCache(book: book, format: format)
+        guard !book.library.server.isLocal, let container else { return }
+        container.downloadManager.cancelDownload(book, format: format)
+        // Reconcile with the latest metadata before the manager persists the cache change.
+        let current = bookRepository.getBook(id: book.inShelfId) ?? book
+        container.bookManager.clearCache(book: current, format: format)
+        if let current = bookRepository.getBook(id: book.inShelfId), loadedBookId == book.inShelfId {
+            applyBookUpdate(current, container: container)
+        }
     }
 
     func isWaitingToRead(_ book: CalibreBook) -> Bool { pendingReading?.bookID == book.inShelfId }
@@ -342,7 +373,10 @@ class BookDetailViewModel: ObservableObject {
     func canRead(_ book: CalibreBook) -> Bool { calibreBook?.inShelfId == book.inShelfId && hasReadableFile }
 
     func readActionTitle(for book: CalibreBook) -> String {
-        isWaitingToRead(book) ? "Downloading…" : (canRead(book) ? "Read" : "Download and Read")
+        if let pending = pendingReading, pending.bookID == book.inShelfId {
+            return getActiveDownload(book: book, format: pending.format)?.isPaused == true ? "Paused" : "Downloading…"
+        }
+        return canRead(book) ? "Read" : (book.library.server.isLocal ? "File Missing" : "Download and Read")
     }
 
     func hasActiveDownload(_ book: CalibreBook) -> Bool {
@@ -448,70 +482,25 @@ class BookDetailViewModel: ObservableObject {
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
         pendingReading = nil
         cancelRefresh()
-        guard let container = container else { return false }
-        guard let reader = container.sessionManager.formatReaderMap[format]?.first else { return false }
-        guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
-            alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
+        closePreview()
+        guard let container, let reader = ReaderType.readers(for: format).first else { return false }
+        guard formatInfo.cached, let url = getSavedUrl(book: book, format: format), fileExists(url) else {
+            updateReadableFile()
+            alertItem = AlertItem(id: "Cannot locate book file", msg: book.library.server.isLocal
+                ? "Please import the original file again." : "Please download \(format.rawValue) again.")
             return false
         }
-
-        let readPosition = container.readingPositionRepository.createInitial(deviceName: container.deviceName, reader: reader)
-
-        _ = container.sessionManager.prepareBookReading(
-            url: bookFileUrl,
-            format: format,
-            readerType: reader,
-            position: readPosition
-        )
-        
-        previewViewModel.container = container
-        previewViewModel.book = book
-        previewViewModel.url = bookFileUrl
-        previewViewModel.format = format
-        previewViewModel.reader = reader
-        previewViewModel.toc = "Initializing"
-        
-        Task { [weak self] in
-            do {
-                let data = try await container.calibreServerService.getBookManifest(book: book, format: format)
-                await MainActor.run {
-                    self?.parseManifestToTOC(json: data)
-                }
-            } catch {
-                // Error handled or left as initializing
-            }
-        }
+        let info = ReaderInfo(deviceName: container.deviceName, url: url, missing: false, format: format,
+            readerType: reader, position: readingPositionRepository.createInitial(deviceName: container.deviceName, reader: reader))
+        let preview = BookPreviewViewModel(container: container, book: book, readerInfo: info)
+        previewViewModel = preview
+        preview.start()
         return true
     }
-    
-    func parseManifestToTOC(json: Data) {
-        previewViewModel.toc = "Without TOC"
-        
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
-            #if DEBUG
-            previewViewModel.toc = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
-            #endif
-            return
-        }
-        
-        guard let tocNode = root["toc"] as? NSDictionary else {
-            #if DEBUG
-            previewViewModel.toc = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
-            #endif
-            
-            if let jobStatus = root["job_status"] as? String, jobStatus == "waiting" {
-                previewViewModel.toc = "Generating TOC, Please try again later"
-            }
-            return
-        }
-        
-        previewViewModel.toc = parseTOCNode(node: tocNode, level: 0)
-    }
-    
-    /// The preview prepared a session at the book's start; restore the book's own reading position
-    /// without opening a reader (closing a preview isn't a request to read).
-    func handlePreviewDismiss(book: CalibreBook) {
-        _ = container?.sessionManager.prepareBookReading(book: book)
+
+    func closePreview() {
+        previewViewModel?.cancel()
+        previewViewModel = nil
     }
 
     private func openReader(for book: CalibreBook, info: ReaderInfo, workspaceID: UUID?) {
@@ -526,21 +515,6 @@ class BookDetailViewModel: ObservableObject {
 
     var updatingMetadata: Bool { refreshState == .refreshing }
 
-    func parseTOCNode(node: NSDictionary, level: Int) -> String {
-        guard let childrenNode = node["children"] as? NSArray else {
-            return ""
-        }
-        
-        let tocString = childrenNode.compactMap { childNode -> String? in
-            guard let dict = childNode as? NSDictionary, let title = dict["title"] as? String else {
-                return nil
-            }
-            return title
-        }.joined(separator: "\n") + "\n"
-        
-        return tocString
-    }
-    
     enum ReadingProgressSummary: Equatable {
         case goodreadsReadDate(String)
         case goodreadsProgress(String)
@@ -548,6 +522,7 @@ class BookDetailViewModel: ObservableObject {
     }
 
     private func updateReadableFile() {
+        updateFormatStates()
         guard let book = calibreBook, let container else { hasReadableFile = false; return }
         hasReadableFile = book.formats.contains { raw, info in
             guard info.cached, let format = Format(rawValue: raw),
@@ -608,6 +583,40 @@ class BookDetailViewModel: ObservableObject {
         calibreBook?.inShelfId == book.inShelfId && hasHistory
     }
     
+    private func updateFormatStates() {
+        guard let book = calibreBook else { formatStates = []; return }
+        formatStates = book.formats.sorted { $0.key < $1.key }.map { raw, info in
+            let format = Format(rawValue: raw).flatMap { ReaderType.readers(for: $0).isEmpty ? nil : $0 }
+            let available = info.cached && (format.flatMap { getSavedUrl(book: book, format: $0) }.map(fileExists) ?? false)
+            let download = format.flatMap { format in
+                activeDownloads.values.lazy
+                    .filter { $0.book.inShelfId == book.inShelfId && $0.format == format }
+                    .max { first, second in
+                        if first.isActive != second.isActive { return second.isActive }
+                        return first.startDatetime < second.startDatetime
+                    }
+            }
+            let text: String
+            let icon: String
+            if format == nil { text = "This format is not supported."; icon = "doc.badge.ellipsis" }
+            else if book.library.server.isLocal {
+                text = available ? "Imported Original File" : "File missing. Import the original file again."
+                icon = available ? "doc" : "exclamationmark.triangle"
+            } else if case .failed = download?.completion {
+                text = available ? "Download failed. Previous download is available." : "Download failed. Try again."
+                icon = "exclamationmark.triangle"
+            } else if info.cached && !available {
+                text = "File missing. Download again."; icon = "exclamationmark.triangle"
+            } else if available {
+                text = remoteFreshnessUnknown ? "Downloaded" : (info.cacheUptoDate ? "Downloaded · Up to Date" : "Downloaded · Server Has Update")
+                icon = "checkmark.circle"
+            } else { text = "Not Downloaded"; icon = "arrow.down.circle" }
+            return BookFormatState(id: raw, format: format, size: available ? info.cacheSize : info.serverSize,
+                isLocal: book.library.server.isLocal, fileAvailable: available, wasCached: info.cached,
+                download: download, statusText: text, statusIcon: icon)
+        }
+    }
+
     func isFormatDownloading(book: CalibreBook, format: Format) -> Bool {
         return activeDownloads.values.contains { download in
             download.book.inShelfId == book.inShelfId && download.format == format && download.isActive
@@ -620,15 +629,6 @@ class BookDetailViewModel: ObservableObject {
         }
     }
     
-    func getFormatStatusText(formatInfo: FormatInfo) -> String {
-        if formatInfo.cached {
-            if remoteFreshnessUnknown { return "Downloaded" }
-            return formatInfo.cacheUptoDate ? "Up to date" : "Server has update"
-        } else {
-            return "Not cached"
-        }
-    }
-    
     private var remoteFreshnessUnknown: Bool {
         switch refreshState {
         case .failed, .unavailable: return true
@@ -636,8 +636,4 @@ class BookDetailViewModel: ObservableObject {
         }
     }
 
-    func getFormatStatusIcon(formatInfo: FormatInfo) -> String {
-        if formatInfo.cached && remoteFreshnessUnknown { return "checkmark.circle" }
-        return formatInfo.cacheUptoDate ? "hand.thumbsup" : "hand.thumbsdown"
-    }
 }

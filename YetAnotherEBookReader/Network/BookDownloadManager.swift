@@ -81,6 +81,16 @@ class BookDownloadManager {
         startDownload(book, format: format, overwrite: overwrite)
     }
 
+    /// Shelf rebuilds may arrive after a failed or cancelled attempt. Only the user starts a
+    /// new attempt in this session; rebuilding the shelf must not retry or resume it implicitly.
+    @MainActor
+    func requestAutomaticDownload(book: CalibreBook, format: Format) {
+        guard !activeDownloads.values.contains(where: {
+            $0.book.inShelfId == book.inShelfId && $0.format == format
+        }) else { return }
+        _ = requestDownload(book: book, format: format)
+    }
+
     @MainActor
     func cancelDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
@@ -208,7 +218,9 @@ class BookDownloadManager {
             return .failure(.fileAlreadyExists)
         }
         
-        if activeDownloads[url]?.isActive == true && !overwrite {
+        if !overwrite && (activeDownloads[url]?.isActive == true || activeDownloads.values.contains(where: {
+            $0.book.inShelfId == book.inShelfId && $0.format == format && $0.isActive
+        })) {
             return .failure(.downloadAlreadyActive)
         }
         
@@ -263,14 +275,34 @@ class BookDownloadManager {
 
     @MainActor
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
-        books.forEach { book in
+        guard let container else { return }
+        for requestedBook in books {
+            let book = container.bookRepository.getBook(id: requestedBook.inShelfId) ?? requestedBook
             let downloadFormats = formats.compactMap { format -> Format? in
                 guard let f = Format(rawValue: format),
+                      f != .UNKNOWN,
                       let formatInfo = book.formats[format],
                       formatInfo.serverSize > 0 else { return nil }
                 return f
             }
-            container?.bookManager.addToShelf(book: book, formats: downloadFormats)
+            container.bookManager.addToShelf(book: book, formats: downloadFormats)
+            let server = book.library.server
+            guard !server.isLocal, !downloadFormats.isEmpty else { continue }
+            guard container.calibreServerService.getServerUrlByReachability(server: server) != nil else {
+                // The shelf retains the selection until the server is reachable. Retire terminal
+                // results for the formats the user just queued so they can download at that point.
+                let previousCount = activeDownloads.count
+                activeDownloads = activeDownloads.filter { _, download in
+                    download.isActive || download.book.inShelfId != book.inShelfId
+                        || !downloadFormats.contains(download.format)
+                }
+                if activeDownloads.count != previousCount { publishDownloadSnapshot() }
+                continue
+            }
+            // A confirmed batch is an explicit download, including retries after a terminal result.
+            for format in downloadFormats {
+                requestDownload(book: book, format: format)
+            }
         }
     }
 }
@@ -319,6 +351,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
     
     var isFileExist = false
     var fileSize = UInt64.zero
+    private var stagedURL: URL?
     
     init(download: BookFormatDownload, manager: BookDownloadManager) {
         self.download = download
@@ -326,48 +359,65 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         super.init(download.book.library.server)
     }
     
+    deinit {
+        if let stagedURL { try? FileManager.default.removeItem(at: stagedURL) }
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        self.defaultLog.info("fileURL: \(location.absoluteString)")
-        
         do {
-           //check size
-            let fileAttribs = try FileManager.default.attributesOfItem(atPath: location.path)
-            guard let fileSize = fileAttribs[.size] as? NSNumber, fileSize.uint64Value > 0 else {
+            let attributes = try FileManager.default.attributesOfItem(atPath: location.path)
+            guard let size = attributes[.size] as? NSNumber, size.uint64Value > 0 else {
                 throw DownloadError(msg: "Empty file")
             }
-            
-            if FileManager.default.fileExists(atPath: download.savedURL.path) {
-                try FileManager.default.removeItem(at: download.savedURL)
-            }
-            try FileManager.default.moveItem(at: location, to: download.savedURL)
-            let attributes = [FileAttributeKey.modificationDate: download.modificationDate]
-            try FileManager.default.setAttributes(attributes, ofItemAtPath: download.savedURL.path)
-            
-            isFileExist = FileManager.default.fileExists(atPath: download.savedURL.path)
-            self.fileSize = fileSize.uint64Value
-            self.defaultLog.info("isFileExist: \(self.isFileExist)")
-            
+            // URLSession removes its temporary file after this callback. Keep a private copy until
+            // the main actor validates the HTTP result, download identity and cancellation state.
+            let staging = download.savedURL.deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).download")
+            try FileManager.default.moveItem(at: location, to: staging)
+            stagedURL = staging
+            fileSize = size.uint64Value
+            isFileExist = true
         } catch {
             self.defaultLog.error("file error: \(error.localizedDescription)")
         }
-
     }
-    
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let response = task.response,
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
            error == nil, isFileExist {
-            Task { @MainActor [weak self] in
-                guard let self = self, let manager = self.manager, let container = manager.container
-                       else { return }
+            Task { @MainActor [self] in
+                defer { discardStagedFile() }
+                guard let manager = self.manager, let container = manager.container,
+                      let current = manager.activeDownloads[download.sourceURL],
+                      current.id == download.id, current.isActive else { return }
                 if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
                    currentTask !== task {
                     return
                 }
                 guard manager.activeDownloads[self.download.sourceURL]?.completion == nil else { return }
 
-                container.bookManager.addedCache(book: self.download.book, format: self.download.format)
+                do {
+                    if let stagedURL {
+                        if FileManager.default.fileExists(atPath: download.savedURL.path) {
+                            _ = try FileManager.default.replaceItemAt(download.savedURL, withItemAt: stagedURL)
+                        } else {
+                            try FileManager.default.moveItem(at: stagedURL, to: download.savedURL)
+                        }
+                        try FileManager.default.setAttributes([.modificationDate: download.modificationDate], ofItemAtPath: download.savedURL.path)
+                    }
+                } catch {
+                    manager.activeDownloads[download.sourceURL]?.isDownloading = false
+                    manager.activeDownloads[download.sourceURL]?.isPausing = false
+                    manager.activeDownloads[download.sourceURL]?.isPaused = false
+                    manager.activeDownloads[download.sourceURL]?.resumeData = nil
+                    manager.activeDownloads[download.sourceURL]?.completion = .failed("The downloaded file could not be saved. Please try again.")
+                    manager.publishDownloadSnapshot()
+                    return
+                }
+                let book = container.bookRepository.getBook(id: download.book.inShelfId) ?? download.book
+                container.bookManager.addedCache(book: book, format: self.download.format)
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.isPausing = false
                 manager.activeDownloads[self.download.sourceURL]?.isPaused = false
@@ -375,7 +425,8 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.activeDownloads[self.download.sourceURL]?.completion = .succeeded
                 manager.publishDownloadSnapshot()
 
-                container.publishCalibreUpdate(.book(self.download.book))
+                let updatedBook = container.bookRepository.getBook(id: book.inShelfId) ?? book
+                container.publishCalibreUpdate(.book(updatedBook))
 
                 guard let request = task.originalRequest else { return }
                 let logger = container.logger
@@ -387,8 +438,10 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 }
             }
         } else {
-            Task { @MainActor [weak self] in
-                guard let self = self, let manager = self.manager, let container = manager.container,
+            Task { @MainActor [self] in
+                defer { discardStagedFile() }
+                guard let manager = self.manager, let container = manager.container,
+                      manager.activeDownloads[download.sourceURL]?.id == download.id,
                       let request = task.originalRequest
                        else { return }
                 if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
@@ -431,6 +484,11 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         }
     }
     
+    private func discardStagedFile() {
+        if let stagedURL { try? FileManager.default.removeItem(at: stagedURL) }
+        stagedURL = nil
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
         

@@ -38,17 +38,32 @@ private struct BookDetailToolbarControls: View {
                 .accessibilityIdentifier("book-detail.refresh")
             } else {
                 HStack(spacing: 16) {
-                    Button {
-                        viewModel.downloadOrClearCache(book: book)
-                    } label: {
-                        if viewModel.hasActiveDownload(book) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        } else {
-                            Image(systemName: book.inShelf ? "star.slash" : "star")
+                    Menu {
+                        ForEach(viewModel.formatStates) { state in
+                            if let format = state.format {
+                                Section(header: Text(state.id)) {
+                                    BookFormatActions(state: state,
+                                        cache: { viewModel.cacheFormat(book: book, format: format) },
+                                        clear: { viewModel.clearingFormat = format },
+                                        preview: {
+                                            if let info = book.formats[state.id] {
+                                                _ = viewModel.previewAction(book: book, format: format, formatInfo: info)
+                                            }
+                                        },
+                                        pauseOrResume: {
+                                            if state.download?.isDownloading == true { viewModel.pauseDownload(book: book, format: format) }
+                                            else { viewModel.resumeDownload(book: book, format: format) }
+                                        },
+                                        cancel: { viewModel.cancelDownload(book: book, format: format) })
+                                }
+                            }
                         }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
                     }
-                    .accessibilityLabel(book.inShelf ? "Clear Downloaded Files" : "Download Only")
+                    .accessibilityLabel("Files and Formats")
+                    .accessibilityIdentifier("book-detail.files")
+                    .disabled(viewModel.formatStates.allSatisfy { !$0.isTransferring && !$0.canDownload && !$0.canClear && !$0.canPreview })
 
                     Button {
                         viewModel.showReadingPositionHistory(book: book)

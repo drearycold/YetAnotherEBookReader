@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 def serve(upstream, port):
-    state = {"mode": "success", "attempts": 0, "detail_mode": "success"}
+    state = {"mode": "success", "attempts": 0, "detail_mode": "success", "manifest_mode": "real"}
     lock = threading.Lock()
     # A system proxy must never send these loopback requests to another machine.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -51,6 +51,33 @@ def serve(upstream, port):
                     state["detail_mode"] = mode
                 self.reply(200, b"{}", "application/json")
                 return
+            if parsed.path == "/bd3-control":
+                mode = urllib.parse.parse_qs(parsed.query).get("mode", ["real"])[0]
+                if mode not in ("real", "success", "empty", "waiting", "invalid", "offline", "slow"):
+                    self.reply(400, b"Unknown preview mode", "text/plain")
+                    return
+                with lock:
+                    state["manifest_mode"] = mode
+                self.reply(200, b"{}", "application/json")
+                return
+            if parsed.path.startswith("/book-manifest/"):
+                with lock:
+                    manifest_mode = state["manifest_mode"]
+                if manifest_mode == "slow":
+                    time.sleep(5)
+                payloads = {
+                    "success": b'{"toc":{"children":[{"title":"Preview Chapter","children":[{"title":"Nested Chapter"}]}]}}',
+                    "slow": b'{"toc":{"children":[{"title":"Late Chapter"}]}}',
+                    "empty": b'{"toc":{"children":[]}}',
+                    "waiting": b'{"job_status":"waiting"}',
+                    "invalid": b'{"toc":"invalid"}',
+                }
+                if manifest_mode in payloads:
+                    self.reply(200, payloads[manifest_mode], "application/json")
+                    return
+                if manifest_mode == "offline":
+                    self.reply(503, b"Temporarily unavailable", "text/plain")
+                    return
             if parsed.path.startswith("/ajax/books/"):
                 with lock:
                     detail_mode = state["detail_mode"]

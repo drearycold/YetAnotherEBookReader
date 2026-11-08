@@ -1,6 +1,9 @@
 import XCTest
 import SwiftUI
 import Combine
+import UIKit
+import PDFKit
+import Zip
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -172,8 +175,8 @@ class BookDetailViewModelTests: XCTestCase {
         controller.complete(0, with: .failed("Late failure"))
         await Task.yield()
         XCTAssertEqual(model.refreshState, .unavailable)
-        XCTAssertEqual(model.getFormatStatusText(formatInfo: try XCTUnwrap(book.formats["EPUB"])), "Downloaded")
-        XCTAssertEqual(model.getFormatStatusIcon(formatInfo: try XCTUnwrap(book.formats["EPUB"])), "checkmark.circle")
+        XCTAssertEqual(model.formatStates.first?.statusText, "Downloaded")
+        XCTAssertEqual(model.formatStates.first?.statusIcon, "checkmark.circle")
         XCTAssertEqual(model.pageState, .content)
         XCTAssertEqual(model.readActionTitle(for: book), "Read")
         model.readBook(book: book)
@@ -811,6 +814,133 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.readerInfo.readerType, mockAppContainer.sessionManager.getPreferredReader(for: format))
     }
 
+    func testFormatStatesSeparateFormatsAndLibrariesDuringPauseAndCancel() async throws {
+        var book = try makeDownloadReadBook()
+        book.formats["PDF"] = book.formats["EPUB"]
+        book.formats["MOBI"] = book.formats["EPUB"]
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.setup(bookId: book.inShelfId)
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        _ = try controlledDownload(for: book)
+        viewModel.pauseDownload(book: book, format: .EPUB)
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "EPUB" }?.transferText, "Pausing…")
+        await waitUntil { self.viewModel.formatStates.first { $0.id == "EPUB" }?.transferText == "Paused" }
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "EPUB" }?.transferText, "Paused")
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "PDF" }?.canDownload, true)
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "MOBI" }?.canDownload, false)
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "MOBI" }?.canPreview, false)
+        let otherLibrary = TestFixtures.makeLibrary(server: book.library.server, key: "other", name: "Other")
+        var other = CalibreBook(id: book.id, library: otherLibrary)
+        other.formats = book.formats
+        try mockAppContainer.libraryManager.saveLibrary(library: otherLibrary)
+        mockAppContainer.bookRepository.saveBook(other)
+        viewModel.cacheFormat(book: other, format: .PDF)
+        let otherDownload = try controlledDownload(for: other)
+        viewModel.cancelDownload(book: book, format: .EPUB)
+        XCTAssertFalse(viewModel.isFormatDownloading(book: book, format: .EPUB))
+        XCTAssertTrue(viewModel.isFormatDownloading(book: other, format: .PDF))
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "PDF" }?.isTransferring, false)
+        mockAppContainer.downloadManager.cancelDownload(other, format: otherDownload.format)
+    }
+
+    func testMissingFileSnapshotDisablesPreviewAndAllowsRedownload() throws {
+        var book = try makeDownloadReadBook()
+        book.formats["EPUB"]?.cached = true
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.setup(bookId: book.inShelfId)
+        let state = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertEqual(state.statusText, "File missing. Download again.")
+        XCTAssertFalse(state.canPreview)
+        XCTAssertTrue(state.canDownload)
+        XCTAssertFalse(viewModel.canRead(book))
+    }
+
+    func testLocalOriginalCannotBeClearedOrDownloaded() throws {
+        let server = TestFixtures.makeServer(name: "Local Original", baseUrl: ".")
+        let library = TestFixtures.makeLibrary(server: server, key: "BD3-Local", name: "BD3 Local")
+        mockAppContainer.serverManager.addServer(server: server, libraries: [library])
+        var book = CalibreBook(id: 123, library: library)
+        book.inShelf = true
+        book.formats["EPUB"] = FormatInfo(filename: "original.epub", serverSize: 4,
+            serverMTime: Date(), cached: true, cacheSize: 4, cacheMTime: Date())
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("EPUB".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.setup(bookId: book.inShelfId)
+        let state = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertTrue(state.canPreview)
+        XCTAssertFalse(state.canClear)
+        XCTAssertFalse(state.canDownload)
+        viewModel.clearFormat(book: book, format: .EPUB)
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertNil(viewModel.getActiveDownload(book: book, format: .EPUB))
+    }
+
+    func testClearOneFormatPreservesOtherFileAndReadingPosition() throws {
+        var book = try makeDownloadReadBook()
+        book.inShelf = true
+        book.formats["PDF"] = book.formats["EPUB"]
+        for format in [Format.EPUB, .PDF] {
+            let url = try XCTUnwrap(getSavedUrl(book: book, format: format))
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(format.rawValue.utf8).write(to: url)
+            book.formats[format.rawValue]?.cached = true
+        }
+        let epubURL = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        let pdfURL = try XCTUnwrap(getSavedUrl(book: book, format: .PDF))
+        defer { try? FileManager.default.removeItem(at: epubURL); try? FileManager.default.removeItem(at: pdfURL) }
+        mockAppContainer.bookManager.addToShelf(book: book, formats: [.EPUB, .PDF])
+        var position = mockAppContainer.readingPositionRepository.createInitial(deviceName: mockAppContainer.deviceName, reader: .YabrEPUB)
+        position.lastReadPage = 27
+        mockAppContainer.readingPositionRepository.savePosition(position, for: book)
+        viewModel.setup(bookId: book.inShelfId)
+        viewModel.clearFormat(book: book, format: .PDF)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: epubURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pdfURL.path))
+        XCTAssertEqual(mockAppContainer.readingPositionRepository.getPosition(for: book, policy: .latest)?.lastReadPage, 27)
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "EPUB" }?.canPreview, true)
+        XCTAssertEqual(viewModel.formatStates.first { $0.id == "PDF" }?.canPreview, false)
+    }
+
+    func testPreviewReaderCallbacksCannotOverwritePositionForAnyEngine() throws {
+        let book = try XCTUnwrap(mockCalibreBook)
+        var original = mockAppContainer.readingPositionRepository.createInitial(deviceName: mockAppContainer.deviceName, reader: .YabrEPUB)
+        original.lastReadPage = 27
+        mockAppContainer.readingPositionRepository.savePosition(original, for: book)
+        for reader in ReaderType.allCases where reader != .UNSUPPORTED {
+            let bridge = YabrEBookReaderRepresentable(book: book,
+                readerInfo: ReaderInfo(deviceName: mockAppContainer.deviceName, url: URL(fileURLWithPath: "/preview.\(reader.format.ext)"),
+                    missing: false, format: reader.format, readerType: reader, position: original), isPreview: true)
+            bridge.makeCoordinator().readerEngine(NSObject(), didUpdatePosition: ReaderEnginePosition(pageNumber: 99, maxPage: 100))
+            XCTAssertEqual(mockAppContainer.readingPositionRepository.getPosition(for: book, policy: .latest)?.lastReadPage, 27)
+        }
+    }
+
+    func testCompletingTwoFormatsPreservesBothCachesAndCurrentMetadata() async throws {
+        var book = try makeDownloadReadBook()
+        book.formats["PDF"] = book.formats["EPUB"]
+        mockAppContainer.bookRepository.saveBook(book)
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        let epub = try controlledDownload(for: book, format: .EPUB)
+        viewModel.cacheFormat(book: book, format: .PDF)
+        let pdf = try controlledDownload(for: book, format: .PDF)
+        defer { try? FileManager.default.removeItem(at: epub.savedURL); try? FileManager.default.removeItem(at: pdf.savedURL) }
+        var refreshed = try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId))
+        refreshed.title = "Refreshed During Download"
+        mockAppContainer.bookRepository.saveBook(refreshed)
+        try await completeReadDownload(epub)
+        try await completeReadDownload(pdf)
+        let saved = try XCTUnwrap(mockAppContainer.bookRepository.getBook(id: book.inShelfId))
+        XCTAssertEqual(saved.title, "Refreshed During Download")
+        XCTAssertEqual(saved.formats["EPUB"]?.cached, true)
+        XCTAssertEqual(saved.formats["PDF"]?.cached, true)
+        XCTAssertEqual(saved.formats["EPUB"]?.selected, true)
+        XCTAssertEqual(saved.formats["PDF"]?.selected, true)
+    }
+
     private func makeDownloadReadBook() throws -> CalibreBook {
         var book = try XCTUnwrap(mockCalibreBook)
         book.formats = ["EPUB": FormatInfo(selected: nil, filename: "download-read.epub", serverSize: 1024,
@@ -827,9 +957,9 @@ class BookDetailViewModelTests: XCTestCase {
     }
 
     /// Keep the real startDownload path; replace only its transport for deterministic callbacks.
-    private func controlledDownload(for book: CalibreBook) throws -> BookFormatDownload {
+    private func controlledDownload(for book: CalibreBook, format: Format? = nil) throws -> BookFormatDownload {
         let manager = mockAppContainer.downloadManager
-        var download = try XCTUnwrap(manager.activeDownloads.values.first { $0.book.inShelfId == book.inShelfId && $0.isActive })
+        var download = try XCTUnwrap(manager.activeDownloads.values.first { $0.book.inShelfId == book.inShelfId && $0.isActive && (format == nil || $0.format == format) })
         let originalTask = download.downloadTask
         download.downloadTask = DetailDownloadTask(url: download.sourceURL)
         manager.activeDownloads[download.sourceURL] = download
@@ -849,28 +979,19 @@ class BookDetailViewModelTests: XCTestCase {
         withExtendedLifetime(delegate) {}
     }
     
-    func testParseManifestToTOCSuccess() throws {
-        let jsonString = "{\"toc\": {\"children\": [{\"title\": \"Chapter 1\"}, {\"title\": \"Chapter 2\"}]}}"
-        let data = jsonString.data(using: .utf8)!
-        viewModel.parseManifestToTOC(json: data)
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Chapter 1\nChapter 2\n", "TOC should be correctly parsed from manifest JSON")
+    func testParseManifestToTOCSuccess() {
+        let data = Data("{\"toc\": {\"children\": [{\"title\": \"Chapter 1\"}, {\"title\": \"Chapter 2\"}]}}".utf8)
+        XCTAssertEqual(BookPreviewViewModel.parseManifest(data), .loaded("Chapter 1\nChapter 2\n"))
     }
-    
-    func testParseManifestToTOCWaiting() throws {
-        let jsonString = "{\"job_status\": \"waiting\"}"
-        let data = jsonString.data(using: .utf8)!
-        viewModel.parseManifestToTOC(json: data)
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Generating TOC, Please try again later", "Should show generating message when job is waiting")
+
+    func testParseManifestToTOCWaiting() {
+        XCTAssertEqual(BookPreviewViewModel.parseManifest(Data("{\"job_status\": \"waiting\"}".utf8)), .generating)
     }
-    
-    func testParseManifestToTOCInvalidJSON() throws {
-        let data = "Invalid JSON".data(using: .utf8)!
-        viewModel.parseManifestToTOC(json: data)
-        #if DEBUG
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Invalid JSON", "Should fallback to raw string for invalid JSON in DEBUG")
-        #else
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Without TOC", "Should fallback to Without TOC for invalid JSON")
-        #endif
+
+    func testParseManifestToTOCInvalidJSON() {
+        guard case .failed = BookPreviewViewModel.parseManifest(Data("Invalid JSON".utf8)) else {
+            return XCTFail("Invalid payload must be a recoverable failure")
+        }
     }
 
     func testUpdatingMetadata() throws {
@@ -1188,19 +1309,58 @@ class BookDetailViewModelTests: XCTestCase {
         viewModel.activeDownloads.removeAll()
     }
     
-    func testGetFormatStatusTextAndIcon() throws {
-        var formatInfo = FormatInfo(filename: "test.epub", serverSize: 100, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
-        
-        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Not cached")
-        
-        formatInfo.cached = true
-        formatInfo.cacheSize = 100
-        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Up to date")
-        XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsup")
-        
-        formatInfo.cacheMTime = formatInfo.serverMTime.addingTimeInterval(-120)
-        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Server has update")
-        XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsdown")
+    func testFormatSnapshotUsesActiveAttemptThenNewestResultAcrossServerAddresses() async throws {
+        let book = try makeDownloadReadBook()
+        let savedURL = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        let originalURL = try XCTUnwrap(URL(string: "http://localhost/get/EPUB/123/lib1"))
+        let changedURL = try XCTUnwrap(URL(string: "http://localhost:8080/get/EPUB/123/lib1"))
+        var downloads = Dictionary(uniqueKeysWithValues: [originalURL, changedURL].map { url in
+            (url, BookFormatDownload(completion: .failed("Connection failed"), book: book, format: .EPUB,
+                startDatetime: .distantPast, sourceURL: url, savedURL: savedURL, modificationDate: .distantPast))
+        })
+        // Exercise the ordering that previously picked the failed record.
+        let retryURL = try XCTUnwrap(Array(downloads.keys).last)
+        downloads[retryURL]?.isDownloading = true
+        downloads[retryURL]?.completion = nil
+        downloads[retryURL]?.startDatetime = Date()
+        let retryID = try XCTUnwrap(downloads[retryURL]?.id)
+        mockAppContainer.downloadManager.activeDownloads = downloads
+        viewModel.setup(bookId: book.inShelfId)
+        defer { viewModel.onDisappear() }
+        await waitUntil { self.viewModel.formatStates.first?.download != nil }
+
+        let transferring = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertEqual(transferring.download?.id, retryID)
+        XCTAssertTrue(transferring.isTransferring)
+        XCTAssertFalse(transferring.canDownload)
+
+        viewModel.cancelDownload(book: book, format: .EPUB)
+
+        let cancelled = try XCTUnwrap(viewModel.formatStates.first)
+        XCTAssertEqual(cancelled.download?.id, retryID)
+        XCTAssertEqual(cancelled.download?.completion, .cancelled)
+        XCTAssertTrue(cancelled.canDownload)
+    }
+
+    func testFormatSnapshotUsesCurrentFileAndServerFreshness() throws {
+        var available = false
+        let model = BookDetailViewModel(container: mockAppContainer, fileExists: { _ in available })
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats["EPUB"] = FormatInfo(filename: "test.epub", serverSize: 100, serverMTime: Date(),
+            cached: false, cacheSize: 0, cacheMTime: Date())
+        mockAppContainer.bookRepository.saveBook(book)
+        model.setup(bookId: book.inShelfId)
+        XCTAssertEqual(model.formatStates.first?.statusText, "Not Downloaded")
+        available = true
+        book.formats["EPUB"]?.cached = true
+        mockAppContainer.bookRepository.saveBook(book)
+        model.setup(bookId: book.inShelfId)
+        XCTAssertEqual(model.formatStates.first?.statusText, "Downloaded · Up to Date")
+        book.formats["EPUB"]?.cacheMTime = .distantPast
+        mockAppContainer.bookRepository.saveBook(book)
+        model.setup(bookId: book.inShelfId)
+        XCTAssertEqual(model.formatStates.first?.statusText, "Downloaded · Server Has Update")
+        model.onDisappear()
     }
 
     func testDownloadInteraction() throws {
@@ -1212,6 +1372,38 @@ class BookDetailViewModelTests: XCTestCase {
         
         viewModel.cancelDownload(book: book, format: .EPUB)
         XCTAssertFalse(viewModel.isFormatDownloading(book: book, format: .EPUB))
+    }
+
+    func testPreviewRejectsMissingCachedFile() throws {
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats["EPUB"] = FormatInfo(filename: "missing-preview.epub", serverSize: 100,
+            serverMTime: Date(), cached: true, cacheSize: 100, cacheMTime: Date())
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try? FileManager.default.removeItem(at: url)
+        XCTAssertFalse(viewModel.previewAction(book: book, format: .EPUB,
+            formatInfo: try XCTUnwrap(book.formats["EPUB"])))
+        XCTAssertEqual(viewModel.alertItem?.id, "Cannot locate book file")
+    }
+
+    func testPreviewPreparationPreservesFormalReaderInfo() throws {
+        var book = try XCTUnwrap(mockCalibreBook)
+        book.formats["EPUB"] = FormatInfo(filename: "isolated-preview.epub", serverSize: 100,
+            serverMTime: Date(), cached: true, cacheSize: 100, cacheMTime: Date())
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("EPUB".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        var originalPosition = mockAppContainer.readingPositionRepository.createInitial(
+            deviceName: mockAppContainer.deviceName, reader: .ReadiumPDF)
+        originalPosition.lastReadPage = 42
+        let originalURL = URL(fileURLWithPath: "/formal.pdf")
+        mockAppContainer.sessionManager.prepareBookReading(url: originalURL, format: .PDF,
+            readerType: .ReadiumPDF, position: originalPosition)
+        XCTAssertTrue(viewModel.previewAction(book: book, format: .EPUB,
+            formatInfo: try XCTUnwrap(book.formats["EPUB"])))
+        XCTAssertEqual(mockAppContainer.sessionManager.readerInfo?.url, originalURL)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerInfo?.position.lastReadPage, 42)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
     }
 
     func testPreviewSelection() async throws {
@@ -1255,12 +1447,12 @@ class BookDetailViewModelTests: XCTestCase {
         
         let handled = viewModel.previewAction(book: book, format: .EPUB, formatInfo: book.formats["EPUB"]!)
         XCTAssertTrue(handled)
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Initializing")
+        XCTAssertEqual(viewModel.previewViewModel?.contentsState, .loading)
 
         await waitUntil {
-            self.viewModel.previewViewModel.toc == "Intro\n"
+            self.viewModel.previewViewModel?.contentsState == .loaded("Intro\n")
         }
-        XCTAssertEqual(viewModel.previewViewModel.toc, "Intro\n")
+        XCTAssertEqual(viewModel.previewViewModel?.contentsState, .loaded("Intro\n"))
     }
 
     func testMetadataRefresh() async throws {
@@ -1936,4 +2128,172 @@ final class BookMetadataPublicationDateTests: XCTestCase {
         }
     }
 
+}
+
+@MainActor
+final class BookPreviewLifecycleTests: XCTestCase {
+    private func preview(book: CalibreBook = TestFixtures.makeBook(), format: Format = .EPUB,
+                         manifest: @escaping () async throws -> Data,
+                         local: @escaping () async throws -> String = { throw URLError(.cannotDecodeContentData) }) -> BookPreviewViewModel {
+        let reader = ReaderType.readers(for: format).first ?? .UNSUPPORTED
+        return BookPreviewViewModel(book: book,
+            readerInfo: ReaderInfo(deviceName: "preview-test", url: URL(fileURLWithPath: "/preview.\(format.ext)"),
+                missing: false, format: format, readerType: reader,
+                position: TestFixtures.makeReadingPosition(readerName: reader.rawValue)),
+            loadManifest: manifest, loadLocalContents: local)
+    }
+
+    private func waitFor(_ condition: () -> Bool) async {
+        for _ in 0..<100 {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Preview did not reach the expected state")
+    }
+
+    func testClosedPreviewRejectsLateResponse() async {
+        let response = DeferredPreviewManifest()
+        let model = preview(manifest: { try await response.load() })
+        model.start()
+        await waitFor { response.requests.count == 1 }
+        model.cancel()
+        response.requests[0].resume(returning: Data("{\"toc\":{\"children\":[{\"title\":\"Late\"}]}}".utf8))
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(model.contentsState, .loading)
+    }
+
+    func testRetryRejectsOldResponseAndAcceptsNewOne() async {
+        let response = DeferredPreviewManifest()
+        let model = preview(manifest: { try await response.load() })
+        model.start()
+        model.start()
+        await waitFor { response.requests.count == 1 }
+        model.loadContents()
+        await waitFor { response.requests.count == 2 }
+        response.requests[1].resume(returning: Data("{\"toc\":{\"children\":[{\"title\":\"New\"}]}}".utf8))
+        await waitFor { model.contentsState == .loaded("New\n") }
+        response.requests[0].resume(returning: Data("{\"toc\":{\"children\":[{\"title\":\"Old\"}]}}".utf8))
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(model.contentsState, .loaded("New\n"))
+    }
+
+    func testLatePreviewACannotOverwritePreviewBWithSameNumericBookID() async {
+        let response = DeferredPreviewManifest()
+        let first = preview(manifest: { try await response.load() })
+        let second = preview(format: .PDF, manifest: { Data("{\"toc\":{\"children\":[{\"title\":\"B\"}]}}".utf8) })
+        XCTAssertEqual(first.book.id, second.book.id)
+        XCTAssertNotEqual(first.book.inShelfId, second.book.inShelfId)
+        first.start()
+        await waitFor { response.requests.count == 1 }
+        first.cancel()
+        second.start()
+        await waitFor { second.contentsState == .loaded("B\n") }
+        response.requests[0].resume(returning: Data("{\"toc\":{\"children\":[{\"title\":\"A\"}]}}".utf8))
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(second.contentsState, .loaded("B\n"))
+        XCTAssertEqual(second.readerInfo.format, .PDF)
+    }
+
+    func testNetworkFailureIsRecoverable() async {
+        var attempts = 0
+        let model = preview(manifest: {
+            attempts += 1
+            if attempts == 1 { throw URLError(.notConnectedToInternet) }
+            return Data("{\"toc\":{\"children\":[{\"title\":\"Recovered\"}]}}".utf8)
+        })
+        model.start()
+        await waitFor { if case .failed = model.contentsState { return true }; return false }
+        model.loadContents()
+        await waitFor { model.contentsState == .loaded("Recovered\n") }
+        XCTAssertEqual(attempts, 2)
+    }
+
+    func testOfflinePreviewUsesDownloadedContents() async {
+        let model = preview(manifest: { throw URLError(.notConnectedToInternet) }, local: { "Local chapter\n" })
+        model.start()
+        await waitFor { model.contentsState == .loaded("Local chapter\n") }
+    }
+
+    func testLocalPreviewNeverRequestsServer() async {
+        let localBook = TestFixtures.makeBook(library: TestFixtures.makeLibrary(server: TestFixtures.makeServer(baseUrl: ".")))
+        let model = preview(book: localBook, manifest: { XCTFail("Local file must not use Calibre"); return Data() }, local: { "Local\n" })
+        model.start()
+        await waitFor { model.contentsState == .loaded("Local\n") }
+    }
+
+    func testCachedManifestCanBeUsedOffline() async {
+        var book = TestFixtures.makeBook()
+        book.formats["EPUB"] = FormatInfo(serverSize: 0, serverMTime: .distantPast,
+            cached: true, cacheSize: 0, cacheMTime: .distantPast,
+            manifest: Data("{\"toc\":{\"children\":[{\"title\":\"Saved\"}]}}".utf8))
+        let model = preview(book: book, manifest: { XCTFail("Saved contents should be used"); return Data() })
+        model.start()
+        await waitFor { model.contentsState == .loaded("Saved\n") }
+    }
+
+    func testLocalParserReadsTheBundledEPUBWithoutAReadingSession() async throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "UI Test Fixture", withExtension: "epub"))
+        let contents = try await BookPreviewViewModel.localContents(url: url)
+        XCTAssertTrue(contents.contains("The Compass and the Quiet Map"), contents)
+    }
+
+    func testLocalParserPreservesPDFAndCBZWithoutContents() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let pdfURL = folder.appendingPathComponent("preview.pdf")
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 300))
+        try renderer.pdfData { context in
+            context.beginPage()
+            "PDF Preview".draw(at: CGPoint(x: 20, y: 20))
+        }.write(to: pdfURL)
+        let imageURL = folder.appendingPathComponent("page.png")
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 300)).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 300))
+        }
+        try XCTUnwrap(image.pngData()).write(to: imageURL)
+        let cbzURL = folder.appendingPathComponent("preview.cbz")
+        try Zip.zipFiles(paths: [imageURL], zipFilePath: cbzURL, password: nil, progress: nil)
+        let pdfContents = try await BookPreviewViewModel.localContents(url: pdfURL)
+        let cbzContents = try await BookPreviewViewModel.localContents(url: cbzURL)
+        XCTAssertEqual(pdfContents, "")
+        XCTAssertEqual(cbzContents, "")
+    }
+
+    func testGeneratingManifestCanBeRetriedToAnEmptyContentsResult() async {
+        var requests = 0
+        let model = preview(manifest: {
+            requests += 1
+            return Data((requests == 1 ? "{\"job_status\":\"waiting\"}" : "{\"toc\":{\"children\":[]}}").utf8)
+        })
+        model.start()
+        await waitFor { model.contentsState == .generating }
+        model.loadContents()
+        await waitFor { model.contentsState == .empty }
+    }
+
+    func testEmptyGeneratingNestedAndMalformedManifests() {
+        for json in ["{}", "{\"toc\":null}", "{\"toc\":{\"children\":[]}}"] {
+            XCTAssertEqual(BookPreviewViewModel.parseManifest(Data(json.utf8)), .empty)
+        }
+        for status in ["waiting", "running", "working"] {
+            XCTAssertEqual(BookPreviewViewModel.parseManifest(Data("{\"job_status\":\"\(status)\"}".utf8)), .generating)
+        }
+        let nested = Data("{\"toc\":{\"children\":[{\"title\":\"One\",\"children\":[{\"title\":\"Two\"}]}]}}".utf8)
+        XCTAssertEqual(BookPreviewViewModel.parseManifest(nested), .loaded("One\n  Two\n"))
+        for json in ["[]", "invalid", "{\"toc\":[]}", "{\"toc\":{\"children\":\"invalid\"}}", "{\"job_status\":\"failed\"}", "{\"aborted\":true}", "{\"traceback\":\"server error\"}", "{\"toc\":{\"children\":[{\"title\":123}]}}"] {
+            guard case .failed = BookPreviewViewModel.parseManifest(Data(json.utf8)) else {
+                return XCTFail("Malformed manifest must allow retry: \(json)")
+            }
+        }
+    }
+}
+
+@MainActor
+private final class DeferredPreviewManifest {
+    var requests: [CheckedContinuation<Data, Error>] = []
+    func load() async throws -> Data {
+        try await withCheckedThrowingContinuation { requests.append($0) }
+    }
 }

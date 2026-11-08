@@ -81,7 +81,7 @@ extension CalibreServerService {
         await self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
         do {
-            let (data, httpResponse) = try await self.validatedData(for: request, server: book.library.server)
+            let (data, httpResponse) = try await self.validatedData(for: request, server: book.library.server, timeout: 10)
             guard httpResponse.mimeType == "application/json" else {
                 throw CalibreAPIError.unsupportedPayload
             }

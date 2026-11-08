@@ -1,74 +1,57 @@
-//
-//  BookPreviewView.swift
-//  YetAnotherEBookReader
-//
-//  Created by 京太郎 on 2021/8/29.
-//
-
 import SwiftUI
 
 struct BookPreviewView: View {
-    @ObservedObject private var _VM: BookPreviewViewModel
-    
-    init(viewModel: BookPreviewViewModel) {
-        self._VM = viewModel
-    }
-    
+    @ObservedObject var viewModel: BookPreviewViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab = 0
+
     var body: some View {
-        TabView {
-            ScrollView(.vertical) {
-                VStack(alignment: .leading) {
-                    Text("Table of Content")
-                        .font(.headline)
-                    Text(_VM.toc)
-                }.padding()
+        NavigationView {
+            TabView(selection: $selectedTab) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Table of Contents").font(.headline)
+                        switch viewModel.contentsState {
+                        case .loading: ProgressView("Loading table of contents…")
+                        case .loaded(let text): Text(text)
+                        case .empty: Text("No table of contents in this book.")
+                        case .generating:
+                            Text("The server is generating the table of contents. Try again shortly.")
+                            retry
+                        case .failed(let message):
+                            Text(message)
+                            retry
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading).padding()
+                }
+                .tabItem { Label("Contents", systemImage: "scroll") }.tag(0)
+                ZStack {
+                    // Keep the tab present even before its reader is mounted.
+                    // The reader is mounted only when selected, and is always isolated from reading.
+                    if selectedTab == 1 {
+                        YabrEBookReader(book: viewModel.book, readerInfo: viewModel.readerInfo, isPreview: true)
+                    }
+                }
+                .tabItem { Label("Preview", systemImage: "book") }.tag(1)
             }
-            .tabItem {
-                Image(systemName: "scroll")
-                Text("Manifest")
-            }.tag(0)
-            
-            VStack {
-                YabrEBookReader(
-                    book: _VM.book,
-                    readerInfo: ReaderInfo(
-                        deviceName: _VM.container.deviceName,
-                        url: _VM.url,
-                        missing: false,
-                        format: _VM.format,
-                        readerType: _VM.reader,
-                        position: _VM.container.readingPositionRepository.createInitial(deviceName: _VM.container.deviceName, reader: _VM.reader)                        
-                    )
-                )
+            .navigationTitle("\(viewModel.readerInfo.format.rawValue) Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { viewModel.cancel(); dismiss() }
+                        .accessibilityIdentifier("book-preview.close")
+                }
             }
-            .tabItem {
-                Image(systemName: "book")
-                Text("Preview")
-            }.tag(1)
         }
+        .navigationViewStyle(.stack)
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.cancel() }
+        .accessibilityIdentifier("screen.book-preview")
     }
-    
-    
-}
 
-struct BookPreviewView_Previews: PreviewProvider {
-    static let container = AppContainer(mock: true)
-
-    static var previews: some View {
-        if let book = container.bookManager.booksInShelf.first?.value,
-           let formatReaderPair: (Format, ReaderType) = container.sessionManager.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
-           let savedUrl = getSavedUrl(book: book, format: formatReaderPair.0) {
-            BookPreviewView(
-                viewModel: BookPreviewViewModel(
-                    container: container,
-                    book: book,
-                    url: savedUrl,
-                    format: formatReaderPair.0,
-                    reader: formatReaderPair.1
-                )
-            )
-        } else {
-            Text("Nil Book")
-        }
+    private var retry: some View {
+        Button("Retry") { viewModel.loadContents() }
+            .frame(minHeight: 44).accessibilityIdentifier("book-preview.retry")
     }
 }

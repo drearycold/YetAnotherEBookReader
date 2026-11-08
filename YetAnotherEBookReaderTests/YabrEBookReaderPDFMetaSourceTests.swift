@@ -13,6 +13,15 @@ final class YabrEBookReaderPDFMetaSourceTests: XCTestCase {
     /// Each chapter's title and the 1-based page it starts on.
     private static let chapters = [("Chapter 1", 1), ("Chapter 2", 4), ("Chapter 3", 6)]
 
+    func testPreviewDoesNotSaveDefaultOrChangedPDFPreferences() throws {
+        let repository = StubPDFPreferenceRepository()
+        let (source, _) = try makeReader()
+        let preview = YabrEBookReaderPDFMetaSource(book: source.book, readerInfo: source.readerInfo,
+            preferenceRepository: repository, isPreview: true)
+        preview.yabrPDFOptions(nil, update: PDFPreferenceValue())
+        XCTAssertEqual(repository.saveCount, 0)
+    }
+
     func testOutlineOfAChaptersFirstAndLastPage() throws {
         let (metaSource, view) = try makeReader()
 
@@ -95,6 +104,7 @@ final class YabrEBookReaderPDFMetaSourceTests: XCTestCase {
 }
 
 private final class StubPDFPreferenceRepository: ReaderPreferenceRepositoryProtocol {
+    var saveCount = 0
     func loadInitialPreferences(for book: CalibreBook, readerType: ReaderType) -> ReaderEnginePreferences? { nil }
     func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {}
     func loadFolioPreferences(for book: CalibreBook) -> FolioReaderPreferenceValue? { nil }
@@ -102,5 +112,5 @@ private final class StubPDFPreferenceRepository: ReaderPreferenceRepositoryProto
     func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? { nil }
     func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook) {}
     func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue? { nil }
-    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) {}
+    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) { saveCount += 1 }
 }
