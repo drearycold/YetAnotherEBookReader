@@ -25,7 +25,7 @@ struct LibraryDetailView: View {
             
             Section(header: Text("Troubleshooting")) {
                 NavigationLink(
-                    destination: LazyView(ActivityList(viewModel: ActivityListViewModel(container: viewModel.container, libraryId: viewModel.library.id, bookId: nil), presenting: Binding<Bool>(get: { false }, set:{_ in })))
+                    destination: LazyView(ActivityList(viewModel: viewModel.makeActivityListViewModel()))
                 ) {
                     Text("Activity Logs")
                 }

@@ -174,6 +174,11 @@ class UIJourneyTestCase: XCTestCase {
                 // A row's info pushes its position detail through History's hidden link.
                 waitForIdentifier(AccessibilityID.readingHistoryPosition).tap()
                 waitForIdentifier(AccessibilityID.readingPositionScreen)
+                waitForIdentifier("reading-position.continue").tap()
+                waitForIdentifier(AccessibilityID.readerFolioContent, timeout: readerLoadTimeout)
+                waitForIdentifier(AccessibilityID.readerFolioClose).tap()
+                waitForNonExistence(AccessibilityID.readerFolioScreen)
+                waitForIdentifier(AccessibilityID.readingPositionScreen)
                 navigateBackFromNavigationStack()
                 waitForNonExistence(AccessibilityID.readingPositionScreen)
                 waitForIdentifier(AccessibilityID.readingHistoryScreen)
@@ -1114,7 +1119,12 @@ final class CalibreOnboardingUITests: XCTestCase {
     func testDetailInActualIPadSplitWindow() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["YABR_DETAIL_SPLIT"] == "1",
                           "Requires the isolated iPad Release fixture")
-        connect(name: "BD2 Split Server", url: singleURL)
+        let descriptionKey = "YABR_DESCRIPTION_CONTROL_URL"
+        let hasDescriptionFixture = ProcessInfo.processInfo.environment[descriptionKey] != nil
+        if hasDescriptionFixture {
+            try configureFixture("long", environmentKey: descriptionKey)
+        }
+        connect(name: "Split View Server", url: singleURL)
         waitForEnabled(element("server.connection.confirm"))
         element("server.connection.confirm").tap()
         let book = app.descendants(matching: .any).matching(identifier: "browse.book.mock").firstMatch
@@ -1144,6 +1154,92 @@ final class CalibreOnboardingUITests: XCTestCase {
         assertHorizontalBounds(read)
         XCTAssertTrue(read.isHittable)
         capture("bd2-ipad-split-read")
+        if hasDescriptionFixture {
+            let toggle = app.buttons["book-description.toggle"].firstMatch
+            reveal(toggle)
+            XCTAssertEqual(toggle.label, "Show More")
+            assertHorizontalBounds(toggle)
+            capture("bd4-description-split")
+
+            let jump = app.links["Jump to the final paragraph"].firstMatch
+            reveal(jump, upward: false)
+            jump.tap()
+            let end = app.staticTexts["BD4 Final Paragraph"].firstMatch
+            let reachedAnchor = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                end.exists && end.isHittable && self.app.windows.firstMatch.frame.contains(end.frame)
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [reachedAnchor], timeout: 15), .completed, app.debugDescription)
+            XCTAssertEqual(toggle.label, "Show Less")
+            capture("bd4-description-split-anchor")
+        }
+    }
+
+    func testDescriptionReflowsAndUpdatesInBookDetail() throws {
+        let key = "YABR_DESCRIPTION_CONTROL_URL"
+        try XCTSkipIf(ProcessInfo.processInfo.environment[key] == nil, "Requires the BD4 description fixture")
+        try configureFixture("long", environmentKey: key)
+        connect(name: "BD4 Description Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        let first = element("browse.book.mock")
+        reveal(first)
+        first.tap()
+        element("book-detail.title")
+        let heading = app.staticTexts["Description"].firstMatch
+        reveal(heading)
+        let toggle = app.buttons["book-description.toggle"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertEqual(toggle.label, "Show More")
+        reveal(toggle)
+        capture("bd4-description-collapsed")
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "Show Less")
+        let ending = app.staticTexts["BD4 Final Paragraph"].firstMatch
+        reveal(ending)
+        XCTAssertTrue(ending.isHittable)
+        capture("bd4-description-expanded")
+        reveal(toggle)
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "Show More")
+        reveal(heading, upward: false)
+
+        if app.windows.firstMatch.frame.width >= 700 {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            reveal(heading)
+            XCTAssertEqual(toggle.label, "Show More")
+            assertHorizontalBounds(toggle)
+            capture("bd4-description-landscape")
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        try configureFixture("short", environmentKey: key)
+        element("book-detail.refresh").tap()
+        reveal(heading, upward: false)
+        let updated = app.staticTexts["BD4 Short Synopsis"].firstMatch
+        XCTAssertTrue(updated.waitForExistence(timeout: 20), app.debugDescription)
+        reveal(updated)
+        XCTAssertFalse(toggle.exists)
+        capture("bd4-description-short-after-refresh")
+
+        let logs = app.buttons["Activity Logs"].firstMatch
+        reveal(logs, maxDrags: 28)
+        logs.tap()
+        XCTAssertTrue(app.navigationBars["Activity Logs"].waitForExistence(timeout: 10))
+        capture("bd4-activity-logs")
+        app.navigationBars["Activity Logs"].buttons["Close"].tap()
+        XCTAssertTrue(app.navigationBars["Book Details"].waitForExistence(timeout: 10))
+
+        back()
+        let second = element("browse.book.2")
+        reveal(second)
+        second.tap()
+        element("book-detail.title")
+        reveal(app.staticTexts["Files and Formats"].firstMatch)
+        XCTAssertFalse(heading.exists)
+        XCTAssertFalse(toggle.exists)
+        XCTAssertFalse(updated.exists)
+        capture("bd4-description-empty-other-book")
     }
 
     func testDetailMetadataRefreshUpdatesDisplayedValues() throws {
@@ -1234,8 +1330,8 @@ final class CalibreOnboardingUITests: XCTestCase {
         element("screen.browse.book-list")
     }
 
-    private func reveal(_ item: XCUIElement, upward: Bool = true) {
-        for _ in 0..<20 {
+    private func reveal(_ item: XCUIElement, upward: Bool = true, maxDrags: Int = 20) {
+        for _ in 0..<maxDrags {
             let collection = app.collectionViews.firstMatch
             let table = app.tables.firstMatch
             let list = collection.exists ? collection : table

@@ -12,28 +12,32 @@ struct BookDetailView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollView {
-                if let book = viewModel.calibreBook, book.inShelfId == bookId {
-                    content(for: book, width: min(960, max(0, geometry.size.width - 32)))
-                        .frame(maxWidth: 960)
-                        .padding(16)
-                        .frame(maxWidth: .infinity)
-                } else if viewModel.pageState == .loading {
-                    ProgressView("Loading book details...")
-                        .frame(maxWidth: .infinity).padding()
-                } else {
-                    VStack(spacing: 12) {
-                        Text("Book Unavailable").font(.headline)
-                        Text("This book is no longer available in this library.")
-                        Button("Retry") {
-                            viewModel.onAppear(bookId: bookId, targetWorkspaceID: readerWorkspaceID)
+            ScrollViewReader { scroll in
+                ScrollView {
+                    if let book = viewModel.calibreBook, book.inShelfId == bookId {
+                        content(for: book, width: min(960, max(0, geometry.size.width - 32))) {
+                            scroll.scrollTo(BookDetailContentView.descriptionID, anchor: .top)
                         }
+                            .frame(maxWidth: 960)
+                            .padding(16)
+                            .frame(maxWidth: .infinity)
+                    } else if viewModel.pageState == .loading {
+                        ProgressView("Loading book details...")
+                            .frame(maxWidth: .infinity).padding()
+                    } else {
+                        VStack(spacing: 12) {
+                            Text("Book Unavailable").font(.headline)
+                            Text("This book is no longer available in this library.")
+                            Button("Retry") {
+                                viewModel.onAppear(bookId: bookId, targetWorkspaceID: readerWorkspaceID)
+                            }
+                        }
+                        .frame(maxWidth: .infinity).padding()
+                        .accessibilityIdentifier("book-detail.unavailable")
                     }
-                    .frame(maxWidth: .infinity).padding()
-                    .accessibilityIdentifier("book-detail.unavailable")
                 }
+                .background(Color(uiColor: .systemGroupedBackground))
             }
-            .background(Color(uiColor: .systemGroupedBackground))
         }
         .navigationTitle("Book Details")
         .navigationBarTitleDisplayMode(.inline)
@@ -44,13 +48,11 @@ struct BookDetailView: View {
         .sheet(item: Binding(get: { viewModel.previewViewModel }, set: { if $0 == nil { viewModel.closePreview() } })) { preview in
             BookPreviewView(viewModel: preview).id(preview.id)
         }
-        .sheet(isPresented: $viewModel.activityListViewPresenting) {
+        .sheet(item: Binding(get: { viewModel.activityViewModel }, set: { if $0 == nil { viewModel.closeActivity() } })) { activity in
             NavigationView {
-                if let book = viewModel.calibreBook, let container = viewModel.sharedAppContainer {
-                    ActivityList(viewModel: ActivityListViewModel(container: container, libraryId: book.library.id, bookId: book.id),
-                                 presenting: $viewModel.activityListViewPresenting)
-                }
+                ActivityList(viewModel: activity, close: viewModel.closeActivity)
             }
+            .navigationViewStyle(.stack)
         }
         .confirmationDialog("Clear Downloaded File?", isPresented: Binding(
             get: { viewModel.clearingFormat != nil },
@@ -74,7 +76,7 @@ struct BookDetailView: View {
         .accessibilityIdentifier("screen.book-detail")
     }
 
-    private func content(for book: CalibreBook, width: CGFloat) -> some View {
+    private func content(for book: CalibreBook, width: CGFloat, scrollToDescription: @escaping () -> Void) -> some View {
         let countPages = viewModel.countPagesConfiguration(for: book.library)
         return BookDetailContentView(
             book: book,
@@ -93,8 +95,9 @@ struct BookDetailView: View {
             connectivity: BookConnectivitySection(book: book, refreshState: viewModel.refreshState,
                 showFailure: { viewModel.alertItem = AlertItem(id: "Refresh Failed", msg: $0) },
                 retry: { viewModel.refresh(book: book) },
-                showActivity: { viewModel.activityListViewPresenting = true }),
-            countPages: countPages.isEnabled ? BookCountPagesCorner(book: book, countPage: countPages) : nil)
+                showActivity: { viewModel.showActivity(book: book) }),
+            countPages: countPages.isEnabled ? BookCountPagesCorner(book: book, countPage: countPages) : nil,
+            scrollToDescription: scrollToDescription)
     }
 
     private func formatRows(for book: CalibreBook) -> [BookFormatRow] {
@@ -116,9 +119,9 @@ struct BookDetailView: View {
     /// One pushed route serves the progress section and toolbar, preserving the reader workspace.
     private var readingHistoryLink: some View {
         NavigationLink(isActive: $viewModel.isReadingPositionHistoryActive) {
-            if let book = viewModel.calibreBook, book.inShelfId == bookId {
-                ReadingPositionHistoryView(library: book.library, bookId: book.id)
-                    .id(book.inShelfId)
+            if let history = viewModel.readingHistoryViewModel {
+                ReadingPositionHistoryView(viewModel: history)
+                    .id(history.id)
             }
         } label: { EmptyView() }
         .hidden()

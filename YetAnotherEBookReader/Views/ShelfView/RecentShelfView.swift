@@ -321,7 +321,8 @@ struct RecentShelfView: View {
                 .id(bookId)
         case .readingHistory(let bookId):
             if let book = viewModel.readingHistoryBook(bookId: bookId) {
-                ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                ReadingPositionHistoryView(viewModel: ReadingPositionHistoryViewModel(
+                    container: container, library: book.library, bookId: book.id))
                     .id(bookId)
             } else {
                 Text("This book is no longer on the shelf")

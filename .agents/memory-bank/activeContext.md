@@ -5,6 +5,76 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Book Detail Modernization BD4 (2026-11-08)
+
+`codex/book-detail-bd4` starts at `ea391b50` on main. BD3 PR #138 merged
+with Detect changes, iOS unit tests, Calibre contract tests and Mac Catalyst
+all passing for head `7b820e7f`.
+
+Book Detail owns a dedicated inline HTML renderer. Its input is the description
+markup and the base URL, so progress and refresh state reuse the same document.
+A document token rejects late layout messages. WebKit measures natural body
+height after width, font or resource changes. The native viewport's height
+does not trigger another measurement. Long descriptions use a Dynamic Type
+scaled fold and the detail page's existing scrolling. Relative resources use
+the book's base URL, local anchors scroll the detail page, and external links
+use the system URL action. Description content JavaScript is disabled.
+Privacy, Terms and release notes still use the shared WebView.
+
+Reading History and Activity Logs now start and cancel their subscriptions at
+page visibility on the main actor. Book Detail owns scoped, stable route
+models. History keeps the same list model while refreshing that book, and its
+position detail keeps the chosen value through the pop animation. Continue
+Reading passes the workspace at the point of action and checks the file again.
+The Activity sheet owns a separate dismissal subscription, so opening a reader
+can close it even after Book Detail has stopped observing. Settings retains
+global statistics and global or library-scoped Activity Logs.
+
+The first iPadOS 18.5 Release run caught a launch failure. The Swift WebKit
+overlay's `callAsyncJavaScript` added a required `libswiftWebKit` dependency
+missing from that simulator runtime. The final binary uses the original WebKit
+JavaScript evaluation method and observes the document's style attribute in
+the isolated measurement script. The before and after `otool` outputs and the
+launch crash are in `/tmp/YabrBD4`. The final Release passed real Safari Split
+View on iPadOS 18.5, including opening a description from its internal link
+and scrolling to the target. The final Release also passed iPhone 7 / iOS 15.5
+with maximum accessibility text and dark appearance. The first iPhone 7 run
+needed a longer test-driver scroll budget to reach Activity Logs at that size.
+
+Final verification passed **196 focused unit tests and two UI journeys** on
+iPhone 17 / iOS 26.5. On iPhone 7 / iOS 15.5, **121 focused units** and the
+Recent/history journey passed after relinking. The Browse journey passed when
+rerun at standard text size. It had reached a fixture tap failure when it
+inherited maximum text size. The real WKWebView test changes width and text size
+without changing the document token, then changes only the base URL and only
+the HTML, verifying each new document and relative link resolution. Separate
+tests cover the originating workspace for both continue-reading actions,
+observation cancellation and Activity dismissal on reader open.
+
+Native Release iPhone 17, iPadOS 26.5 portrait/landscape, BD3 preview/format
+operations, P3 download/read/retry/cancel, and the local EPUB flow passed before
+the WebKit relink. The final iOS Release, iOS test build, Catalyst build, Swift
+parse, project check, proxy syntax and diff checks passed. See
+`/tmp/YabrBD4/verification.json` for results and screenshot paths. Simulator
+coverage includes relative SVG rendering and an in-description anchor in an
+actual split window. Catalyst window interaction, hardware, VoiceOver, and the
+system browser handoff for an external link were outside this verification.
+
+### BD4 review follow-up (2026-11-08)
+
+A native HTML `<details>` disclosure changed the description's body height
+without a report, leaving the expanded text clipped. The measuring script now
+catches `toggle` in the capture phase and reports the natural height without
+reloading the document or measuring on viewport height changes.
+
+The real WebKit test reproduced the missing report before the fix. It now
+passes on iPhone 17 and iPhone 7 / iOS 15.5, including height growth, collapse,
+and an unchanged document token. All 18 focused iPhone 17 tests passed. The
+macOS WebKit probe, iOS Release and Catalyst builds, and static checks passed.
+The Release binary still has no `libswiftWebKit` dependency. Evidence is in
+`/tmp/YabrBD4Disclosure`, with the red run in `/tmp/YabrBD4Review`. The earlier
+Release UI matrix above predates this change.
+
 ## BD3 review follow-up (2026-11-08)
 
 Browse batch confirmation starts the selected remote formats directly when the

@@ -12,34 +12,29 @@ import SwiftUI
 import SwiftUICharts
 #endif
 
-class ReadingPositionListViewModel: ObservableObject {
-    @Published var container: AppContainer
-    @Published var book: CalibreBook
+@MainActor
+final class ReadingPositionListViewModel {
+    var book: CalibreBook
+    var positions: [BookDeviceReadingPosition]
 
-    @Published var positions: [BookDeviceReadingPosition]
-
-    let percentFormatter = NumberFormatter()
-    let dateFormatter = DateFormatter()
-
-    var modified = false
+    private let sessionManager: ReadingSessionManager
+    private let openReader: (CalibreBook, ReaderInfo, UUID?) -> Void
 
     init(container: AppContainer, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
-        self.container = container
         self.book = book
         self.positions = positions
-
-        percentFormatter.numberStyle = .percent
-        percentFormatter.minimumFractionDigits = 1
-        dateFormatter.doesRelativeDateFormatting = true
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .medium
-        dateFormatter.timeZone = .current
+        sessionManager = container.sessionManager
+        openReader = { book, info, workspaceID in
+            container.openReader(book: book, readerInfo: info, source: .readingPosition, targetWorkspaceID: workspaceID)
+        }
     }
 
-    func positionsByLatestStyle() -> [BookDeviceReadingPosition] {
-        guard let latest = positions.first else { return [] }
+    func format(for reader: ReaderType) -> Format {
+        sessionManager.formatOfReader(readerName: reader.rawValue) ?? reader.format
+    }
 
-        return positions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle }
+    func readers(for format: Format) -> [ReaderType] {
+        sessionManager.formatReaderMap[format] ?? []
     }
 
     func positionsByLatestStyle(deviceId: String) -> [BookDeviceReadingPosition] {
@@ -57,11 +52,6 @@ class ReadingPositionListViewModel: ObservableObject {
         }.sorted(by: { $0.value > $1.value }).map { $0.key }
     }
 
-    func removePosition(_ deviceName: String) {
-        container.readingPositionRepository.removePosition(deviceName: deviceName, for: book)
-        modified = true
-    }
-
     /// The reader and format a position reopens with: the override when given, otherwise the reader
     /// that saved it.
     private func readerAndFormat(
@@ -73,8 +63,7 @@ class ReadingPositionListViewModel: ObservableObject {
               reader != .UNSUPPORTED else {
             return nil
         }
-        let format = format ?? container.sessionManager.formatOfReader(readerName: reader.rawValue) ?? reader.format
-        return (reader, format)
+        return (reader, format ?? self.format(for: reader))
     }
 
     func canContinueReading(at position: BookDeviceReadingPosition, format: Format? = nil, readerType: ReaderType? = nil) -> Bool {
@@ -97,98 +86,64 @@ class ReadingPositionListViewModel: ObservableObject {
               formatInfo.cached else {
             return AlertItem(id: "Selected Format Not Cached", msg: "Please download \(format.rawValue) first")
         }
-        guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
-            return AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
+        guard let bookFileUrl = getSavedUrl(book: book, format: format),
+              FileManager.default.fileExists(atPath: bookFileUrl.path) else {
+            return AlertItem(id: "Cannot Locate Book File", msg: book.library.server.isLocal
+                ? "Please import the original file again." : "Please download \(format.rawValue) again.")
         }
 
-        let readerInfo = container.sessionManager.prepareBookReading(
+        let readerInfo = sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: reader,
             position: position
         )
-        container.openReader(
-            book: book,
-            readerInfo: readerInfo,
-            source: .readingPosition,
-            targetWorkspaceID: targetWorkspaceID
-        )
+        openReader(book, readerInfo, targetWorkspaceID)
         return nil
     }
 }
 
-class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
-    @Published var container: AppContainer
-    @Published var listModel: ReadingPositionListViewModel
-    @Published var position: BookDeviceReadingPosition
-    var targetWorkspaceID: UUID?
+@MainActor
+final class ReadingPositionDetailViewModel: ObservableObject, Identifiable {
+    let id = UUID()
+    let position: BookDeviceReadingPosition
+    let selectedFormat: Format
+    let availableReaders: [ReaderType]
 
-    @Published var selectedFormat = Format.UNKNOWN
-    @Published var selectedFormatReader = ReaderType.UNSUPPORTED
-    @Published var startPage = ""
+    @Published var selectedFormatReader: ReaderType
     @Published var alertItem: AlertItem?
 
+    private let listModel: ReadingPositionListViewModel
     let percentFormatter = NumberFormatter()
     let dateFormatter = DateFormatter()
 
-    init(
-        container: AppContainer,
-        listModel: ReadingPositionListViewModel,
-        position: BookDeviceReadingPosition,
-        targetWorkspaceID: UUID? = nil
-    ) {
-        self.container = container
+    init(listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
         self.listModel = listModel
         self.position = position
-        self.targetWorkspaceID = targetWorkspaceID
-
-        if let format = container.sessionManager.formatOfReader(readerName: position.readerName) {
-            self.selectedFormat = format
-        }
-        if let reader = ReaderType(rawValue: position.readerName) {
-            self.selectedFormatReader = reader
-        }
-
-        startPage = position.lastReadPage.description
+        let reader = ReaderType(rawValue: position.readerName) ?? .UNSUPPORTED
+        selectedFormatReader = reader
+        selectedFormat = listModel.format(for: reader)
+        availableReaders = listModel.readers(for: selectedFormat)
 
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1
-
         dateFormatter.doesRelativeDateFormatting = true
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .medium
         dateFormatter.timeZone = .current
     }
 
-    func alert(alertItem: AlertItem) {
-        self.alertItem = alertItem
-    }
-
-    var availableReaders: [ReaderType] {
-        return container.sessionManager.formatReaderMap[selectedFormat] ?? []
-    }
-
     var isSelectedFormatCached: Bool {
-        return listModel.book.formats[selectedFormat.rawValue]?.cached == true
+        listModel.canContinueReading(at: position, format: selectedFormat, readerType: selectedFormatReader)
     }
 
-    func readSelectedFormat() {
+    func readSelectedFormat(targetWorkspaceID: UUID?) {
         alertItem = listModel.continueReading(
             at: position,
             format: selectedFormat,
             readerType: selectedFormatReader,
             targetWorkspaceID: targetWorkspaceID
         )
-    }
-
-    func updatePosition() {
-        container.sessionManager.updateCurrentPosition(alertDelegate: self)
-
-        let book = listModel.book
-        listModel.positions = container.readingPositionRepository.getPositions(for: book)
-        if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(self.position.id)) {
-            self.position = position
-        }
     }
 }
 
@@ -229,8 +184,10 @@ struct ReadingHistorySessionRow: Identifiable {
     let endPosition: BookDeviceReadingPosition
 }
 
-class ReadingPositionHistoryViewModel: ObservableObject {
-    @Published var container: AppContainer
+@MainActor
+final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
+    let id = UUID()
+    private let container: AppContainer
     let library: CalibreLibrary?
     let bookId: Int32?
 
@@ -240,8 +197,7 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     @Published var readingStatistics = [Double]()
     @Published var maxMinutes = 0
     @Published var avgMinutes = 0
-    @Published var listViewModel: ReadingPositionListViewModel? = nil
-    @Published var localActivities = [BookDeviceReadingPositionHistory]()
+    private(set) var listViewModel: ReadingPositionListViewModel?
     @Published var booksHistoryItems = [BookHistoryItem]()
     @Published var debugReadingPositions = [BookDeviceReadingPosition]()
     @Published private(set) var deviceSections = [ReadingHistoryDeviceSection]()
@@ -249,16 +205,9 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     @Published var alertItem: AlertItem?
     /// The position whose detail is pushed. Rows are buttons rather than NavigationLinks, so a row's
     /// Continue button is its own tap target instead of part of the link.
-    @Published var detailPosition: BookDeviceReadingPosition? = nil {
-        didSet {
-            if let detailPosition {
-                displayedDetailPosition = detailPosition
-            }
-        }
-    }
-    /// The pushed detail's position. Kept after it is dismissed, so the page doesn't go blank while
-    /// it slides out.
-    @Published private(set) var displayedDetailPosition: BookDeviceReadingPosition? = nil
+    @Published private(set) var isDetailActive = false
+    /// The destination stays intact while its pop animation finishes.
+    @Published private(set) var displayedDetail: ReadingPositionDetailViewModel?
 
     #if canImport(SwiftUICharts)
     @Published var barChartData: BarChartData?
@@ -271,7 +220,7 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     private let durationFormatter = DateComponentsFormatter()
     private let sessionDateFormatter = DateFormatter()
 
-    init(container: AppContainer = AppContainer.shared ?? AppContainer(mock: true), library: CalibreLibrary?, bookId: Int32?) {
+    init(container: AppContainer, library: CalibreLibrary?, bookId: Int32?) {
         self.container = container
         self.library = library
         self.bookId = bookId
@@ -297,9 +246,9 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     /// Reloads when a reader above this page records a position (it is hidden or deactivated), a
     /// reader closes, or books update (shelf refresh after a reader closes, a finished download).
     /// None of these make the page appear again, so `onAppear` alone leaves it stale.
-    @MainActor
-    func observeChanges() {
+    func start() {
         guard refreshTasks.isEmpty else { return }
+        loadData()
         let readerInfos = container.sessionManager.readerInfoSnapshots()
         let presentations = container.sessionManager.readerPresentationSnapshots()
         let updates = container.calibreUpdates()
@@ -325,6 +274,11 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         ]
     }
     
+    func stop() {
+        refreshTasks.forEach { $0.cancel() }
+        refreshTasks.removeAll()
+    }
+
     /// A single book's history; otherwise statistics across every book on the shelf.
     var isBookMode: Bool {
         library != nil && bookId != nil
@@ -364,26 +318,34 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         #endif
 
         if let library = library, let bookId = bookId {
-            localActivities = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
+            let identity = CalibreBook.identity(library: library, bookId: bookId)
+            let sessions = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId)
+            let activeBook = container.sessionManager.activeReaderPresentation?.book
+            let book = container.bookRepository.getBook(library: library, bookId: bookId)
+                ?? (activeBook?.inShelfId == identity ? activeBook : nil)
 
-            if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
-                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
-            } else if let book = container.sessionManager.activeReaderPresentation?.book,
-                      book.library.id == library.id, book.id == bookId {
-                // Only the book this history is about: Continue Reading opens listViewModel's book.
-                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
+            if let book, book.inShelfId == identity {
+                let positions = container.readingPositionRepository.getPositions(for: book)
+                if let listViewModel {
+                    listViewModel.book = book
+                    listViewModel.positions = positions
+                } else {
+                    listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: positions)
+                }
             } else {
                 listViewModel = nil
             }
 
             deviceSections = makeDeviceSections()
-            sessionRows = makeSessionRows()
+            sessionRows = makeSessionRows(sessions[identity] ?? [])
 
+            #if DEBUG
             let prefix = BookAnnotation.PrefId(library: library, id: bookId)
             self.debugReadingPositions = container.readingPositionRepository.debugPositions(
                 forBookId: prefix,
                 server: library.server
             )
+            #endif
         } else {
             let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in
                 let inShelfId = entry.key
@@ -420,24 +382,20 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     }
 
     func showDetail(for position: BookDeviceReadingPosition) {
-        detailPosition = position
+        guard let listViewModel else {
+            alertItem = AlertItem(id: "Book Not Found", msg: "This book is no longer in the library")
+            return
+        }
+        displayedDetail = ReadingPositionDetailViewModel(listModel: listViewModel, position: position)
+        isDetailActive = true
     }
 
     func dismissDetail() {
-        detailPosition = nil
+        isDetailActive = false
     }
 
-    func detailViewModel(
-        for position: BookDeviceReadingPosition,
-        listViewModel: ReadingPositionListViewModel,
-        targetWorkspaceID: UUID?
-    ) -> ReadingPositionDetailViewModel {
-        ReadingPositionDetailViewModel(
-            container: container,
-            listModel: listViewModel,
-            position: position,
-            targetWorkspaceID: targetWorkspaceID
-        )
+    func history(for book: CalibreBook) -> ReadingPositionHistoryViewModel {
+        ReadingPositionHistoryViewModel(container: container, library: book.library, bookId: book.id)
     }
 
     private func percentText(_ progress: Double) -> String {
@@ -479,8 +437,8 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         )
     }
 
-    private func makeSessionRows() -> [ReadingHistorySessionRow] {
-        localActivities.enumerated().compactMap { index, session in
+    private func makeSessionRows(_ sessions: [BookDeviceReadingPositionHistory]) -> [ReadingHistorySessionRow] {
+        sessions.enumerated().compactMap { index, session in
             guard let endPosition = session.endPosition else { return nil }
             let chapter = endPosition.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)
             let duration = endPosition.epoch - session.startDatetime.timeIntervalSince1970

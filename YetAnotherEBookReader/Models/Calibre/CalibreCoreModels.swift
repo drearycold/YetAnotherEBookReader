@@ -384,7 +384,7 @@ struct CalibreBook: Hashable {
         guard let keyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return nil
         }
-        return URL(string: "\(library.server.serverUrl)/get/\(id)/\(keyEncoded)")!
+        return URL(string: "\(library.server.serverUrl)/get/\(id)/\(keyEncoded)")
     }
     
     var inShelfId : String {

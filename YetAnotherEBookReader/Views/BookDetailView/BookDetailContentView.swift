@@ -2,27 +2,30 @@ import SwiftUI
 
 /// Composition only. The page owns observations, actions and modal/navigation state.
 struct BookDetailContentView: View {
-    let comments: String
-    let commentBaseURL: URL?
+    let description: BookDescriptionDocument
     let overview: BookOverviewView
     let progress: BookProgressSection
     let formats: BookFormatList
     let metadata: BookMetadataSection
     let connectivity: BookConnectivitySection
     let countPages: BookCountPagesCorner?
+    let scrollToDescription: () -> Void
 
     init(book: CalibreBook, overview: BookOverviewView, progress: BookProgressSection,
          formats: BookFormatList, metadata: BookMetadataSection,
-         connectivity: BookConnectivitySection, countPages: BookCountPagesCorner?) {
-        comments = book.comments
-        commentBaseURL = book.commentBaseURL
+         connectivity: BookConnectivitySection, countPages: BookCountPagesCorner?,
+         scrollToDescription: @escaping () -> Void = {}) {
+        description = BookDescriptionDocument(html: book.comments, baseURL: book.commentBaseURL)
         self.overview = overview
         self.progress = progress
         self.formats = formats
         self.metadata = metadata
         self.connectivity = connectivity
         self.countPages = countPages
+        self.scrollToDescription = scrollToDescription
     }
+
+    static let descriptionID = "book-detail.description"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -32,13 +35,9 @@ struct BookDetailContentView: View {
 
             overview
             BookDetailSection("Reading Progress") { progress }
-            if !comments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               comments != "Without Comments" {
-                BookDetailSection("Description") {
-                    // Content loading, expansion and height ownership are BD4 work.
-                    WebViewUI(content: comments, baseURL: commentBaseURL)
-                        .frame(height: 400)
-                }
+            if description.hasMarkup {
+                BookDescriptionSection(document: description, scrollToHeading: scrollToDescription)
+                    .id(Self.descriptionID)
             }
             BookDetailSection("Files and Formats") { formats }
             BookDetailSection("Book Information") { metadata }

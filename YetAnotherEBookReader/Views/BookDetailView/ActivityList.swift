@@ -8,45 +8,41 @@
 import SwiftUI
 
 struct ActivityList: View {
-    @ObservedObject var viewModel: ActivityListViewModel
+    @StateObject private var viewModel: ActivityListViewModel
+    let close: (() -> Void)?
 
-    @Binding var presenting: Bool
-
-    init(viewModel: ActivityListViewModel, presenting: Binding<Bool>) {
-        self.viewModel = viewModel
-        self._presenting = presenting
-    }
-
-    init(viewModel: ActivityListViewModel, presenting: Bool? = nil) {
-        self.viewModel = viewModel
-        self._presenting = Binding<Bool>(get: { presenting ?? false }, set: { _ in })
+    init(viewModel: @autoclosure @escaping () -> ActivityListViewModel, close: (() -> Void)? = nil) {
+        self._viewModel = StateObject(wrappedValue: viewModel())
+        self.close = close
     }
 
     var body: some View {
         List {
-            ForEach(viewModel.activities, id: \.self) { obj in
-                NavigationLink(destination: ActivityDetailView(obj: obj), label: {
-                    row(obj: obj)
-                })
+            if viewModel.activities.isEmpty {
+                Text("No activity in the last 7 days")
+                    .foregroundColor(.secondary)
+            }
+            ForEach(viewModel.activities) { entry in
+                NavigationLink {
+                    ActivityDetailView(obj: entry)
+                } label: {
+                    row(obj: entry)
+                }
             }
         }
-        .navigationTitle("Recent Activities")
+        .navigationTitle("Activity Logs")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction, content: {
-                if presenting {
-                    Button(action: {
-                        presenting = false
-                    }) {
-                        Image(systemName: "xmark")
-                    }
-                } else {
-                    EmptyView()
+            ToolbarItem(placement: .cancellationAction) {
+                if let close {
+                    Button("Close", action: close)
                 }
-            })
+            }
         }
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.stop() }
     }
-    
+
     @ViewBuilder
     private func row(obj: ActivityLogUIEntry) -> some View {
         VStack {
@@ -71,77 +67,49 @@ struct ActivityList: View {
 }
 
 struct ActivityDetailView: View {
-    var obj: ActivityLogUIEntry
+    let obj: ActivityLogUIEntry
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                if !obj.bookTitle.isEmpty {
-                    Text("Book Title:").frame(minWidth: 100, alignment: .leading)
-                    Text(obj.bookTitle)
-                } else {
-                    Text("Library Name:").frame(minWidth: 100, alignment: .leading)
-                    Text(obj.libraryName)
-                }
-                Spacer()
-            }.font(.title2)
-            HStack {
-                Text("Task:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.type).navigationTitle(obj.type)
-                Spacer()
-            }.font(.title3)
-            HStack {
-                Text("Start time:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.startDateLongString)
+        List {
+            Section("Activity") {
+                LabeledActivityValue(title: obj.bookTitle.isEmpty ? "Library" : "Book",
+                                     value: obj.bookTitle.isEmpty ? obj.libraryName : obj.bookTitle)
+                LabeledActivityValue(title: "Task", value: obj.type)
+                LabeledActivityValue(title: "Started", value: obj.startDateLongString)
+                LabeledActivityValue(title: "Finished", value: obj.finishDateLongString)
+                LabeledActivityValue(title: "Result", value: obj.errMsg)
             }
-            
-            HStack {
-                Text("Finish time:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.finishDateLongString)
+            Section("Request") {
+                LabeledActivityValue(title: "URL", value: obj.endpointURL)
+                LabeledActivityValue(title: "Method", value: obj.httpMethod)
+                LabeledActivityValue(title: "Body", value: obj.httpBodyString ?? "Empty")
             }
-            
-            HStack {
-                Text("Result:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.errMsg)
-            }
-            
-            Divider().padding(EdgeInsets(top: 16, leading: 0, bottom: 8, trailing: 0))
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("More Infos")
-                HStack {
-                    Text("URL:").frame(minWidth: 64, alignment: .leading)
-                    Text(obj.endpointURL)
-                }
-                HStack {
-                    Text("Method:").frame(minWidth: 64, alignment: .leading)
-                    Text(obj.httpMethod)
-                }
-                HStack(alignment: .top) {
-                    Text("Body:").frame(minWidth: 64, alignment: .leading)
-                    if let httpBodyString = obj.httpBodyString {
-                        Text(httpBodyString)
-                    } else {
-                        Text("(Empty Body)")
-                    }
-                }
-            }.font(.caption)
-            
-            Spacer()
         }
-        .padding()
+        .listStyle(.insetGrouped)
+        .navigationTitle("Activity Details")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LabeledActivityValue: View {
+    let title: LocalizedStringKey
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundColor(.secondary)
+            Text(value).textSelection(.enabled)
+        }
     }
 }
 
 struct ActivityList_Previews: PreviewProvider {
     static private var container = AppContainer(mock: true)
     
-    @State static private var presenting = false
     static var previews: some View {
         NavigationView {
             ActivityList(
-                viewModel: ActivityListViewModel(container: container),
-                presenting: $presenting
+                viewModel: ActivityListViewModel(repository: container.activityLogRepository)
             )
         }
         .navigationViewStyle(StackNavigationViewStyle())
