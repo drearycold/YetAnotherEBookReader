@@ -11,8 +11,7 @@ import os.log
 
 enum DatabaseSchema {
     // Independent of CFBundleVersion. Increment only for schema or data migrations.
-    // Start at 148 because build 148 already opened production Realms at this version.
-    static let version: UInt64 = 148
+    static let version: UInt64 = 149
 }
 
 class DatabaseService: ObservableObject {

@@ -298,18 +298,4 @@ final class CalibreDataSplitTests: XCTestCase {
         let empty: [Int] = []
         XCTAssertEqual(empty.chunks(size: 5), [])
     }
-
-    // MARK: - Activity class hierarchy
-
-    func testCalibreActivityStartFinishInheritType() {
-        let url = URL(string: "http://localhost/x")!
-        let request = URLRequest(url: url)
-        let start = CalibreActivityStart("fetch", request, startDatetime: Date(), bookId: 1, libraryId: "lib")
-        let finish = CalibreActivityFinish("fetch", request, startDatetime: Date(), finishDatetime: Date(), errMsg: "ok")
-
-        XCTAssertEqual(start.type, "fetch")
-        XCTAssertEqual(finish.type, "fetch")
-        XCTAssertTrue(start is CalibreActivity)
-        XCTAssertTrue(finish is CalibreActivity)
-    }
 }

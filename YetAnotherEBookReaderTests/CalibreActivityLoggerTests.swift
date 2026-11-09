@@ -7,7 +7,7 @@ import XCTest
 @testable import YetAnotherEBookReader
 
 final class CalibreActivityLoggerTests: XCTestCase {
-    func testLoggerBatchesStartAndFinishEventsAsValues() async throws {
+    func testLegacyAdapterBatchesRequestSnapshotsAndOriginalResult() async throws {
         let repository = MockActivityLogRepository()
         let logger = CalibreActivityLogger(
             repository: repository,
@@ -39,8 +39,8 @@ final class CalibreActivityLoggerTests: XCTestCase {
         XCTAssertTrue(repository.writeActivityLogEventsCalled)
         XCTAssertEqual(repository.writeActivityLogEventsParam.count, 2)
 
-        guard case .start(let startValue) = repository.writeActivityLogEventsParam[0],
-              case .finish(let finishValue) = repository.writeActivityLogEventsParam[1]
+        guard case .legacyStart(let startValue) = repository.writeActivityLogEventsParam[0],
+              case .legacyFinish(let finishValue) = repository.writeActivityLogEventsParam[1]
         else {
             XCTFail("Expected start and finish events")
             return
@@ -56,9 +56,35 @@ final class CalibreActivityLoggerTests: XCTestCase {
         XCTAssertTrue(startValue.request.headers.contains(ActivityLogHeader(key: "Content-Type", value: "application/json")))
 
         XCTAssertEqual(finishValue.type, "Sync")
+        XCTAssertEqual(finishValue.endpointURL, startValue.request.endpointURL)
         XCTAssertEqual(finishValue.startDatetime, startDate)
         XCTAssertEqual(finishValue.finishDatetime, finishDate)
         XCTAssertEqual(finishValue.errMsg, "Success")
+    }
+
+    func testTypedStartProgressAndFinishBatchUsesOneID() async {
+        let repository = MockActivityLogRepository()
+        let logger = CalibreActivityLogger(repository: repository, flushDelayNanoseconds: 60_000_000_000)
+        let id = ActivityID()
+        let startDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let request = URLRequest(url: URL(string: "http://calibre.local/ajax/books")!)
+        let start = ActivityLogStartValue(
+            id: id, kind: .batchMetadata, request: ActivityLogRequestSnapshot(request: request),
+            startDatetime: startDate, libraryId: "library", bookIds: [1, 2]
+        )
+        let pause = ActivityLogUpdate.progress(.paused, revision: 1)
+        let finish = ActivityLogUpdate.finish(
+            .failed,
+            at: startDate.addingTimeInterval(5),
+            result: ActivityLogResult(httpStatusCode: 503, errorCategory: .http, detail: "Unavailable")
+        )
+
+        await logger.start(start)
+        await logger.update(id: id, pause)
+        await logger.update(id: id, finish)
+        await logger.flushPendingActivitiesForTesting()
+
+        XCTAssertEqual(repository.writeActivityLogEventsParam, [.start(start), .update(id: id, pause), .update(id: id, finish)])
     }
 
     func testLoggerDelegatesDeleteAndClean() async throws {
@@ -66,11 +92,12 @@ final class CalibreActivityLoggerTests: XCTestCase {
         let logger = CalibreActivityLogger(repository: repository)
         let cutoff = Date(timeIntervalSince1970: 1_700_000_000)
 
-        await logger.removeCalibreActivity(id: "activity-id")
+        let id = ActivityID()
+        await logger.removeCalibreActivity(id: id)
         await logger.cleanCalibreActivities(startDatetime: cutoff)
 
         XCTAssertTrue(repository.removeCalibreActivityCalled)
-        XCTAssertEqual(repository.removeCalibreActivityIdParam, "activity-id")
+        XCTAssertEqual(repository.removeCalibreActivityIdParam, id)
         XCTAssertTrue(repository.cleanCalibreActivitiesCalled)
         XCTAssertEqual(repository.cleanCalibreActivitiesStartDatetimeParam, cutoff)
     }

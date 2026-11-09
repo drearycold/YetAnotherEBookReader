@@ -2,8 +2,6 @@
 //  CalibreActivityLogRealmMappers.swift
 //  YetAnotherEBookReader
 //
-//  Realm boundary for activity-log write values.
-//
 
 import Foundation
 import RealmSwift
@@ -11,36 +9,104 @@ import RealmSwift
 extension CalibreActivityLogEntry {
     convenience init(startValue: ActivityLogStartValue) {
         self.init()
-        apply(startValue)
+        id = startValue.id.rawValue
+        kind = startValue.kind.rawValue
+        status = ActivityLogProgress.running.rawValue
+        startDatetime = startValue.startDatetime
+        libraryId = startValue.libraryId
+        bookIds.append(objectsIn: startValue.bookIds.sorted())
+        storeRequest(startValue.request)
     }
 
-    func apply(_ value: ActivityLogStartValue) {
-        type = value.type
-        startDatetime = value.startDatetime
-        bookId = value.bookId ?? 0
-        libraryId = value.libraryId
+    private var activityState: ActivityLogState {
+        if let progress = ActivityLogProgress(rawValue: status) {
+            return .inProgress(progress)
+        }
+        if let completion = ActivityLogCompletion(rawValue: status) {
+            return .finished(completion)
+        }
+        return .legacy
+    }
 
-        endpoingURL = value.request.endpointURL
-        httpMethod = value.request.httpMethod
-        httpBody = value.request.httpBody
-        requestHeaders.removeAll()
-        value.request.headers.forEach {
-            requestHeaders.append($0.key)
-            requestHeaders.append($0.value)
+    func apply(_ update: ActivityLogUpdate) {
+        // Terminal and legacy records are immutable through the typed API.
+        guard case .inProgress = activityState else { return }
+        switch update {
+        case let .progress(progress, revision):
+            guard revision > progressRevision else { return }
+            progressRevision = revision
+            status = progress.rawValue
+        case let .finish(completion, date, result):
+            status = completion.rawValue
+            finishDatetime = date
+            httpStatusCode = result.httpStatusCode
+            errorCategory = result.errorCategory?.rawValue
+            resultDetail = result.detail
         }
     }
 
-    func apply(_ value: ActivityLogFinishValue) {
+    func toSnapshot(libraryName: String?, bookTitle: String?) -> ActivityLogSnapshot {
+        let headers = stride(from: 0, to: requestHeaders.count - 1, by: 2).map { index in
+            ActivityLogHeader(key: requestHeaders[index], value: requestHeaders[index + 1])
+        }
+        return ActivityLogSnapshot(
+            id: ActivityID(rawValue: id),
+            kind: kind.flatMap(ActivityLogKind.init(rawValue:)),
+            state: activityState,
+            startDatetime: startDatetime,
+            finishDatetime: finishDatetime,
+            result: ActivityLogResult(
+                httpStatusCode: httpStatusCode,
+                errorCategory: errorCategory.flatMap(ActivityLogErrorCategory.init(rawValue:)),
+                detail: resultDetail
+            ),
+            request: ActivityLogRequestSnapshot(
+                endpointURL: endpoingURL,
+                httpMethod: httpMethod,
+                httpBody: httpBody,
+                headers: headers
+            ),
+            libraryId: libraryId,
+            bookIds: Set(bookIds),
+            libraryName: libraryName,
+            bookTitle: bookTitle,
+            legacyType: type,
+            legacyResult: errMsg
+        )
+    }
+
+    private func storeRequest(_ request: ActivityLogRequestSnapshot) {
+        endpoingURL = request.endpointURL
+        httpMethod = request.httpMethod
+        httpBody = request.httpBody
+        requestHeaders.append(objectsIn: request.headers.flatMap { [$0.key, $0.value] })
+    }
+
+    // AL4 removes this write adapter, while keeping legacy snapshot reads.
+    convenience init(legacyStart value: ActivityLogLegacyStartValue) {
+        self.init()
+        type = value.type
+        startDatetime = value.startDatetime
+        libraryId = value.libraryId
+        if let bookId = value.bookId, bookId != 0 {
+            bookIds.append(bookId)
+        }
+        storeRequest(value.request)
+    }
+
+    func apply(_ value: ActivityLogLegacyFinishValue) {
         finishDatetime = value.finishDatetime
         errMsg = value.errMsg
     }
 
-    static func predicate(matching value: ActivityLogFinishValue) -> NSPredicate {
-        NSPredicate(
-            format: "type = %@ AND startDatetime = %@ AND endpoingURL = %@",
+    static func legacyPredicate(matching value: ActivityLogLegacyFinishValue) -> NSPredicate {
+        let endpoint: NSObject = value.endpointURL.map { $0 as NSObject } ?? NSNull()
+        return NSPredicate(
+            format: "status == %@ AND type == %@ AND startDatetime == %@ AND endpoingURL == %@",
+            "legacy",
             value.type,
             value.startDatetime as NSDate,
-            value.request.endpointURL ?? ""
+            endpoint
         )
     }
 }

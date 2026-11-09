@@ -4,6 +4,45 @@ Archived records for Realm boundary shrinkage, repository ownership, mapper extr
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Activity Log AL1 (2026-11-09)
+
+The logger accepts Sendable start and update values with the same
+`ActivityID`, backed by the existing UUID string primary key. The first
+start owns the ID. Updates for unknown IDs are discarded. Progress revisions
+must increase from the initial revision of zero, so a replayed pause can't
+undo a resume. The first terminal update wins from either running or paused
+and sets the finish date. A terminal update carries optional HTTP status,
+error category, and detail as separate values. The logger submits batches
+in order even if a second flush arrives during an earlier write.
+
+Schema 149 keeps legacy IDs, timestamps, type, result text, URL, method,
+body, and headers. The migration marks those rows legacy and moves nonzero
+`bookId` values to `bookIds`. A book query matches both its library ID and
+membership in the list. The repository observes on the main actor and
+returns snapshots with raw dates. Writes open their own Realm on the
+repository's serial queue. The views format dates and show the legacy label
+with the original result in Activity Details. The seven-day views still
+observe only while visible. Book Detail's sheet retains its independent
+reader-open dismissal subscription.
+
+Current network and download callers write through the string adapter.
+Its composite match is restricted to legacy rows. AL2 should submit typed
+service completions at the parse and validation boundary. AL3 should reuse
+each download UUID, order progress revisions, reject stale callbacks, and
+handle background flush and interrupted attempts. AL4 can remove the
+string write adapter and keep the legacy read mapping for saved logs.
+
+Verification passed on iPhone 17 / iOS 26.5 with 175 focused tests and on
+iPhone 7 / iOS 15.5 with 21 focused tests. Both include file-backed fixtures
+with the actual 147/148 Activity Log table shape and a saved Folio profile,
+plus repository updates, scopes, observation visibility, and reader-open
+sheet dismissal. The larger run includes Book Detail, network service,
+download, and server-scoped Realm tests. The final Catalyst build and
+Swift parse, project plist, Realm boundary, and diff checks passed.
+Logs and result bundles are under `/tmp/YabrAL1`. Verification covers
+simulator tests and builds. The full suite, real Calibre, and native UI
+interaction were outside this run.
+
 ## Recent Changes & Decisions
 
 - **Models Final Boundary Sweep (2026-07-04, complete):** Completed the final planned `Models/` pass after Realm boundary convergence. Removed the remaining composition-root reverse dependency from Calibre value models by replacing `CalibreLibrary.plugin*WithDefault` and `CalibreBook` Goodreads display computed properties with pure configuration-driven helpers in `CalibreLibraryPluginPreferences`; Book Detail, dictionary viewer, and Goodreads auto-sync call sites now pass DSReader Helper configuration from their owning container/manager/view model. Moved the metadata Realm write queue from `AppContainer.SaveBooksMetadataRealmQueue` to `DatabaseService.metadataWriteQueue`, preserving the `saveBooksMetadata` label and QoS while removing manager/persistence dependency on an AppContainer static. Narrowed `AppContainerProtocol.searchCacheRepository` from concrete `RealmSearchCacheStore` to `SearchCacheRepository`, while keeping the concrete store internal to AppContainer and still using it for category cache. Replaced remaining production-path `print(...)` calls in Models with `OSLog`, removed unused SwiftUI imports from managers, and left `AppContainer.shared` only inside `AppContainer.swift` where the composition root owns the environment fallback. Validation: static scans passed for no `AppContainer.shared` outside `Models/App/AppContainer.swift`, no `SaveBooksMetadataRealmQueue`, no concrete `var searchCacheRepository: RealmSearchCacheStore`, no `print(...)` in Models, and no RealmSwift imports in Domain/Managers; focused `CalibreBookManagerTests`, `BookDetailViewModelTests`, `DatabaseBootstrapperTests`, `UnifiedSearchServiceTests`, `UnifiedSearchIntegrationTests`, `UnifiedCategoryServiceTests`, and `V2MigrationDependencyTests` passed; standard iOS Simulator build passed; `git diff --check` passed.

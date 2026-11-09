@@ -51,30 +51,75 @@ final class DatabaseBootstrapperTests: XCTestCase {
         XCTAssertEqual(databaseService.realmConf?.schemaVersion, DatabaseSchema.version)
     }
 
-    /// Both the last schema change (147) and the build-only bump (148) must reopen
-    /// with their data intact after schema versioning is separated from app builds.
-    func testProductionConfigurationPreservesExistingDatabases() throws {
+    /// Schemas 147 and 148 share the same Activity Log layout.
+    func testProductionMigrationPreservesLegacyActivityAndOtherData() throws {
         let previousConfiguration = Realm.Configuration.defaultConfiguration
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DatabaseSchema-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer {
+            databaseService.reset(clearConfiguration: true)
             Realm.Configuration.defaultConfiguration = previousConfiguration
             try? FileManager.default.removeItem(at: directory)
         }
 
+        let startDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let finishDate = startDate.addingTimeInterval(5)
+        let request = ActivityLogRequestSnapshot(
+            endpointURL: "http://calibre.local/ajax/books",
+            httpMethod: "POST",
+            httpBody: Data("payload".utf8),
+            headers: [
+                ActivityLogHeader(key: "X-Request", value: "request-id"),
+                ActivityLogHeader(key: "Content-Type", value: "application/json")
+            ]
+        )
+        let historicalID = ActivityID()
+        let unfinishedID = ActivityID()
         for oldVersion: UInt64 in [147, 148] {
             let realmURL = directory.appendingPathComponent("\(oldVersion).realm")
-            let oldConfiguration = Realm.Configuration(fileURL: realmURL, schemaVersion: oldVersion)
+            let oldConfiguration = Realm.Configuration(
+                fileURL: realmURL,
+                schemaVersion: oldVersion,
+                objectTypes: [CalibreActivityLogEntryAtSchema148.self, FolioReaderPreferenceRealm.self]
+            )
             try autoreleasepool {
                 let realm = try Realm(configuration: oldConfiguration)
+                // The Swift schema uses the fixture class name. _realmObjectName aliases the on-disk table.
+                let schema = try XCTUnwrap(realm.schema[CalibreActivityLogEntryAtSchema148.className()])
+                XCTAssertNotNil(schema["bookId"])
+                XCTAssertNil(schema["bookIds"])
+                XCTAssertNil(schema["status"])
+
                 try realm.write {
+                    let activity = CalibreActivityLogEntryAtSchema148()
+                    activity.id = historicalID.rawValue
+                    activity.type = "Get Book Metadata"
+                    activity.startDatetime = startDate
+                    activity.finishDatetime = finishDate
+                    activity.bookId = 42
+                    activity.libraryId = "library-A"
+                    activity.endpoingURL = request.endpointURL
+                    activity.httpMethod = request.httpMethod
+                    activity.httpBody = request.httpBody
+                    activity.requestHeaders.append(objectsIn: request.headers.flatMap { [$0.key, $0.value] })
+                    activity.errMsg = "Success"
+                    realm.add(activity)
+
+                    let unfinished = CalibreActivityLogEntryAtSchema148()
+                    unfinished.id = unfinishedID.rawValue
+                    unfinished.type = "Library Summary"
+                    unfinished.libraryId = "library-A"
+                    unfinished.startDatetime = startDate
+                    realm.add(unfinished)
+
                     let profile = FolioReaderPreferenceRealm()
                     profile.id = "Saved Profile"
                     profile.currentFont = "Avenir"
                     realm.add(profile)
                 }
             }
+            XCTAssertEqual(try schemaVersionAtURL(realmURL), oldVersion)
 
             try autoreleasepool {
                 try databaseService.prepareProductionConfiguration(fileURL: realmURL) { _ in }
@@ -82,9 +127,35 @@ final class DatabaseBootstrapperTests: XCTestCase {
                 XCTAssertEqual(configuration.schemaVersion, DatabaseSchema.version)
                 XCTAssertEqual(Realm.Configuration.defaultConfiguration.schemaVersion, DatabaseSchema.version)
                 XCTAssertEqual(try schemaVersionAtURL(realmURL), DatabaseSchema.version)
-                let realm = try Realm(configuration: configuration)
+                try databaseService.openMainRealm(conf: configuration)
+                let realm = try XCTUnwrap(databaseService.realm)
                 let profile = try XCTUnwrap(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Saved Profile"))
                 XCTAssertEqual(profile.currentFont, "Avenir")
+
+                let repository = RealmActivityLogRepository(
+                    databaseService: databaseService, bookRepository: MockBookRepository(), container: nil
+                )
+                let bookEntries = repository.fetchEntries(libraryId: "library-A", bookId: 42, since: startDate)
+                XCTAssertEqual(bookEntries.map(\.id), [historicalID])
+                let legacy = try XCTUnwrap(bookEntries.first)
+                XCTAssertEqual(legacy.startDatetime, startDate)
+                XCTAssertEqual(legacy.finishDatetime, finishDate)
+                XCTAssertEqual(legacy.bookIds, [42])
+                XCTAssertEqual(legacy.request, request)
+                XCTAssertEqual(legacy.legacyType, "Get Book Metadata")
+                XCTAssertEqual(legacy.legacyResult, "Success")
+                XCTAssertNil(legacy.kind)
+                XCTAssertEqual(legacy.result, ActivityLogResult())
+                XCTAssertEqual(legacy.state, .legacy)
+                XCTAssertEqual(legacy.statusText, String(localized: "Legacy Entry"))
+
+                let libraryEntries = repository.fetchEntries(libraryId: "library-A", bookId: nil, since: startDate)
+                XCTAssertEqual(Set(libraryEntries.map(\.id)), [historicalID, unfinishedID])
+                let unfinished = try XCTUnwrap(libraryEntries.first { $0.id == unfinishedID })
+                XCTAssertEqual(unfinished.state, .legacy)
+                XCTAssertTrue(unfinished.bookIds.isEmpty)
+                XCTAssertNil(unfinished.legacyResult)
+                XCTAssertNil(unfinished.finishDatetime)
             }
         }
     }
@@ -269,4 +340,22 @@ final class DatabaseBootstrapperTests: XCTestCase {
         XCTAssertEqual(try migrated(["Default": 1]), ["Default": 1], "A paged default is a choice")
         XCTAssertEqual(try migrated(["Default": 0]), ["Default": 0], "So is vertical")
     }
+}
+
+/// The actual Activity Log table layout before AL1. Only this fixture opens it.
+private final class CalibreActivityLogEntryAtSchema148: Object {
+    override class func _realmIgnoreClass() -> Bool { true }
+    override class func _realmObjectName() -> String { "CalibreActivityLogEntry" }
+
+    @Persisted(primaryKey: true) var id = UUID().uuidString
+    @Persisted var type: String?
+    @Persisted var startDatetime = Date.distantPast
+    @Persisted var finishDatetime: Date?
+    @Persisted var bookId: Int32 = 0
+    @Persisted var libraryId: String?
+    @Persisted var endpoingURL: String?
+    @Persisted var httpMethod: String?
+    @Persisted var httpBody: Data?
+    @Persisted var requestHeaders: List<String>
+    @Persisted var errMsg: String?
 }

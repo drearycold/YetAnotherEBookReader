@@ -76,6 +76,16 @@ final class DatabaseMigrator {
                     // category by. It's empty until the next library sync, and a filter falls back
                     // to the category's name, lowercased, as before.
                 }
+                if oldSchemaVersion < 149 {
+                    migration.enumerateObjects(ofType: CalibreActivityLogEntry.className()) { oldObject, newObject in
+                        newObject?["status"] = "legacy"
+                        // Zero was the sentinel for no associated book.
+                        if let oldObject, oldObject.objectSchema["bookId"] != nil,
+                           let bookId = oldObject["bookId"] as? Int32, bookId != 0 {
+                            newObject?["bookIds"] = [bookId]
+                        }
+                    }
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

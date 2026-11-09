@@ -5,6 +5,7 @@ actor CalibreActivityLogger {
     private let flushDelayNanoseconds: UInt64
     private var pendingEvents: [ActivityLogWriteEvent] = []
     private var flushTask: Task<Void, Never>?
+    private var latestWrite: Task<Void, Never>?
 
     init(
         repository: ActivityLogRepositoryProtocol,
@@ -14,53 +15,24 @@ actor CalibreActivityLogger {
         self.flushDelayNanoseconds = flushDelayNanoseconds
     }
 
-    func logStartCalibreActivity(
-        type: String,
-        request: URLRequest,
-        startDatetime: Date,
-        bookId: Int32?,
-        libraryId: String?
-    ) {
-        pendingEvents.append(
-            .start(
-                ActivityLogStartValue(
-                    type: type,
-                    request: ActivityLogRequestSnapshot(request: request),
-                    startDatetime: startDatetime,
-                    bookId: bookId,
-                    libraryId: libraryId
-                )
-            )
-        )
-        scheduleFlush()
+    func start(_ activity: ActivityLogStartValue) {
+        enqueue(.start(activity))
     }
 
-    func logFinishCalibreActivity(
-        type: String,
-        request: URLRequest,
-        startDatetime: Date,
-        finishDatetime: Date,
-        errMsg: String
-    ) {
-        pendingEvents.append(
-            .finish(
-                ActivityLogFinishValue(
-                    type: type,
-                    request: ActivityLogRequestSnapshot(request: request),
-                    startDatetime: startDatetime,
-                    finishDatetime: finishDatetime,
-                    errMsg: errMsg
-                )
-            )
-        )
-        scheduleFlush()
+    func update(id: ActivityID, _ update: ActivityLogUpdate) {
+        enqueue(.update(id: id, update))
     }
 
-    private func scheduleFlush() {
+    private func enqueue(_ event: ActivityLogWriteEvent) {
+        pendingEvents.append(event)
         guard flushTask == nil else { return }
 
         flushTask = Task { [flushDelayNanoseconds] in
-            try? await Task.sleep(nanoseconds: flushDelayNanoseconds)
+            do {
+                try await Task.sleep(nanoseconds: flushDelayNanoseconds)
+            } catch {
+                return
+            }
             await self.finishScheduledFlush()
         }
     }
@@ -71,12 +43,19 @@ actor CalibreActivityLogger {
     }
 
     private func flush() async {
-        let events = pendingEvents
-        pendingEvents.removeAll()
+        if !pendingEvents.isEmpty {
+            let events = pendingEvents
+            pendingEvents.removeAll()
 
-        guard !events.isEmpty else { return }
-
-        await repository.writeActivityLogEvents(events)
+            // Actor reentrancy can allow another flush before this write returns.
+            // Submit batches in order so an update can't reach Realm ahead of its start.
+            let previousWrite = latestWrite
+            latestWrite = Task { [repository] in
+                await previousWrite?.value
+                await repository.writeActivityLogEvents(events)
+            }
+        }
+        await latestWrite?.value
     }
 
     func flushPendingActivitiesForTesting() async {
@@ -85,11 +64,47 @@ actor CalibreActivityLogger {
         await flush()
     }
 
-    func removeCalibreActivity(id: String) async {
+    func removeCalibreActivity(id: ActivityID) async {
         await repository.removeCalibreActivity(id: id)
     }
 
     func cleanCalibreActivities(startDatetime: Date) async {
         await repository.cleanCalibreActivities(startDatetime: startDatetime)
+    }
+}
+
+// Temporary write adapter for the current service and download callers.
+// Remove in AL4 after AL2 and AL3 switch to start/update.
+extension CalibreActivityLogger {
+    func logStartCalibreActivity(
+        type: String,
+        request: URLRequest,
+        startDatetime: Date,
+        bookId: Int32?,
+        libraryId: String?
+    ) {
+        enqueue(.legacyStart(ActivityLogLegacyStartValue(
+            type: type,
+            request: ActivityLogRequestSnapshot(request: request),
+            startDatetime: startDatetime,
+            bookId: bookId,
+            libraryId: libraryId
+        )))
+    }
+
+    func logFinishCalibreActivity(
+        type: String,
+        request: URLRequest,
+        startDatetime: Date,
+        finishDatetime: Date,
+        errMsg: String
+    ) {
+        enqueue(.legacyFinish(ActivityLogLegacyFinishValue(
+            type: type,
+            endpointURL: request.url?.absoluteString,
+            startDatetime: startDatetime,
+            finishDatetime: finishDatetime,
+            errMsg: errMsg
+        )))
     }
 }

@@ -1922,19 +1922,20 @@ class ReadingPositionViewModelTests: XCTestCase {
 class ActivityListViewModelTests: XCTestCase {
     func testActivityObservationFollowsVisibility() async throws {
         let repository = MockActivityLogRepository()
-        let initialEntry = ActivityLogUIEntry(
-            id: "1",
+        let initialEntry = ActivityLogSnapshot(
+            id: ActivityID(),
+            kind: .bookMetadata,
+            state: .inProgress(.running),
+            startDatetime: Date(timeIntervalSince1970: 1_700_000_000),
+            finishDatetime: nil,
+            result: ActivityLogResult(),
+            request: ActivityLogRequestSnapshot(endpointURL: "http://localhost", httpMethod: "GET", httpBody: nil, headers: []),
+            libraryId: "library-id",
+            bookIds: [7],
             libraryName: "Library",
             bookTitle: "Book",
-            type: "Sync",
-            errMsg: "",
-            startDateString: "start",
-            finishDateString: "finish",
-            startDateLongString: "start long",
-            finishDateLongString: "finish long",
-            endpointURL: "http://localhost",
-            httpMethod: "GET",
-            httpBodyString: nil
+            legacyType: nil,
+            legacyResult: nil
         )
         repository.fetchEntriesReturn = [initialEntry]
 
@@ -1963,19 +1964,20 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(repository.observeEntriesBookIdParam, 7)
         XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
 
-        let updatedEntry = ActivityLogUIEntry(
-            id: "2",
-            libraryName: "Library 2",
-            bookTitle: "Book 2",
-            type: "Error",
-            errMsg: "boom",
-            startDateString: "s2",
-            finishDateString: "f2",
-            startDateLongString: "sl2",
-            finishDateLongString: "fl2",
-            endpointURL: "http://localhost/2",
-            httpMethod: "POST",
-            httpBodyString: "{}"
+        let updatedEntry = ActivityLogSnapshot(
+            id: initialEntry.id,
+            kind: initialEntry.kind,
+            state: .finished(.failed),
+            startDatetime: initialEntry.startDatetime,
+            finishDatetime: initialEntry.startDatetime.addingTimeInterval(5),
+            result: ActivityLogResult(httpStatusCode: 503, errorCategory: .http, detail: "Unavailable"),
+            request: initialEntry.request,
+            libraryId: initialEntry.libraryId,
+            bookIds: initialEntry.bookIds,
+            libraryName: initialEntry.libraryName,
+            bookTitle: initialEntry.bookTitle,
+            legacyType: nil,
+            legacyResult: nil
         )
         repository.sendObservedEntries([updatedEntry])
         // The update is applied on the main actor, which the starting test host can hold for over
