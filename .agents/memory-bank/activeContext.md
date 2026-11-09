@@ -5,6 +5,15 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Activity Log AL1 (2026-11-09)
+
+`codex/activity-log-al1` starts at main `850e5ac4` and migrates the main
+Realm to schema 149. AL2 can use `CalibreActivityLogger.start` and
+`update(id:_:)` with a stable `ActivityID`. Associate batch metadata with
+its library and all requested book IDs. Report completion after response
+validation and parsing. See [Realm Boundary Convergence](history/realm-boundary-convergence.md#activity-log-al1-2026-11-09)
+for the event contract, legacy adapter boundary, and verification.
+
 ## App Marketing Version 0.3 (2026-11-08)
 
 `codex/bump-app-version-0-3` starts at main `6b798872` after BD4 #139.

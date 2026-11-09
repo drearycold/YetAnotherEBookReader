@@ -582,13 +582,13 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var fetchEntriesLibraryIdParam: String?
     var fetchEntriesBookIdParam: Int32?
     var fetchEntriesSinceParam: Date?
-    var fetchEntriesReturn: [ActivityLogUIEntry] = []
+    var fetchEntriesReturn: [ActivityLogSnapshot] = []
 
     var observeEntriesCalled = false
     var observeEntriesLibraryIdParam: String?
     var observeEntriesBookIdParam: Int32?
     var observeEntriesSinceParam: Date?
-    private let observeEntriesBroadcaster = TestAsyncStreamBroadcaster<[ActivityLogUIEntry]>()
+    private let observeEntriesBroadcaster = TestAsyncStreamBroadcaster<[ActivityLogSnapshot]>()
     var observeEntriesSubscriberCount: Int {
         observeEntriesBroadcaster.subscriberCount
     }
@@ -597,12 +597,12 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var writeActivityLogEventsParam: [ActivityLogWriteEvent] = []
 
     var removeCalibreActivityCalled = false
-    var removeCalibreActivityIdParam: String?
+    var removeCalibreActivityIdParam: ActivityID?
 
     var cleanCalibreActivitiesCalled = false
     var cleanCalibreActivitiesStartDatetimeParam: Date?
 
-    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
+    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot] {
         fetchEntriesCalled = true
         fetchEntriesLibraryIdParam = libraryId
         fetchEntriesBookIdParam = bookId
@@ -610,7 +610,7 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         return fetchEntriesReturn
     }
 
-    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogUIEntry]> {
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogSnapshot]> {
         observeEntriesCalled = true
         observeEntriesLibraryIdParam = libraryId
         observeEntriesBookIdParam = bookId
@@ -618,7 +618,7 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         return observeEntriesBroadcaster.stream(initialValue: fetchEntriesReturn)
     }
 
-    func sendObservedEntries(_ entries: [ActivityLogUIEntry]) {
+    func sendObservedEntries(_ entries: [ActivityLogSnapshot]) {
         observeEntriesBroadcaster.send(entries)
     }
 
@@ -627,7 +627,7 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         writeActivityLogEventsParam = events
     }
 
-    func removeCalibreActivity(id: String) async {
+    func removeCalibreActivity(id: ActivityID) async {
         removeCalibreActivityCalled = true
         removeCalibreActivityIdParam = id
     }

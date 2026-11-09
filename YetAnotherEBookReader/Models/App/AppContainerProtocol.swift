@@ -125,6 +125,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     func updateCustomDictViewer(enabled: Bool, value: String?) -> URL?
 
     func cleanCalibreActivities(startDatetime: Date)
+    // AL4 removes these wrappers after the service and download callers adopt ActivityID.
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?)
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String)
 

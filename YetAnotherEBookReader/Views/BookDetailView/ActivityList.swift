@@ -24,9 +24,9 @@ struct ActivityList: View {
             }
             ForEach(viewModel.activities) { entry in
                 NavigationLink {
-                    ActivityDetailView(obj: entry)
+                    ActivityDetailView(entry: entry)
                 } label: {
-                    row(obj: entry)
+                    row(entry)
                 }
             }
         }
@@ -43,51 +43,123 @@ struct ActivityList: View {
         .onDisappear { viewModel.stop() }
     }
 
-    @ViewBuilder
-    private func row(obj: ActivityLogUIEntry) -> some View {
+    private func row(_ entry: ActivityLogSnapshot) -> some View {
         VStack {
             HStack {
-                Text(obj.bookTitle.isEmpty ? obj.libraryName : obj.bookTitle)
+                Text(entry.entityText)
                 Spacer()
             }
             HStack {
-                Text(obj.type)
+                Text(entry.kindText)
                 Spacer()
-                Text(obj.errMsg)
+                Text(entry.statusText)
             }.font(.caption)
             HStack {
-                Text(obj.startDateString)
+                Text(entry.startDatetime.formatted(date: .numeric, time: .standard))
                 Spacer()
-                Text("->")
-                Spacer()
-                Text(obj.finishDateString)
+                if let finished = entry.finishDatetime {
+                    Text("->")
+                    Spacer()
+                    Text(finished.formatted(date: .numeric, time: .standard))
+                }
             }.font(.caption)
         }
     }
 }
 
 struct ActivityDetailView: View {
-    let obj: ActivityLogUIEntry
-    
+    let entry: ActivityLogSnapshot
+
     var body: some View {
         List {
             Section("Activity") {
-                LabeledActivityValue(title: obj.bookTitle.isEmpty ? "Library" : "Book",
-                                     value: obj.bookTitle.isEmpty ? obj.libraryName : obj.bookTitle)
-                LabeledActivityValue(title: "Task", value: obj.type)
-                LabeledActivityValue(title: "Started", value: obj.startDateLongString)
-                LabeledActivityValue(title: "Finished", value: obj.finishDateLongString)
-                LabeledActivityValue(title: "Result", value: obj.errMsg)
+                LabeledActivityValue(title: entry.entityTitle, value: entry.entityText)
+                LabeledActivityValue(title: "Task", value: entry.kindText)
+                LabeledActivityValue(title: "Status", value: entry.statusText)
+                LabeledActivityValue(title: "Started", value: entry.startDatetime.formatted(date: .long, time: .complete))
+                if let finished = entry.finishDatetime {
+                    LabeledActivityValue(title: "Finished", value: finished.formatted(date: .long, time: .complete))
+                }
+                if let code = entry.result.httpStatusCode {
+                    LabeledActivityValue(title: "HTTP Status", value: String(code))
+                }
+                if let category = entry.result.errorCategory {
+                    LabeledActivityValue(title: "Error Category", value: category.displayText)
+                }
+                if let detail = entry.legacyResult ?? entry.result.detail {
+                    LabeledActivityValue(title: "Result", value: detail)
+                }
             }
             Section("Request") {
-                LabeledActivityValue(title: "URL", value: obj.endpointURL)
-                LabeledActivityValue(title: "Method", value: obj.httpMethod)
-                LabeledActivityValue(title: "Body", value: obj.httpBodyString ?? "Empty")
+                LabeledActivityValue(title: "URL", value: entry.request.endpointURL ?? String(localized: "Unknown"))
+                LabeledActivityValue(title: "Method", value: entry.request.httpMethod ?? "GET")
+                LabeledActivityValue(
+                    title: "Body",
+                    value: entry.request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? String(localized: "Empty")
+                )
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Activity Details")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+extension ActivityLogSnapshot {
+    fileprivate var entityTitle: LocalizedStringKey {
+        bookTitle?.isEmpty == false ? "Book" : "Library"
+    }
+
+    fileprivate var entityText: String {
+        if let bookTitle, !bookTitle.isEmpty {
+            return bookTitle
+        }
+        return libraryName ?? String(localized: "No Entity")
+    }
+
+    fileprivate var kindText: String {
+        switch kind {
+        case .bookMetadata: return String(localized: "Get Book Metadata")
+        case .batchMetadata: return String(localized: "Get Books Metadata")
+        case .bookManifest: return String(localized: "Get Book Manifest")
+        case .updateMetadata: return String(localized: "Set Book Metadata")
+        case .librarySummary: return String(localized: "Library Summary")
+        case .search: return String(localized: "Search")
+        case .categories: return String(localized: "Categories")
+        case .probe: return String(localized: "Server Probe")
+        case .readingPosition: return String(localized: "Reading Position")
+        case .annotations: return String(localized: "Annotations")
+        case .helper: return String(localized: "DSReader Helper")
+        case .download: return String(localized: "Download")
+        case nil: return legacyType ?? String(localized: "Unknown Type")
+        }
+    }
+
+    var statusText: String {
+        switch state {
+        case .inProgress(.running): return String(localized: "Running")
+        case .inProgress(.paused): return String(localized: "Paused")
+        case .finished(.succeeded): return String(localized: "Succeeded")
+        case .finished(.failed): return String(localized: "Failed")
+        case .finished(.cancelled): return String(localized: "Cancelled")
+        case .finished(.interrupted): return String(localized: "Interrupted")
+        case .legacy: return String(localized: "Legacy Entry")
+        }
+    }
+}
+
+private extension ActivityLogErrorCategory {
+    var displayText: String {
+        switch self {
+        case .invalidRequest: return String(localized: "Invalid Request")
+        case .transport: return String(localized: "Transport")
+        case .http: return "HTTP"
+        case .authentication: return String(localized: "Authentication")
+        case .decoding: return String(localized: "Decoding")
+        case .serverRejected: return String(localized: "Server Rejected Request")
+        case .file: return String(localized: "File")
+        case .unknown: return String(localized: "Unknown")
+        }
     }
 }
 

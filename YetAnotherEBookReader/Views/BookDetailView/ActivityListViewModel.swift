@@ -11,7 +11,7 @@ import SwiftUI
 @MainActor
 final class ActivityListViewModel: ObservableObject, Identifiable {
     let id = UUID()
-    @Published private(set) var activities: [ActivityLogUIEntry] = []
+    @Published private(set) var activities: [ActivityLogSnapshot] = []
     
     private var activitiesTask: Task<Void, Never>?
     private let libraryId: String?
