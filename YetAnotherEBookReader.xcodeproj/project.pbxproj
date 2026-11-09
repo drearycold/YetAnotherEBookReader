@@ -2449,7 +2449,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.9;
+				MARKETING_VERSION = 0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",
@@ -2534,7 +2534,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.9;
+				MARKETING_VERSION = 0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",
@@ -2699,7 +2699,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.9;
+				MARKETING_VERSION = 0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",
@@ -2781,7 +2781,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.9;
+				MARKETING_VERSION = 0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",

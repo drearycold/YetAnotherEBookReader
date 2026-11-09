@@ -5,6 +5,16 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## App Marketing Version 0.3 (2026-11-08)
+
+`codex/bump-app-version-0-3` starts at main `6b798872` after BD4 #139.
+The iOS and Catalyst Debug/Release app configurations now use marketing
+version **0.3**. Both Info.plist files derive CFBundleShortVersionString from
+MARKETING_VERSION. Xcode continues to manage distributed build numbers.
+Validation passed: project and plist syntax, all four app configuration values,
+plist version bindings, and `git diff --check`. No build or test run for this
+configuration-only change.
+
 ## Book Detail Modernization BD4 (2026-11-08)
 
 `codex/book-detail-bd4` starts at `ea391b50` on main. BD3 PR #138 merged
