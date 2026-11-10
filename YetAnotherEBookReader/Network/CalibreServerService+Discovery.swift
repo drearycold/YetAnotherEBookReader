@@ -52,38 +52,37 @@ extension CalibreServerService {
         var url = resultInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
 
-        let delegate = CalibreServerProbeTaskDelegate(resultInfo.server)
-        do {
-            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
-            let (data, response) = try await withURLSession(server: resultInfo.server, timeout: 10) {
-                try await $0.data(for: request, delegate: delegate)
-            }
-            resultInfo.httpStatusCode = (response as? HTTPURLResponse)?.statusCode
-            _ = try validateHTTPResponse(data: data, response: response)
-            let libraryInfo = try decodePayload(CalibreServerLibraryInfo.self, from: data)
-            guard let defaultLibrary = libraryInfo.defaultLibrary,
-                  libraryInfo.libraryMap.count > 0 else {
-                resultInfo.errorMsg = "Server has no library"
-                resultInfo.error = .unsupportedPayload
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
+        return await withActivity(.probe, request: request, resultError: { $0.error }) { activity in
+            do {
+                let (data, response) = try await validatedData(for: request, server: serverInfo.server, timeout: 10, activity: activity)
+                resultInfo.httpStatusCode = response.statusCode
+                try requireJSON(response)
+                let libraryInfo = try decodePayload(CalibreServerLibraryInfo.self, from: data)
+                guard let defaultLibrary = libraryInfo.defaultLibrary,
+                      libraryInfo.libraryMap.count > 0 else {
+                    resultInfo.errorMsg = "Server has no library"
+                    resultInfo.error = .unsupportedPayload
+                    return resultInfo
+                }
+
+                resultInfo.defaultLibrary = defaultLibrary
+                resultInfo.libraryMap = libraryInfo.libraryMap
+                resultInfo.errorMsg = "Success"
+                resultInfo.error = nil
+                resultInfo.reachable = true
+                return resultInfo
+            } catch {
+                let apiError = CalibreAPIError(error: error)
+                resultInfo.httpStatusCode = resultInfo.httpStatusCode ?? activity.httpStatusCode
+                resultInfo.error = apiError
+                if case .transport(let transportError) = apiError, transportError.code == .cancelled {
+                    resultInfo.errorMsg = "cancelled, server may require authentication"
+                } else {
+                    resultInfo.errorMsg = apiError.localizedDescription
+                }
                 return resultInfo
             }
-
-            resultInfo.defaultLibrary = defaultLibrary
-            resultInfo.libraryMap = libraryInfo.libraryMap
-            resultInfo.errorMsg = "Success"
-            resultInfo.error = nil
-            resultInfo.reachable = true
-            return resultInfo
-        } catch {
-            let apiError = CalibreAPIError(error: error)
-            resultInfo.httpStatusCode = resultInfo.httpStatusCode ?? delegate.authenticationStatusCode
-            resultInfo.error = apiError
-            if case .transport(let transportError) = apiError, transportError.code == .cancelled {
-                resultInfo.errorMsg = "cancelled, server may require authentication"
-            } else {
-                resultInfo.errorMsg = apiError.localizedDescription
-            }
-            return resultInfo
         }
     }
 
@@ -93,10 +92,14 @@ extension CalibreServerService {
         }
 
         do {
-            let (data, _) = try await validatedData(from: task.probeUrl, server: task.library.server)
-            var task = task
-            task.probeResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: data)
-            return task
+            return try await withRequestActivity(
+                .probe, request: URLRequest(url: task.probeUrl), server: task.library.server, libraryId: task.library.id
+            ) { data, response in
+                try requireJSON(response)
+                var result = task
+                result.probeResult = try decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: data)
+                return result
+            }
         } catch {
             return task
         }
@@ -119,8 +122,8 @@ extension CalibreServerService {
 }
 
 /// Keep an HTTP authentication challenge's status when URLSession cancels after rejection.
-/// This delegate is per probe and follows the shared delegate's credential/retry policy.
-private final class CalibreServerProbeTaskDelegate: CalibreServerTaskDelegate {
+/// This delegate is per request and follows the shared delegate's credential/retry policy.
+final class CalibreServerDiagnosticTaskDelegate: CalibreServerTaskDelegate {
     private let lock = NSLock()
     private var statusCode: Int?
 

@@ -90,18 +90,39 @@ struct ActivityDetailView: View {
                     LabeledActivityValue(title: "Result", value: detail)
                 }
             }
-            Section("Request") {
-                LabeledActivityValue(title: "URL", value: entry.request.endpointURL ?? String(localized: "Unknown"))
-                LabeledActivityValue(title: "Method", value: entry.request.httpMethod ?? "GET")
-                LabeledActivityValue(
-                    title: "Body",
-                    value: entry.request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? String(localized: "Empty")
-                )
+            if entry.result.requests.isEmpty {
+                Section("Request") {
+                    requestValues(entry.request)
+                }
+            } else {
+                ForEach(entry.result.requests.indices, id: \.self) { index in
+                    let diagnostic = entry.result.requests[index]
+                    Section("Request \(index + 1)") {
+                        requestValues(diagnostic.request)
+                        if let responseURL = diagnostic.responseURL {
+                            LabeledActivityValue(title: "Response URL", value: responseURL)
+                        }
+                        if let code = diagnostic.httpStatusCode {
+                            LabeledActivityValue(title: "HTTP Status", value: String(code))
+                        }
+                        LabeledActivityValue(title: "Duration", value: diagnostic.duration.formatted(.number.precision(.fractionLength(3))) + " s")
+                    }
+                }
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Activity Details")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func requestValues(_ request: ActivityLogRequestSnapshot) -> some View {
+        LabeledActivityValue(title: "URL", value: request.endpointURL ?? String(localized: "Unknown"))
+        LabeledActivityValue(title: "Method", value: request.httpMethod ?? "GET")
+        LabeledActivityValue(
+            title: "Body",
+            value: request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? String(localized: "Empty")
+        )
     }
 }
 

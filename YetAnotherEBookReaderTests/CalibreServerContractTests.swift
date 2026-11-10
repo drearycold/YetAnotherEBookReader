@@ -97,6 +97,16 @@ final class CalibreServerContractTests: XCTestCase {
         XCTAssertEqual(position.pos_frac, 0.5, accuracy: 0.0001)
         XCTAssertNotEqual(position.epoch, sentEpoch)
         XCTAssertGreaterThanOrEqual(position.epoch, uploadStart - 60, "stamped by the server's clock")
+
+        let task = try XCTUnwrap(service.buildBooksMetadataTask(library: library, books: [book]))
+        let received = try await service.getLastReadPosition(task: task)
+        let data = try XCTUnwrap(received.lastReadPositionsData)
+        let byFormat = try JSONDecoder().decode([String: [CalibreBookLastReadPositionEntry]].self, from: data)
+        XCTAssertEqual(byFormat["\(book.id):EPUB"]?.first { $0.device == device }?.cfi, position.cfi)
+        await service.logger.flushPendingActivitiesForTesting()
+        let entries = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: book.id, since: .distantPast)
+        XCTAssertTrue(entries.contains { $0.kind == .readingPosition &&
+            $0.state == .finished(.succeeded) && $0.request.endpointURL?.contains("/book-get-last-read-position/") == true })
     }
 
     /// Two devices can upload one highlight in either order; calibre keeps the newest timestamp,
@@ -404,6 +414,13 @@ final class CalibreServerContractTests: XCTestCase {
             XCTFail("a read-only user changed the metadata")
         } catch CalibreAPIError.authFailed {
         }
+
+        await service.logger.flushPendingActivitiesForTesting()
+        let entries = container.activityLogRepository.fetchEntries(libraryId: readOnly.id, bookId: book.id, since: .distantPast)
+        let activity = try XCTUnwrap(entries.first { $0.kind == .updateMetadata })
+        XCTAssertEqual(activity.state, .finished(.failed))
+        XCTAssertEqual(activity.result.httpStatusCode, 403)
+        XCTAssertEqual(activity.result.errorCategory, .authentication)
     }
 
     // MARK: - Downloads

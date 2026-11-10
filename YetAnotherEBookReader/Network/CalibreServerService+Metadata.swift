@@ -21,19 +21,16 @@ extension CalibreServerService {
         )
 
         let request = URLRequest(url: endpointURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 600)
-        let startDatetime = Date()
         updatingMetadata = true
 
-        await self.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
-
         do {
-            let (data, httpResponse) = try await self.validatedData(for: request, server: oldbook.library.server)
-            guard httpResponse.mimeType == "application/json" else {
-                throw CalibreAPIError.unsupportedPayload
+            let newbook = try await withRequestActivity(
+                .bookMetadata, request: request, server: oldbook.library.server,
+                libraryId: oldbook.library.id, bookIds: [oldbook.id]
+            ) { data, response in
+                guard response.mimeType == "application/json" else { throw CalibreAPIError.unsupportedPayload }
+                return try handleLibraryBookOne(oldbook: oldbook, json: data)
             }
-            let newbook = try self.handleLibraryBookOne(oldbook: oldbook, json: data)
-
-            await self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Success")
 
             await MainActor.run {
                 self.updatingMetadataStatus = "Success"
@@ -47,7 +44,6 @@ extension CalibreServerService {
             return newbook
         } catch {
             let err = CalibreAPIError(error: error)
-            await self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
             await MainActor.run {
                 self.updatingMetadataStatus = err.localizedDescription
                 self.updatingMetadata = false
@@ -68,6 +64,14 @@ extension CalibreServerService {
     }
 
     func getBookManifest(book: CalibreBook, format: Format) async throws -> Data {
+        try await fetchBookManifest(book: book, format: format).data
+    }
+
+    func getBookManifestContents(book: CalibreBook, format: Format) async throws -> CalibreBookManifestContents {
+        try await fetchBookManifest(book: book, format: format).contents
+    }
+
+    private func fetchBookManifest(book: CalibreBook, format: Format) async throws -> (data: Data, contents: CalibreBookManifestContents) {
         let endpointURL = try makeEndpointURL(
             server: book.library.server,
             path: "/book-manifest/\(book.id)/\(format.id)",
@@ -75,25 +79,23 @@ extension CalibreServerService {
         )
 
         let request = URLRequest(url: endpointURL)
-        let startDatetime = Date()
         updatingMetadata = true
-
-        await self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
-
         do {
-            let (data, httpResponse) = try await self.validatedData(for: request, server: book.library.server, timeout: 10)
-            guard httpResponse.mimeType == "application/json" else {
-                throw CalibreAPIError.unsupportedPayload
+            let result: (data: Data, contents: CalibreBookManifestContents) = try await withRequestActivity(
+                .bookManifest, request: request, server: book.library.server, libraryId: book.library.id,
+                bookIds: [book.id], timeout: 10, resultError: { $0.contents.error }
+            ) { data, response in
+                guard response.mimeType == "application/json" else { throw CalibreAPIError.unsupportedPayload }
+                return (data, CalibreBookManifestContents(data: data))
             }
-            await self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Success")
+            let status = result.contents.error?.localizedDescription ?? "Success"
             await MainActor.run {
-                self.updatingMetadataStatus = "Success"
+                self.updatingMetadataStatus = status
                 self.updatingMetadata = false
             }
-            return data
+            return result
         } catch {
             let err = CalibreAPIError(error: error)
-            await self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
             await MainActor.run {
                 self.updatingMetadataStatus = err.localizedDescription
                 self.updatingMetadata = false
@@ -112,18 +114,14 @@ extension CalibreServerService {
         let json: [Any] = ["fields", bookId, metadata]
         let data = try JSONSerialization.data(withJSONObject: json, options: [])
         let request = makeJSONRequest(url: endpointURL, method: "POST", body: data)
-        let startDatetime = Date()
-
-        await self.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
-
-        do {
-            let (_, response) = try await self.validatedData(for: request, server: library.server)
-            let logErrMsg = "HTTP \(response.statusCode)"
-            await self.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
-        } catch {
-            let err = CalibreAPIError(error: error)
-            await self.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
-            throw err
+        try await withRequestActivity(
+            .updateMetadata, request: request, server: library.server, libraryId: library.id, bookIds: [bookId]
+        ) { data, response in
+            try requireJSON(response)
+            // The cdb command API can return HTTP 200 with an "err" envelope.
+            let payload = try jsonObject(data)
+            if payload["err"] != nil { throw CalibreAPIError.serverRejected(nil) }
+            guard payload["result"] != nil else { throw CalibreAPIError.unsupportedPayload }
         }
     }
 
@@ -139,7 +137,8 @@ extension CalibreServerService {
             server: library.server,
             bookId: bookId,
             inShelfId: "",
-            url: endpointUrl
+            url: endpointUrl,
+            libraryId: library.id
         )
     }
 
@@ -155,17 +154,32 @@ extension CalibreServerService {
             server: book.library.server,
             bookId: book.id,
             inShelfId: book.inShelfId,
-            url: endpointUrl
+            url: endpointUrl,
+            libraryId: book.library.id
         )
     }
 
     func getMetadata(task: CalibreBookTask) async throws -> (CalibreBookTask, CalibreBookEntry) {
-        let (data, _) = try await validatedData(from: task.url, server: task.server)
-        return (task, try decodePayload(CalibreBookEntry.self, from: data))
+        try await withRequestActivity(.bookMetadata, request: URLRequest(url: task.url), server: task.server,
+                                      libraryId: task.libraryId, bookIds: [task.bookId]) { data, response in
+            try requireJSON(response)
+            return (task, try decodePayload(CalibreBookEntry.self, from: data))
+        }
     }
 
     func getMetadataData(task: CalibreBookTask) async throws -> (CalibreBookTask, Data, URLResponse) {
-        let (data, response) = try await validatedData(from: task.url, server: task.server)
-        return (task, data, response as URLResponse)
+        let result: (Data, HTTPURLResponse, Error?) = try await withRequestActivity(
+            .bookMetadata, request: URLRequest(url: task.url), server: task.server,
+            libraryId: task.libraryId, bookIds: [task.bookId], resultError: { $0.2 }
+        ) { data, response in
+            do {
+                try requireJSON(response)
+                _ = try decodePayload(CalibreBookEntry.self, from: data)
+                return (data, response, nil)
+            } catch {
+                return (data, response, error)
+            }
+        }
+        return (task, result.0, result.1)
     }
 }

@@ -14,6 +14,7 @@ struct CalibreBookTask {
     var bookId: Int32
     var inShelfId: String
     var url: URL
+    var libraryId: String? = nil
 }
 
 struct CalibreBooksMetadataRequest {

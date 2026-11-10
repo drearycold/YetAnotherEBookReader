@@ -324,3 +324,64 @@ struct CalibreLibraryBooksResult: Codable {
     var search_result: SearchResult
     var metadata: [String: BookMetadata]
 }
+
+enum CalibreBookManifestContents {
+    case loaded(String), empty, generating, invalid, rejected
+
+    var error: CalibreAPIError? {
+        switch self {
+        case .invalid: return .unsupportedPayload
+        case .rejected: return .serverRejected(nil)
+        case .loaded, .empty, .generating: return nil
+        }
+    }
+
+    init(data: Data) {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            self = .invalid
+            return
+        }
+        if root["aborted"] as? Bool == true || (root["traceback"] as? String)?.isEmpty == false {
+            self = .rejected
+            return
+        }
+        if let status = root["job_status"] as? String {
+            if ["waiting", "running", "working"].contains(status) {
+                self = .generating
+                return
+            }
+            if ["failed", "error"].contains(status) {
+                self = .rejected
+                return
+            }
+        }
+        guard let toc = root["toc"], !(toc is NSNull) else {
+            self = .empty
+            return
+        }
+        guard let node = toc as? [String: Any] else {
+            self = .invalid
+            return
+        }
+        do {
+            let text = try Self.contents(node: node, level: 0, includeTitle: false)
+            self = text.isEmpty ? .empty : .loaded(text)
+        } catch {
+            self = .invalid
+        }
+    }
+
+    private static func contents(node: [String: Any], level: Int, includeTitle: Bool) throws -> String {
+        guard level < 64 else { throw CalibreAPIError.unsupportedPayload }
+        var text = ""
+        if let title = node["title"], !(title is String), !(title is NSNull) { throw CalibreAPIError.unsupportedPayload }
+        if includeTitle, let title = node["title"] as? String, !title.isEmpty {
+            text = String(repeating: "  ", count: max(0, level - 1)) + title + "\n"
+        }
+        if let value = node["children"] {
+            guard let children = value as? [[String: Any]] else { throw CalibreAPIError.unsupportedPayload }
+            for child in children { text += try contents(node: child, level: level + 1, includeTitle: true) }
+        }
+        return text
+    }
+}

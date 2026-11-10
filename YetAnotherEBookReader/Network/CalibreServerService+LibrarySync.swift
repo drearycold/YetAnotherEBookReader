@@ -32,11 +32,9 @@ extension CalibreServerService {
             ]
         )
         let request = URLRequest(url: searchURL)
-        let startDatetime = Date()
-        await logger.logStartCalibreActivity(type: "Library Summary", request: request, startDatetime: startDatetime, bookId: nil, libraryId: library.id)
-
-        do {
-            let (searchData, _) = try await validatedData(for: request, server: library.server)
+        return try await withActivity(.librarySummary, request: request, libraryId: library.id) { activity in
+            let (searchData, searchResponse) = try await validatedData(for: request, server: library.server, activity: activity)
+            try requireJSON(searchResponse)
             let search = try decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: searchData)
             var summary = CalibreLibrarySummary(bookCount: search.num_books_without_search)
 
@@ -49,7 +47,8 @@ extension CalibreServerService {
                         URLQueryItem(name: "category_urls", value: "false")
                     ]
                 )
-                let (booksData, _) = try await validatedData(from: booksURL, server: library.server)
+                let (booksData, booksResponse) = try await validatedData(from: booksURL, server: library.server, activity: activity)
+                try requireJSON(booksResponse)
                 let books = try decodePayload([String: CalibreLibrarySummaryBookEntry?].self, from: booksData)
                 // The book can be deleted between the two requests.
                 if let entry = books[bookId.description] ?? nil {
@@ -60,12 +59,7 @@ extension CalibreServerService {
                 }
             }
 
-            await logger.logFinishCalibreActivity(type: "Library Summary", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Success")
             return summary
-        } catch {
-            let apiError = CalibreAPIError(error: error)
-            await logger.logFinishCalibreActivity(type: "Library Summary", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: apiError.localizedDescription)
-            throw apiError
         }
     }
 
@@ -74,8 +68,11 @@ extension CalibreServerService {
             server: library.server,
             path: "/ajax/categories/\(library.key)"
         )
-        let (data, _) = try await validatedData(from: endpointURL, server: library.server)
-        return try decodePayload([CalibreLibraryCategory].self, from: data)
+        return try await withRequestActivity(.categories, request: URLRequest(url: endpointURL),
+                                             server: library.server, libraryId: library.id) { data, response in
+            try requireJSON(response)
+            return try decodePayload([CalibreLibraryCategory].self, from: data)
+        }
     }
 
     func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) async -> CalibreBooksTask {
@@ -86,11 +83,22 @@ extension CalibreServerService {
         }
 
         do {
-            let (data, response) = try await validatedData(from: metadataUrl, server: task.library.server, qos: qos)
-            var resultTask = task
-            resultTask.data = data
-            resultTask.response = response
-            return applyBooksMetadataPayload(data, to: resultTask)
+            return try await withRequestActivity(
+                .batchMetadata, request: URLRequest(url: metadataUrl), server: task.library.server,
+                libraryId: task.library.id, bookIds: Set(task.books), qos: qos, resultError: { result in
+                    if let error = result.error { return error }
+                    // A null entry answers for a deleted or restricted book. A missing key
+                    // leaves that book unanswered even if the other results can be used.
+                    let answered = result.books.allSatisfy { result.booksMetadataEntry?.index(forKey: $0.description) != nil }
+                    return answered ? nil : CalibreAPIError.unsupportedPayload
+                }
+            ) { data, response in
+                try requireJSON(response)
+                var resultTask = task
+                resultTask.data = data
+                resultTask.response = response
+                return applyBooksMetadataPayload(data, to: resultTask)
+            }
         } catch {
             var resultTask = task
             resultTask.error = CalibreAPIError(error: error)
@@ -150,33 +158,24 @@ extension CalibreServerService {
         do {
             task.booksMetadataJSON = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
         } catch {
-            task.error = CalibreAPIError(error: error)
+            task.error = .decoding(error)
         }
 
         do {
             task.booksMetadataEntry = try JSONDecoder().decode([String: CalibreBookEntry?].self, from: data)
-        } catch let DecodingError.keyNotFound(_, context) {
-            if let firstCodingPath = context.codingPath.first,
-               let bookId = Int32(firstCodingPath.stringValue),
-               bookId > 0 {
+        } catch let error as DecodingError {
+            if case .keyNotFound(_, let context) = error,
+               let first = context.codingPath.first, let bookId = Int32(first.stringValue), bookId > 0 {
                 task.booksError.insert(bookId)
             } else if task.books.count == 1 {
                 task.booksError.formUnion(task.books)
             }
-            if let lastCodingPath = context.codingPath.last {
-                task.error = CalibreAPIError(error: DecodingError.keyNotFound(lastCodingPath, context))
-            } else {
-                task.error = CalibreAPIError(error: DecodingError.keyNotFound(context.codingPath.first!, context))
-            }
+            task.error = .decoding(error)
         } catch {
             if task.books.count == 1 {
                 task.booksError.formUnion(task.books)
             }
-            task.error = CalibreAPIError(error: error)
-        }
-
-        if let entries = try? JSONDecoder().decode([String: CalibreBookEntry].self, from: data) {
-            task.booksMetadataEntry = entries
+            task.error = .decoding(error)
         }
 
         return task

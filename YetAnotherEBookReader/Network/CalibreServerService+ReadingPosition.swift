@@ -14,10 +14,16 @@ extension CalibreServerService {
             return task
         }
 
-        let (data, _) = try await validatedData(from: lastReadPositionUrl, server: task.library.server)
-        var task = task
-        task.lastReadPositionsData = data
-        return task
+        return try await withRequestActivity(
+            .readingPosition, request: URLRequest(url: lastReadPositionUrl), server: task.library.server,
+            libraryId: task.library.id, bookIds: Set(task.books)
+        ) { data, response in
+            try requireJSON(response)
+            _ = try decodePayload([String: [CalibreBookLastReadPositionEntry]].self, from: data)
+            var result = task
+            result.lastReadPositionsData = data
+            return result
+        }
     }
 
     func buildSetLastReadPositionTask(library: CalibreLibrary, bookId: Int32, format: Format, entry: CalibreBookLastReadPositionEntry) throws -> CalibreBookSetLastReadPositionTask {
@@ -41,28 +47,18 @@ extension CalibreServerService {
     }
 
     func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) async -> CalibreBookSetLastReadPositionTask {
-        await logger.logStartCalibreActivity(type: "Set Last Read Position", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
-
-        var resultTask = task
+        var result = task
         do {
-            let (data, response) = try await validatedData(for: task.urlRequest, server: task.library.server)
-            resultTask.urlResponse = response
-            resultTask.data = data
+            (result.data, result.urlResponse) = try await withRequestActivity(
+                .readingPosition, request: task.urlRequest, server: task.library.server,
+                libraryId: task.library.id, bookIds: [task.bookId]
+            ) { data, response in
+                try validateMutationResponse(data, response: response)
+                return (data, response)
+            }
         } catch {
-            resultTask.error = CalibreAPIError(error: error)
+            result.error = CalibreAPIError(error: error)
         }
-
-        let logErrMsg: String
-        if let calibreError = resultTask.error {
-            logErrMsg = calibreError.localizedDescription
-        } else if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
-            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
-        } else {
-            logErrMsg = "Unknown"
-        }
-        await logger.logFinishCalibreActivity(type: "Set Last Read Position", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
-
-        return resultTask
+        return result
     }
-
 }

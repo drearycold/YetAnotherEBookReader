@@ -11,7 +11,7 @@ import os.log
 
 enum DatabaseSchema {
     // Independent of CFBundleVersion. Increment only for schema or data migrations.
-    static let version: UInt64 = 149
+    static let version: UInt64 = 150
 }
 
 class DatabaseService: ObservableObject {

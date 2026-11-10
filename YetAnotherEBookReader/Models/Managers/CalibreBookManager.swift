@@ -301,7 +301,7 @@ class CalibreBookManager {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             Task {
                 do {
-                    try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
+                    try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading", book: book)
                 } catch {
                     logger.error("Failed to add book \(book.title) to Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
@@ -334,14 +334,14 @@ class CalibreBookManager {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             Task {
                 do {
-                    try await connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
+                    try await connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading", book: book)
                 } catch {
                     logger.error("Failed to remove book \(book.title) from Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
 
                 if let position = readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container?.deviceName ?? "")), position.lastProgress > 99 {
                     do {
-                        try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
+                        try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read", book: book)
                     } catch {
                         logger.error("Failed to add book \(book.title) to Goodreads read shelf: \(error.localizedDescription)")
                     }

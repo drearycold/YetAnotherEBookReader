@@ -736,7 +736,7 @@ class ReadingSessionManager {
             let connector = DSReaderHelperConnector(calibreServerService: container.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             
             do {
-                try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+                try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress, book: book)
             } catch {
                 logger.error("Failed to update Goodreads reading progress for book \(book.title): \(error.localizedDescription)")
             }
@@ -775,7 +775,7 @@ class ReadingSessionManager {
             let connector = DSReaderHelperConnector(calibreServerService: container!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             Task {
                 do {
-                    try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+                    try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress, book: readingBook)
                 } catch {
                     logger.error("Failed to update Goodreads reading progress for book \(readingBook.title): \(error.localizedDescription)")
                 }
