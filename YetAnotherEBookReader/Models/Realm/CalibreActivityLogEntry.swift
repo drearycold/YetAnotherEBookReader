@@ -11,6 +11,9 @@ class CalibreActivityLogEntry: Object, Identifiable {
     @Persisted var kind: String?
     @Persisted var status = "legacy"
     @Persisted var progressRevision = 0
+    @Persisted var ownerProcessID: String?
+    @Persisted var downloadFormat: String?
+    @Persisted var progressChangesData: Data?
 
     @Persisted var startDatetime = Date.distantPast
     @Persisted var finishDatetime: Date?

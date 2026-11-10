@@ -11,9 +11,7 @@ import RealmSwift
 protocol ActivityLogRepositoryProtocol {
     @MainActor func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot]
     @MainActor func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogSnapshot]>
-    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async
-    func removeCalibreActivity(id: ActivityID) async
-    func cleanCalibreActivities(startDatetime: Date) async
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async throws
 }
 
 final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
@@ -21,25 +19,30 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
     private let bookRepository: BookRepositoryProtocol
     private weak var librarySnapshotProvider: CalibreLibrarySnapshotProviding?
     private let writeQueue = DispatchQueue(label: "activity-log-repository.write", qos: .utility)
+    private let ownerProcessID: String
+    private var retainedSince = Date.distantPast // Owned by writeQueue.
 
-    init(
+    // Shared across repositories and repeated database bootstrap in this process.
+    private static let processID = UUID().uuidString
+
+    convenience init(
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol,
         container: AppContainerProtocol?
     ) {
-        self.databaseService = databaseService
-        self.bookRepository = bookRepository
-        self.librarySnapshotProvider = container
+        self.init(databaseService: databaseService, bookRepository: bookRepository, librarySnapshotProvider: container)
     }
 
     init(
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol,
-        librarySnapshotProvider: CalibreLibrarySnapshotProviding?
+        librarySnapshotProvider: CalibreLibrarySnapshotProviding?,
+        ownerProcessID: String? = nil
     ) {
         self.databaseService = databaseService
         self.bookRepository = bookRepository
         self.librarySnapshotProvider = librarySnapshotProvider
+        self.ownerProcessID = ownerProcessID ?? Self.processID
     }
 
     private func predicate(libraryId: String?, bookId: Int32?, since: Date) -> NSPredicate {
@@ -115,81 +118,73 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
         }
     }
 
-    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async {
-        guard !events.isEmpty, let realmConf = databaseService.realmConf else { return }
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async throws {
+        guard !events.isEmpty else { return }
+        guard let realmConf = databaseService.realmConf else {
+            throw DatabaseBootstrapError.realmConfigurationMissing
+        }
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             writeQueue.async {
-                defer { continuation.resume() }
-                autoreleasepool {
-                    guard let realm = try? Realm(configuration: realmConf) else {
-                        return
-                    }
-
-                    try? realm.write {
-                        events.forEach { event in
-                            switch event {
-                            case .start(let value):
-                                // The first start owns this ID. Unknown updates are dropped.
-                                guard realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: value.id.rawValue) == nil else { return }
-                                realm.add(CalibreActivityLogEntry(startValue: value))
-                            case let .update(id, update):
-                                realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue)?.apply(update)
-                            case .legacyStart(let value):
-                                realm.add(CalibreActivityLogEntry(legacyStart: value))
-                            case .legacyFinish(let value):
-                                realm.objects(CalibreActivityLogEntry.self)
-                                    .filter(CalibreActivityLogEntry.legacyPredicate(matching: value))
-                                    .first?.apply(value)
+                continuation.resume(with: Result {
+                    try autoreleasepool {
+                        let realm = try Realm(configuration: realmConf)
+                        var cutoff = self.retainedSince
+                        try realm.write {
+                            for event in events {
+                                switch event {
+                                case .start(let value):
+                                    guard value.startDatetime >= cutoff,
+                                          realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: value.id.rawValue) == nil
+                                    else { continue }
+                                    realm.add(CalibreActivityLogEntry(startValue: value, ownerProcessID: self.ownerProcessID))
+                                case let .update(id, update):
+                                    if let entry = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue),
+                                       entry.ownerProcessID == self.ownerProcessID {
+                                        entry.apply(update)
+                                    }
+                                case .legacyStart(let value):
+                                    guard value.startDatetime >= cutoff else { continue }
+                                    realm.add(CalibreActivityLogEntry(legacyStart: value))
+                                case .legacyFinish(let value):
+                                    realm.objects(CalibreActivityLogEntry.self)
+                                        .filter(CalibreActivityLogEntry.legacyPredicate(matching: value))
+                                        .first?.apply(value)
+                                case .remove(let id):
+                                    if let entry = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue) {
+                                        realm.delete(entry)
+                                    }
+                                case .prune(let before):
+                                    cutoff = max(cutoff, before)
+                                    self.prune(realm, before: cutoff)
+                                case .recoverAndPrune(let date):
+                                    cutoff = max(cutoff, ActivityLogRetention.cutoff(at: date))
+                                    self.prune(realm, before: cutoff)
+                                    self.recover(realm, at: date)
+                                }
                             }
                         }
+                        // Publish the retention watermark only after the transaction commits.
+                        self.retainedSince = cutoff
                     }
-                }
+                })
             }
         }
     }
 
-    func removeCalibreActivity(id: ActivityID) async {
-        guard let realmConf = databaseService.realmConf else { return }
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            writeQueue.async {
-                defer { continuation.resume() }
-                autoreleasepool {
-                    guard let realm = try? Realm(configuration: realmConf),
-                          let obj = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue)
-                    else {
-                        return
-                    }
-
-                    try? realm.write {
-                        realm.delete(obj)
-                    }
-                }
-            }
-        }
+    private func prune(_ realm: Realm, before cutoff: Date) {
+        realm.delete(realm.objects(CalibreActivityLogEntry.self)
+            .filter("startDatetime < %@", cutoff as NSDate))
     }
 
-    func cleanCalibreActivities(startDatetime: Date) async {
-        guard let realmConf = databaseService.realmConf else { return }
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            writeQueue.async {
-                defer { continuation.resume() }
-                autoreleasepool {
-                    guard let realm = try? Realm(configuration: realmConf) else {
-                        return
-                    }
-
-                    let activities = realm.objects(CalibreActivityLogEntry.self).filter(
-                        NSPredicate(format: "startDatetime < %@", startDatetime as NSDate)
-                    )
-
-                    try? realm.write {
-                        realm.delete(activities)
-                    }
-                }
-            }
+    private func recover(_ realm: Realm, at date: Date) {
+        let unfinished = realm.objects(CalibreActivityLogEntry.self).filter(
+            "kind != nil AND status IN %@ AND (ownerProcessID == nil OR ownerProcessID != %@)",
+            [ActivityLogProgress.running.rawValue, ActivityLogProgress.paused.rawValue], ownerProcessID
+        )
+        // Copy the collection before changing the fields its predicate uses.
+        for entry in Array(unfinished) {
+            entry.apply(.finish(.interrupted, at: date, result: .init(detail: "The app closed before the operation finished.")))
         }
     }
 }

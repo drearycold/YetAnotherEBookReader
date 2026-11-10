@@ -30,7 +30,7 @@ final class ActivityListViewModel: ObservableObject, Identifiable {
     
     func start() {
         guard activitiesTask == nil else { return }
-        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
+        let cutoff = ActivityLogRetention.cutoff()
         activities = activityLogRepository.fetchEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
         let activityUpdates = activityLogRepository.observeEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
         activitiesTask = Task { @MainActor [weak self] in

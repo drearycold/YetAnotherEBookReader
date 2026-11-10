@@ -267,6 +267,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let readerPresentationTransferBroadcaster = ManagerAsyncBroadcaster<ReaderPresentationTransfer>()
     private var activeReaderWorkspaceID: UUID?
     private var activeAppSceneIDs = Set<UUID>()
+    @MainActor lazy var activityLogBackgroundFlush = ActivityLogBackgroundFlush()
     private var transferringReaderPresentationIDs = Set<ReaderPresentation.ID>()
     private var probeTimerTask: Task<Void, Never>?
     private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
@@ -428,6 +429,23 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         activeAppSceneIDs.remove(id)
         if activeAppSceneIDs.isEmpty {
             disableProbeTimer()
+            flushActivityLogIfBackgrounded()
+        }
+    }
+
+    @MainActor
+    func setActivityLogApplicationBackgrounded(_ backgrounded: Bool) {
+        activityLogBackgroundFlush.setBackgrounded(backgrounded)
+        flushActivityLogIfBackgrounded()
+    }
+
+    @MainActor
+    private func flushActivityLogIfBackgrounded() {
+        guard let logger else { return }
+        activityLogBackgroundFlush.requestIfNeeded(hasActiveScenes: !activeAppSceneIDs.isEmpty) { [downloadManager] in
+            await downloadManager.waitForActivitySubmissions()
+            guard !Task.isCancelled else { return }
+            await logger.maintainHistory()
         }
     }
 

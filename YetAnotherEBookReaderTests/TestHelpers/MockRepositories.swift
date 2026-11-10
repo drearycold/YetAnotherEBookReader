@@ -596,11 +596,9 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var writeActivityLogEventsCalled = false
     var writeActivityLogEventsParam: [ActivityLogWriteEvent] = []
 
-    var removeCalibreActivityCalled = false
-    var removeCalibreActivityIdParam: ActivityID?
-
-    var cleanCalibreActivitiesCalled = false
-    var cleanCalibreActivitiesStartDatetimeParam: Date?
+    var writeActivityLogBatches: [[ActivityLogWriteEvent]] = []
+    var writeFailuresRemaining = 0
+    var beforeWrite: (() async -> Void)?
 
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot] {
         fetchEntriesCalled = true
@@ -622,19 +620,15 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         observeEntriesBroadcaster.send(entries)
     }
 
-    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async {
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async throws {
         writeActivityLogEventsCalled = true
         writeActivityLogEventsParam = events
-    }
-
-    func removeCalibreActivity(id: ActivityID) async {
-        removeCalibreActivityCalled = true
-        removeCalibreActivityIdParam = id
-    }
-
-    func cleanCalibreActivities(startDatetime: Date) async {
-        cleanCalibreActivitiesCalled = true
-        cleanCalibreActivitiesStartDatetimeParam = startDatetime
+        writeActivityLogBatches.append(events)
+        await beforeWrite?()
+        if writeFailuresRemaining > 0 {
+            writeFailuresRemaining -= 1
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 }
 

@@ -4,6 +4,73 @@ Archived records for Realm boundary shrinkage, repository ownership, mapper extr
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Activity Log AL3 (2026-11-10)
+
+Download activities use the attempt UUID and carry the library, book, format,
+and sanitized request. The main actor publishes download state immediately and
+chains only the logger submissions, so the logger accepts a start before any
+transition for that attempt. Pause and resume keep the same UUID and record
+increasing revisions with dates. Retry creates a new UUID. The delegate accepts
+completion and progress only from the current running task and attempt. A
+completion that arrives after pause, cancellation, or replacement at another
+address cannot commit a staged file.
+
+The download snapshot and the activity share the terminal failure message.
+HTTP failures keep the status, including 401 and 403. Transport failures and
+file failures use safe messages. The delegate checks the size, sets attributes
+on the staged file, then moves or replaces it atomically before publishing
+success. A save failure does not mark the format cached. The Book Detail
+download-and-read route continues to use the current book and originating
+workspace.
+
+The logger has one writer and a bounded pending buffer. A flush waits for all
+events accepted before its call, including the in-flight batch. Each barrier
+reports failures only for batches it covers. Repository writes throw on
+failure and run atomically on a serial queue. The logger retries twice after
+the first failure, then reports and drops the failed batch. Subsequent batches
+continue in order. Overflow drops new events and reports it to the system log.
+Writes never change the business operation's outcome. Realm configuration
+snapshots are locked during bootstrap and background reads.
+
+Schema 151 adds optional process ownership, download format, and progress
+history. Startup maintenance prunes with the same seven-day cutoff as the
+list, then marks only previous-process typed running and paused rows
+interrupted. Rows from schema 150 without an owner qualify. Current-process,
+terminal and legacy rows keep their state. The repository's pruning watermark
+blocks stale starts from resurrecting deleted history. Maintenance goes through
+the same write ordering as ordinary events and never starts a download.
+
+The aggregate app phase and the active scene set must both allow a background
+flush. The app first drains accepted download submissions and uses a finite
+UIKit background task for the logger. Expiration releases the lease. It may
+cut short what gets written before suspension or termination. See
+[SwiftUI scene phase](https://developer.apple.com/documentation/swiftui/scenephase)
+and [UIKit background execution](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time).
+
+AL4 can add paging, filters and independent live detail observation, and remove
+the legacy write adapter and its preview wrapper. Keep legacy history readable,
+the process ownership check, and the flush and retention contracts.
+
+The immediate-cancellation test reproduced the legacy row and mismatched
+UUID before AL3. A first focused run exposed a crash while copying a
+published Realm configuration during reconfiguration. The final runs
+passed after synchronizing configuration access.
+
+The final iPhone 17 run passed 214 tests, including 21 real Calibre 9.11
+contracts. iPhone 7 / iOS 15.5 passed 137 focused tests. The file-backed
+schema 150 fixture preserves AL2 diagnostics, legacy text and a saved Folio
+profile, and recovers an unowned typed operation. The earlier migration
+fixtures still pass. The iOS Release and Catalyst builds and static checks
+passed.
+
+The opt-in AL3 UI test passed on a separate iPhone 17 Release installation
+against the real server and loopback proxy. It covers HTTP 503, retry,
+pause/resume, opening Folio after completion, cache clearing, cancellation
+without opening, and the Cancelled activity. The native binary matched the
+Release build. The older P3 and BD3 journeys reached Folio but stopped at
+their existing introduction text check. Hardware and actual OS termination
+were outside this run. Logs and result bundles are in `/tmp/YabrAL3`.
+
 ## Activity Log AL2 (2026-11-09)
 
 `CalibreServerService.withActivity` gives each service operation an ActivityID.

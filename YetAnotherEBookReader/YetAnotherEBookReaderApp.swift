@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct YetAnotherEBookReaderApp: App {
     private let container: AppContainer
+    @Environment(\.scenePhase) private var applicationPhase
 
     init() {
         let isUITestingMockLibrary = UITestingConfiguration.isEnabled()
@@ -36,6 +37,13 @@ struct YetAnotherEBookReaderApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView(container: container)
+        }
+        .onChange(of: applicationPhase) { phase in
+            if phase == .background {
+                container.setActivityLogApplicationBackgrounded(true)
+            } else if phase == .active {
+                container.setActivityLogApplicationBackgrounded(false)
+            }
         }
     }
 }
@@ -160,6 +168,7 @@ private struct AppRootView: View {
     }
 
     private func handleDatabaseReady() {
+        guard scenePhase == .active else { return }
         mainViewModel.restorePersistedReadersIfNeeded()
         container.markAppSceneActive(id: sceneID)
     }

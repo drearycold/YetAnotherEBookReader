@@ -121,9 +121,115 @@ final class CalibreActivityLoggerTests: XCTestCase {
         await logger.removeCalibreActivity(id: id)
         await logger.cleanCalibreActivities(startDatetime: cutoff)
 
-        XCTAssertTrue(repository.removeCalibreActivityCalled)
-        XCTAssertEqual(repository.removeCalibreActivityIdParam, id)
-        XCTAssertTrue(repository.cleanCalibreActivitiesCalled)
-        XCTAssertEqual(repository.cleanCalibreActivitiesStartDatetimeParam, cutoff)
+        XCTAssertEqual(repository.writeActivityLogBatches, [[.remove(id)], [.prune(before: cutoff)]])
+    }
+
+    func testScheduledWriteAndOverlappingFlushesKeepStartAheadOfCompletion() async {
+        let repository = MockActivityLogRepository()
+        let firstWrite = expectation(description: "Scheduled write entered the repository")
+        var release: AsyncStream<Void>.Continuation?
+        let gate = AsyncStream<Void> { release = $0 }
+        repository.beforeWrite = {
+            if repository.writeActivityLogBatches.count == 1 {
+                firstWrite.fulfill()
+                for await _ in gate {}
+            }
+        }
+        defer {
+            release?.finish()
+            repository.beforeWrite = nil
+        }
+        let logger = CalibreActivityLogger(repository: repository, flushDelayNanoseconds: 0)
+        let activity = testActivity()
+        await logger.start(activity)
+        await fulfillment(of: [firstWrite], timeout: 5)
+
+        let finish = ActivityLogUpdate.finish(.succeeded, at: Date())
+        await logger.update(id: activity.id, finish)
+        async let first = logger.flush()
+        async let second = logger.flush()
+        release?.finish()
+        let results = await [first, second]
+
+        XCTAssertEqual(results, [true, true])
+        XCTAssertEqual(repository.writeActivityLogBatches, [[.start(activity)], [.update(id: activity.id, finish)]])
+    }
+
+    func testFlushReportsFailureOnlyForBarriersCoveringTheFailedBatch() async {
+        let repository = MockActivityLogRepository()
+        let firstWrite = expectation(description: "Start is in flight")
+        var release: AsyncStream<Void>.Continuation?
+        let gate = AsyncStream<Void> { release = $0 }
+        repository.beforeWrite = {
+            if repository.writeActivityLogBatches.count == 1 {
+                firstWrite.fulfill()
+                for await _ in gate {}
+            } else {
+                repository.writeFailuresRemaining = 1
+            }
+        }
+        defer {
+            release?.finish()
+            repository.beforeWrite = nil
+        }
+        let logger = CalibreActivityLogger(repository: repository,
+            flushDelayNanoseconds: 60_000_000_000, retryDelaysNanoseconds: [])
+        let activity = testActivity()
+        await logger.start(activity)
+        let onlyStart = Task { await logger.flush() }
+        await fulfillment(of: [firstWrite], timeout: 5)
+        let finish = ActivityLogUpdate.finish(.succeeded, at: Date())
+        await logger.update(id: activity.id, finish)
+        let both = Task { await logger.flush() }
+        release?.finish()
+        let startResult = await onlyStart.value
+        let bothResult = await both.value
+
+        XCTAssertTrue(startResult)
+        XCTAssertFalse(bothResult)
+        XCTAssertEqual(repository.writeActivityLogBatches, [[.start(activity)], [.update(id: activity.id, finish)]])
+    }
+
+    func testTransientFailureRetriesTheSameBatchBeforeLaterEvents() async {
+        let repository = MockActivityLogRepository()
+        repository.writeFailuresRemaining = 1
+        let logger = CalibreActivityLogger(repository: repository,
+            flushDelayNanoseconds: 60_000_000_000, retryDelaysNanoseconds: [0, 0])
+        let activity = testActivity()
+        await logger.start(activity)
+        let persistedStart = await logger.flush()
+        XCTAssertTrue(persistedStart)
+
+        let finish = ActivityLogUpdate.finish(.cancelled, at: Date())
+        await logger.update(id: activity.id, finish)
+        let persistedFinish = await logger.flush()
+        XCTAssertTrue(persistedFinish)
+        XCTAssertEqual(repository.writeActivityLogBatches,
+                       [[.start(activity)], [.start(activity)], [.update(id: activity.id, finish)]])
+    }
+
+    func testExhaustedBatchReportsFailureAndLaterBatchCanPersist() async {
+        let repository = MockActivityLogRepository()
+        repository.writeFailuresRemaining = 3
+        let logger = CalibreActivityLogger(repository: repository,
+            flushDelayNanoseconds: 60_000_000_000, retryDelaysNanoseconds: [0, 0])
+        let dropped = testActivity()
+        await logger.start(dropped)
+        let failed = await logger.flush()
+        XCTAssertFalse(failed)
+
+        let next = testActivity()
+        await logger.start(next)
+        let recovered = await logger.flush()
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(repository.writeActivityLogBatches,
+                       [[.start(dropped)], [.start(dropped)], [.start(dropped)], [.start(next)]])
+    }
+
+    private func testActivity() -> ActivityLogStartValue {
+        ActivityLogStartValue(id: ActivityID(), kind: .download,
+            request: .init(endpointURL: "https://calibre.local/get/EPUB/7/library",
+                           httpMethod: "GET", httpBody: nil, headers: []),
+            startDatetime: Date(), libraryId: "library", bookIds: [7], downloadFormat: "EPUB")
     }
 }

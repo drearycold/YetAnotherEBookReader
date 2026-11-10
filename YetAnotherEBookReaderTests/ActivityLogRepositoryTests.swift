@@ -47,7 +47,7 @@ final class ActivityLogRepositoryTests: XCTestCase {
     func testIdenticalRequestsKeepIndependentIDsAndFirstCompletion() async throws {
         let first = start()
         let second = start()
-        await repository.writeActivityLogEvents([.start(first), .start(second)])
+        try await repository.writeActivityLogEvents([.start(first), .start(second)])
         let running = try entry(first.id)
         XCTAssertEqual(running.state, .inProgress(.running))
         XCTAssertNil(running.finishDatetime)
@@ -55,11 +55,11 @@ final class ActivityLogRepositoryTests: XCTestCase {
 
         let success = ActivityLogResult(httpStatusCode: 200)
         let failure = ActivityLogResult(httpStatusCode: 403, errorCategory: .authentication, detail: "Access denied")
-        await repository.writeActivityLogEvents([
+        try await repository.writeActivityLogEvents([
             .update(id: second.id, .finish(.failed, at: finishDate, result: failure)),
             .update(id: first.id, .finish(.succeeded, at: finishDate, result: success))
         ])
-        await repository.writeActivityLogEvents([
+        try await repository.writeActivityLogEvents([
             .start(start(id: first.id, kind: .probe, libraryId: "other")),
             .update(id: first.id, .finish(.succeeded, at: finishDate, result: success)),
             .update(id: first.id, .finish(.failed, at: finishDate.addingTimeInterval(1), result: failure)),
@@ -85,13 +85,13 @@ final class ActivityLogRepositoryTests: XCTestCase {
     func testProgressReplaysCannotUndoResumeAndOnlyCompletionSetsFinishDate() async throws {
         let activity = start(kind: .download)
         let pause = ActivityLogWriteEvent.update(id: activity.id, .progress(.paused, revision: 1))
-        await repository.writeActivityLogEvents([.start(activity), pause, pause])
+        try await repository.writeActivityLogEvents([.start(activity), pause, pause])
         let paused = try entry(activity.id)
         XCTAssertEqual(paused.state, .inProgress(.paused))
         XCTAssertNil(paused.finishDatetime)
         XCTAssertEqual(paused.result, ActivityLogResult())
 
-        await repository.writeActivityLogEvents([
+        try await repository.writeActivityLogEvents([
             .update(id: activity.id, .progress(.running, revision: 2)),
             pause,
             .update(id: activity.id, .progress(.paused, revision: 2))
@@ -100,34 +100,34 @@ final class ActivityLogRepositoryTests: XCTestCase {
         XCTAssertEqual(resumed.state, .inProgress(.running))
         XCTAssertNil(resumed.finishDatetime)
 
-        await repository.writeActivityLogEvents([.update(id: activity.id, .finish(.cancelled, at: finishDate))])
+        try await repository.writeActivityLogEvents([.update(id: activity.id, .finish(.cancelled, at: finishDate))])
         XCTAssertEqual(try entry(activity.id).state, .finished(.cancelled))
         XCTAssertEqual(try entry(activity.id).finishDatetime, finishDate)
     }
 
     func testUpdatesForUnknownIDsDoNotCreateOrPrepopulateEntries() async throws {
         let activity = start()
-        await repository.writeActivityLogEvents([
+        try await repository.writeActivityLogEvents([
             .update(id: activity.id, .progress(.paused, revision: 1)),
             .update(id: activity.id, .finish(.interrupted, at: finishDate))
         ])
         XCTAssertTrue(entries().isEmpty)
 
-        await repository.writeActivityLogEvents([.start(activity)])
+        try await repository.writeActivityLogEvents([.start(activity)])
         XCTAssertEqual(try entry(activity.id).state, .inProgress(.running))
         XCTAssertNil(try entry(activity.id).finishDatetime)
 
-        await repository.writeActivityLogEvents([.update(id: activity.id, .finish(.interrupted, at: finishDate))])
+        try await repository.writeActivityLogEvents([.update(id: activity.id, .finish(.interrupted, at: finishDate))])
         XCTAssertEqual(try entry(activity.id).state, .finished(.interrupted))
         XCTAssertEqual(try entry(activity.id).finishDatetime, finishDate)
     }
 
-    func testScopesIncludeBatchMembersAndIsolateMatchingBookIDsAcrossLibraries() async {
+    func testScopesIncludeBatchMembersAndIsolateMatchingBookIDsAcrossLibraries() async throws {
         let batch = start(kind: .batchMetadata, libraryId: "A", bookIds: [7, 9])
         let library = start(kind: .librarySummary, libraryId: "A", bookIds: [])
         let other = start(libraryId: "B", bookIds: [7])
         let global = start(libraryId: nil, bookIds: [])
-        await repository.writeActivityLogEvents([.start(batch), .start(library), .start(other), .start(global)])
+        try await repository.writeActivityLogEvents([.start(batch), .start(library), .start(other), .start(global)])
 
         XCTAssertEqual(Set(entries().map(\.id)), [batch.id, library.id, other.id, global.id])
         XCTAssertEqual(Set(entries(libraryId: "A").map(\.id)), [batch.id, library.id])
@@ -139,7 +139,7 @@ final class ActivityLogRepositoryTests: XCTestCase {
         XCTAssertTrue(entries(since: startDate.addingTimeInterval(1)).isEmpty)
     }
 
-    func testResolvesBookTitleForScopedBatchThroughBookRepository() async {
+    func testResolvesBookTitleForScopedBatchThroughBookRepository() async throws {
         let library = TestFixtures.makeLibrary()
         var book = TestFixtures.makeBook(id: 42, library: library)
         book.title = "Mapped Activity Book"
@@ -147,7 +147,7 @@ final class ActivityLogRepositoryTests: XCTestCase {
         bookRepository.getBookReturn = book
 
         let batch = start(kind: .batchMetadata, libraryId: library.id, bookIds: [book.id, 43])
-        await repository.writeActivityLogEvents([.start(batch)])
+        try await repository.writeActivityLogEvents([.start(batch)])
 
         XCTAssertNil(entries(libraryId: library.id).first?.bookTitle)
         XCTAssertFalse(bookRepository.getBookCalled)
@@ -158,10 +158,10 @@ final class ActivityLogRepositoryTests: XCTestCase {
         XCTAssertEqual(bookRepository.getBookBookIdParam, book.id)
     }
 
-    func testObservationPublishesBatchUpdatesForTheSelectedBook() async {
+    func testObservationPublishesBatchUpdatesForTheSelectedBook() async throws {
         let batch = start(kind: .batchMetadata, libraryId: "A", bookIds: [7, 9])
         let other = start(libraryId: "B", bookIds: [9])
-        await repository.writeActivityLogEvents([.start(batch), .start(other)])
+        try await repository.writeActivityLogEvents([.start(batch), .start(other)])
 
         let initial = expectation(description: "Running snapshot")
         let finished = expectation(description: "Completed snapshot")
@@ -181,7 +181,7 @@ final class ActivityLogRepositoryTests: XCTestCase {
         defer { observation.cancel() }
 
         await fulfillment(of: [initial], timeout: 5)
-        await repository.writeActivityLogEvents([.update(id: batch.id, .finish(.succeeded, at: finishDate))])
+        try await repository.writeActivityLogEvents([.update(id: batch.id, .finish(.succeeded, at: finishDate))])
         await fulfillment(of: [finished], timeout: 5)
     }
 
@@ -190,14 +190,14 @@ final class ActivityLogRepositoryTests: XCTestCase {
         let legacyStart = ActivityLogLegacyStartValue(
             type: "Get Book Metadata", request: request, startDatetime: startDate, bookId: 7, libraryId: "A"
         )
-        await repository.writeActivityLogEvents([.start(typed), .legacyStart(legacyStart)])
+        try await repository.writeActivityLogEvents([.start(typed), .legacyStart(legacyStart)])
         let legacyID = try XCTUnwrap(entries(libraryId: "A", bookId: 7).first { $0.state == .legacy }?.id)
 
         let legacyFinish = ActivityLogLegacyFinishValue(
             type: legacyStart.type, endpointURL: request.endpointURL, startDatetime: startDate,
             finishDatetime: finishDate, errMsg: "Success"
         )
-        await repository.writeActivityLogEvents([
+        try await repository.writeActivityLogEvents([
             .legacyFinish(legacyFinish),
             .update(id: legacyID, .finish(.failed, at: finishDate.addingTimeInterval(2)))
         ])
@@ -213,17 +213,63 @@ final class ActivityLogRepositoryTests: XCTestCase {
         XCTAssertNil(try entry(typed.id).finishDatetime)
     }
 
-    func testDeleteAndCleanUseRepositoryBoundary() async {
+    func testDeleteAndCleanUseRepositoryBoundary() async throws {
         let old = start(at: startDate.addingTimeInterval(-5))
         let new = start()
-        await repository.writeActivityLogEvents([.start(old), .start(new)])
+        try await repository.writeActivityLogEvents([.start(old), .start(new)])
         XCTAssertEqual(entries().map(\.id), [new.id, old.id])
 
-        await repository.removeCalibreActivity(id: new.id)
+        try await repository.writeActivityLogEvents([.remove(new.id)])
         XCTAssertEqual(entries().map(\.id), [old.id])
 
-        await repository.cleanCalibreActivities(startDatetime: startDate)
+        try await repository.writeActivityLogEvents([.prune(before: startDate), .start(old)])
         XCTAssertTrue(entries().isEmpty)
+    }
+
+    func testRecoveryOnlyInterruptsPreviousProcessAndPrunesBeforeReplayedStarts() async throws {
+        let previous = RealmActivityLogRepository(databaseService: databaseService,
+            bookRepository: bookRepository, librarySnapshotProvider: nil, ownerProcessID: "previous")
+        let running = start()
+        let paused = start(kind: .download)
+        let finished = start()
+        let stale = start(at: startDate.addingTimeInterval(-8 * 24 * 60 * 60))
+        let legacy = ActivityLogLegacyStartValue(type: "Old", request: request, startDatetime: startDate,
+                                                 bookId: 8, libraryId: "library")
+        try await previous.writeActivityLogEvents([
+            .start(running), .start(paused), .start(finished), .start(stale), .legacyStart(legacy),
+            .update(id: paused.id, .progress(.paused, revision: 1, at: finishDate)),
+            .update(id: finished.id, .finish(.succeeded, at: finishDate))
+        ])
+        let current = start()
+        let recoveredAt = finishDate.addingTimeInterval(1)
+        try await repository.writeActivityLogEvents([
+            .start(current), .recoverAndPrune(at: recoveredAt), .start(stale),
+            .update(id: paused.id, .progress(.running, revision: 2, at: recoveredAt))
+        ])
+        try await repository.writeActivityLogEvents([.recoverAndPrune(at: recoveredAt.addingTimeInterval(1))])
+
+        XCTAssertEqual(try entry(running.id).state, .finished(.interrupted))
+        XCTAssertEqual(try entry(paused.id).finishDatetime, recoveredAt)
+        XCTAssertEqual(try entry(paused.id).state, .finished(.interrupted))
+        XCTAssertEqual(try entry(paused.id).progressChanges, [.init(progress: .paused, revision: 1, date: finishDate)])
+        XCTAssertEqual(try entry(finished.id).finishDatetime, finishDate)
+        XCTAssertEqual(try entry(finished.id).state, .finished(.succeeded))
+        XCTAssertEqual(try entry(current.id).state, .inProgress(.running))
+        XCTAssertNil(try entry(current.id).finishDatetime)
+        XCTAssertFalse(entries().contains { $0.id == stale.id })
+        XCTAssertEqual(entries().filter { $0.state == .legacy }.count, 1)
+    }
+
+    func testWriteReportsMissingDatabaseConfiguration() async {
+        let unavailable = RealmActivityLogRepository(databaseService: DatabaseService(),
+            bookRepository: bookRepository, container: nil)
+        do {
+            try await unavailable.writeActivityLogEvents([.start(start())])
+            XCTFail("A missing Realm configuration must be observable")
+        } catch DatabaseBootstrapError.realmConfigurationMissing {
+        } catch {
+            XCTFail("Unexpected failure: \(error)")
+        }
     }
 
     private func start(

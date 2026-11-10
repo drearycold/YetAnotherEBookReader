@@ -48,9 +48,6 @@ final class DatabaseBootstrapper {
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
-        container.logger = CalibreActivityLogger(repository: container.activityLogRepository)
-        container.calibreServerService.logger = container.logger!
-        container.downloadManager.setup(container: container)
         try DatabaseService.metadataWriteQueue.sync {
             do {
                 try container.databaseService.openMetadataRealm(
@@ -63,6 +60,12 @@ final class DatabaseBootstrapper {
                 throw DatabaseBootstrapError.metadataRealmOpenFailed(underlying: error)
             }
         }
+
+        let activityLogger = container.logger ?? container.calibreServerService.logger
+        container.logger = activityLogger
+        container.calibreServerService.logger = activityLogger
+        container.downloadManager.setup(container: container)
+        Task { await activityLogger.maintainHistory() }
 
         container.serverManager.populateServers()
         container.libraryManager.populateLibraries()
@@ -95,7 +98,6 @@ final class DatabaseBootstrapper {
                 }
             }
         }
-        container.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
 
         migrateLegacyReadPosData()
     }

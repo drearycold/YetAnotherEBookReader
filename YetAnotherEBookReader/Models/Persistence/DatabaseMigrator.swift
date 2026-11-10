@@ -90,6 +90,10 @@ final class DatabaseMigrator {
                     // Realm adds the optional request diagnostics column. Existing request and
                     // result fields remain readable when there are no per-request diagnostics.
                 }
+                if oldSchemaVersion < 151 {
+                    // Realm adds optional process ownership, download format and transition history.
+                    // Existing nonterminal typed rows have no owner and are recovered on startup.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {
