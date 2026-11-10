@@ -463,6 +463,7 @@
 		E7226E3F2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */; };
 		E7226E402FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */; };
 		E7226E422FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E412FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift */; };
+		D4E8E7014AFE4834A6D00C2D /* ReadingStatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E8E7024AFE4834A6D00C2D /* ReadingStatisticsTests.swift */; };
 		E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */; };
 		E7226E452FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */; };
 		E7226E472FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E462FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift */; };
@@ -834,6 +835,7 @@
 		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
 		E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPerformanceSignpost.swift; sourceTree = "<group>"; };
 		E7226E412FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionSelectionTests.swift; sourceTree = "<group>"; };
+		D4E8E7024AFE4834A6D00C2D /* ReadingStatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingStatisticsTests.swift; sourceTree = "<group>"; };
 		E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookMetadataSyncWorker.swift; sourceTree = "<group>"; };
 		E7226E462FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookMetadataSyncWorkerTests.swift; sourceTree = "<group>"; };
 		E7226E482FF0BFD5009D3BB3 /* DefaultServerScopedRealmConfigurationProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultServerScopedRealmConfigurationProviderTests.swift; sourceTree = "<group>"; };
@@ -1273,6 +1275,7 @@
 				E7AD301330F0A00100AD0001 /* ShelfLayoutPlannerTests.swift */,
 				E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */,
 				E7226E412FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift */,
+				D4E8E7024AFE4834A6D00C2D /* ReadingStatisticsTests.swift */,
 				E7226E462FF0B646009D3BB3 /* BookMetadataSyncWorkerTests.swift */,
 				E7226E482FF0BFD5009D3BB3 /* DefaultServerScopedRealmConfigurationProviderTests.swift */,
 			);
@@ -2026,6 +2029,7 @@
 				2AC9D74E30A0A10000AA0001 /* PDFThemePaletteTests.swift in Sources */,
 				E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */,
 				E7226E422FEFD3C0009D3BB3 /* ReadingPositionSelectionTests.swift in Sources */,
+				D4E8E7014AFE4834A6D00C2D /* ReadingStatisticsTests.swift in Sources */,
 				E71F35D02FEBB5BC007AB0B1 /* RealmServerRepositoryTests.swift in Sources */,
 				E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */,
 				E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */,

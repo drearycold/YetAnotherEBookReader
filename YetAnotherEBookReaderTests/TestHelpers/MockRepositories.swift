@@ -350,15 +350,11 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var createInitialReaderParam: ReaderType?
     var createInitialReturn: BookDeviceReadingPosition?
 
-    var positionHistoryCalled = false
-    var positionHistoryLibraryParam: CalibreLibrary?
-    var positionHistoryBookIdParam: Int32?
-    var positionHistoryStartDateAfterParam: Date?
-    var positionHistoryReturn: [BookDeviceReadingPositionHistory] = []
+    var legacySessionsReturn: [BookDeviceReadingPositionHistory] = []
 
     var sessionsCalled = false
     var sessionsBookIdParam: String?
-    var sessionsStartDateAfterParam: Date?
+    var sessionsRangeParam: ClosedRange<Date>?
     var sessionsReturn: [BookDeviceReadingPositionHistory] = []
 
     var beginSessionCalled = false
@@ -423,18 +419,14 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         return createInitialReturn ?? TestFixtures.makeReadingPosition(id: deviceName, readerName: reader.rawValue)
     }
 
-    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
-        positionHistoryCalled = true
-        positionHistoryLibraryParam = library
-        positionHistoryBookIdParam = bookId
-        positionHistoryStartDateAfterParam = startDateAfter
-        return positionHistoryReturn
+    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
+        legacySessionsReturn
     }
 
-    func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+    func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
         sessionsCalled = true
         sessionsBookIdParam = bookId
-        sessionsStartDateAfterParam = startDateAfter
+        sessionsRangeParam = range
         return sessionsReturn
     }
 

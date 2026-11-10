@@ -685,37 +685,54 @@ class ReadingSessionManager {
         return readerInfo
     }
     
-    func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
-        guard let container = container else { return [:] }
-
-        var historyList = container.readingPositionRepository.positionHistory(
-            library: library,
-            bookId: bookId,
-            startDateAfter: startDateAfter
-        )
-        
-        if let library = library, let bookId = bookId {
-            let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
-            if let book = container.bookManager.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: container.readingPositionRepository.sessions(for: book, list: startDateAfter))
-            }
+    /// Returns detached sessions keyed by the full shelf book identity.
+    @MainActor
+    func listBookDeviceReadingPositionHistory(
+        library: CalibreLibrary? = nil,
+        bookId: Int32? = nil,
+        startingIn range: ClosedRange<Date>? = nil
+    ) -> [String: [BookDeviceReadingPositionHistory]] {
+        guard let container else { return [:] }
+        let shelf = container.bookManager.booksInShelf
+        let books: [CalibreBook]
+        if let library, let bookId {
+            let id = CalibreBook.identity(library: library, bookId: bookId)
+            guard let book = shelf[id] else { return [:] }
+            books = [book]
         } else {
-            container.bookManager.booksInShelf.forEach {
-                historyList.append(contentsOf: container.readingPositionRepository.sessions(for: $0.value, list: startDateAfter))
+            books = Array(shelf.values)
+        }
+
+        let knownLibraries = Array(container.calibreLibraries.values) + shelf.values.map(\.library)
+        let librariesByKey = knownLibraries.reduce(into: [String: [String: UUID]]()) { scopes, library in
+            scopes[library.key, default: [:]][library.id] = library.server.uuid
+        }
+        // The main Realm key has no server provenance. Even an off-shelf library can own it.
+        let legacyKeys = Set(books.compactMap { book in
+            librariesByKey[book.library.key]?.count == 1 ? book.bookPrefId : nil
+        })
+        let repository = container.readingPositionRepository
+        let legacyByKey = Dictionary(
+            grouping: repository.legacySessions(forBookIds: legacyKeys, startingIn: range),
+            by: \.bookId
+        )
+
+        return books.reduce(into: [:]) { history, book in
+            let ambiguousScope = librariesByKey[book.library.key, default: [:]].contains { libraryID, serverUUID in
+                serverUUID == book.library.server.uuid && libraryID != book.library.id
             }
-        }
-        
-        let idMap = container.bookManager.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
-            partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
-        }
-        
-        return historyList.sorted(by:{ $0.startDatetime > $1.startDatetime }).removingDuplicates().reduce(into: [:]) { partialResult, history in
-            guard let inShelfId = idMap[history.bookId] else { return }
-            
-            if partialResult[inShelfId] == nil {
-                partialResult[inShelfId] = [history]
-            } else {
-                partialResult[inShelfId]?.append(history)
+            let scoped = ambiguousScope ? [] : repository.sessions(for: book, startingIn: range)
+            let legacy = legacyKeys.contains(book.bookPrefId) ? legacyByKey[book.bookPrefId, default: []] : []
+            var seen = Set<ReadingHistorySessionID>()
+            let sessions = (scoped + legacy).sorted { first, second in
+                if first.startDatetime != second.startDatetime {
+                    return first.startDatetime > second.startDatetime
+                }
+                return (first.id.objectID, first.id.serverUUID?.uuidString ?? "")
+                    > (second.id.objectID, second.id.serverUUID?.uuidString ?? "")
+            }.filter { seen.insert($0.id).inserted }
+            if !sessions.isEmpty {
+                history[book.inShelfId] = sessions
             }
         }
     }
@@ -846,9 +863,5 @@ class ReadingSessionManager {
 
     func updatePreferredReader(for format: Format, with reader: ReaderType) {
         UserDefaults.standard.setValue(reader.rawValue, forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)")
-    }
-
-    func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
-        return BookDeviceReadingPositionHistory.getReadingStatistics(list: list, limitDays: limitDays)
     }
 }

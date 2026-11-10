@@ -169,7 +169,7 @@ final class MockAppContainerFactoryTests: XCTestCase {
             }
             return container.readingPositionRepository.sessions(
                 forBookId: book.bookPrefId,
-                list: nil
+                startingIn: nil
             ).count
         }
 

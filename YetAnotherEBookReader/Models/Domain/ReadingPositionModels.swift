@@ -65,7 +65,7 @@ struct BookReadingPositionLegacy {
 }
 */
 
-struct BookDeviceReadingPosition : Hashable, Codable {
+struct BookDeviceReadingPosition : Hashable, Codable, Sendable {
     static func == (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
         lhs.id == rhs.id
             && lhs.readerName == rhs.readerName
@@ -221,40 +221,85 @@ struct BookDeviceReadingPosition : Hashable, Codable {
 
 
 
-struct BookDeviceReadingPositionHistory : Hashable, Codable {
-    var bookId: String
-    
-    var startDatetime = Date()
-    var startPosition: BookDeviceReadingPosition?
-    var endPosition: BookDeviceReadingPosition?
-    
-    static func == (lhs: BookDeviceReadingPositionHistory, rhs: BookDeviceReadingPositionHistory) -> Bool {
-        lhs.bookId == rhs.bookId
-        && lhs.endPosition == rhs.endPosition
-        // && lhs.startPosition == rhs.startPosition
-    }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(bookId)
-        hasher.combine(endPosition)
-        // hasher.combine(startPosition)
+struct ReadingHistorySessionID: Hashable, Sendable {
+    /// A nil server UUID identifies the main Realm, which also contains legacy rows.
+    let serverUUID: UUID?
+    let objectID: String
+}
+
+struct BookDeviceReadingPositionHistory: Identifiable, Sendable {
+    let id: ReadingHistorySessionID
+    /// The persisted preference key, interpreted within the session's Realm scope.
+    let bookId: String
+    let startDatetime: Date
+    let startPosition: BookDeviceReadingPosition?
+    let endPosition: BookDeviceReadingPosition?
+
+    func elapsedSeconds(through now: Date) -> TimeInterval? {
+        let start = startDatetime.timeIntervalSince1970
+        guard let end = endPosition?.epoch,
+              start.isFinite, end.isFinite,
+              start >= 0, end >= start, end <= now.timeIntervalSince1970 else { return nil }
+        return end - start
     }
 }
 
-extension BookDeviceReadingPositionHistory {
-    static func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
-        let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
-            guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
-            let duration = epoch - history.startDatetime.timeIntervalSince1970
-            let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
-            let nowDayDate = Calendar.current.startOfDay(for: Date())
-            // Calendar days, not 86400-second spans: a DST change makes a day 23 or 25 hours long.
-            guard let daysAgo = Calendar.current.dateComponents([.day], from: readDayDate, to: nowDayDate).day else { return }
-            let offset = limitDays - daysAgo
-            if offset < 0 || offset > limitDays { return }
-            result[offset] += duration / 60
+struct ReadingStatisticsWindow {
+    let now: Date
+    let calendar: Calendar
+    let dayStarts: [Date]
+    let sessionStartRange: ClosedRange<Date>
+
+    init(now: Date, calendar: Calendar, previousDays: Int) {
+        self.now = now
+        self.calendar = calendar
+
+        var day = calendar.startOfDay(for: now)
+        var days = [day]
+        for _ in 0..<max(0, previousDays) {
+            // Use the actual previous day boundary, including days whose midnight is skipped.
+            day = calendar.startOfDay(for: day.addingTimeInterval(-1))
+            days.append(day)
         }
-        return result
+        dayStarts = Array(days.reversed())
+        sessionStartRange = day...now
+    }
+
+    var dayLabels: [String] {
+        let symbols = calendar.shortWeekdaySymbols
+        return dayStarts.dropLast().map { symbols[calendar.component(.weekday, from: $0) - 1] } + ["Today"]
+    }
+}
+
+struct ReadingStatistics {
+    let minutesByDay: [Double]
+    let minutesByBook: [String: Double]
+
+    var previousDayAverage: Double {
+        let previous = minutesByDay.dropLast()
+        return previous.isEmpty ? 0 : previous.reduce(0, +) / Double(previous.count)
+    }
+
+    var previousDayMaximum: Double { minutesByDay.dropLast().max() ?? 0 }
+
+    /// Keys are the canonical shelf book IDs. A whole session counts toward the day it starts.
+    init(window: ReadingStatisticsWindow, historyByBook: [String: [BookDeviceReadingPositionHistory]]) {
+        var days = Array(repeating: 0.0, count: window.dayStarts.count)
+        var books: [String: Double] = [:]
+        var counted = Set<ReadingHistorySessionID>()
+        for bookID in historyByBook.keys.sorted() {
+            for session in historyByBook[bookID, default: []] {
+                guard let seconds = session.elapsedSeconds(through: window.now), seconds > 0,
+                      window.sessionStartRange.contains(session.startDatetime),
+                      let day = window.dayStarts.firstIndex(of: window.calendar.startOfDay(for: session.startDatetime)),
+                      counted.insert(session.id).inserted else { continue }
+                let minutes = seconds / 60
+                days[day] += minutes
+                books[bookID, default: 0] += minutes
+            }
+        }
+        minutesByDay = days
+        minutesByBook = books
     }
 }
 

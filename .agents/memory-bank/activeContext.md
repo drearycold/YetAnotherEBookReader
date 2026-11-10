@@ -2,8 +2,48 @@
 
 ## Current Focus
 
-`codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
-placement (content right of center, top offset / drift after page turns).
+**Reading History and Reading Statistics (RH).** RH1 is implemented on
+`codex/reading-history-rh1`, based on main `f3b8c5f9` after Activity Log AL1–AL4
+merged through PR #144. RH2 is the next phase. The earlier PDF investigation
+remains documented under Current Branch Notes.
+
+## Reading History RH1 (2026-11-10)
+
+History associates each row with its canonical shelf book ID. Session identity
+uses the Realm scope and stored primary key. Only an unambiguous known library
+can receive a legacy main-Realm row. Query and aggregation share a calendar
+window of seven previous days plus today, with whole sessions counted on
+their start day. The chart and per-book totals use the same valid sessions.
+Realm schema 151 is retained. For compatibility details, test evidence and
+the RH2 handoff, see [Reader Modernization History](history/reader-modernization.md#reading-history-rh1-2026-11-10).
+
+## Refactoring Direction: Reading History and Statistics (2026-11-10)
+
+The direction assessment prioritized the history and statistics read path after
+Activity Log. Before RH1, the manager merged main and server-scoped Realm
+sessions and resolved books by `library.key - bookId`, which omits server
+identity. History values discarded the persisted session ID and deduplicated
+by book and end position. RH1 covers two servers with matching library keys
+and numeric IDs, separate sessions with the same end position, midnight and
+window overlap, DST, and time-zone changes. The product scope stays with
+shelf books, seven previous days plus today, and attribution by start day.
+
+`ReadingPositionHistoryViewModel.loadData` still combines book history, global
+statistics, chart construction and navigation on the main actor. It reloads
+on broad reader and Calibre events.
+
+RH2 should move scoped reads/aggregation into repository/service boundaries,
+separate bounded history summaries from position detail, and target observation
+instead of rebuilding everything on unrelated updates. RH3 should separate
+statistics and book-history presentation while preserving pushed navigation,
+originating workspace, position selection, file checks and all reader engines.
+
+The initial assessment used static code and existing coverage. RH1 then
+reproduced the identity and deduplication failures with Realm fixtures.
+Server settings/Helper request ownership remains the alternative to this
+workstream. Keep AppContainer and reader-engine changes scoped.
+The June roadmap's pending A26 entry is stale: its implementation is recorded
+in `history/reader-modernization.md` and present in the Readium controller.
 
 ## Activity Log AL4 (2026-11-10)
 

@@ -4,6 +4,58 @@ Archived records for Readium, FolioReader, PDF reader, reading position, highlig
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Reading History RH1 (2026-11-10)
+
+`codex/reading-history-rh1` starts at `f3b8c5f9` after AL4. The history read
+path returns detached values keyed by `CalibreBook.inShelfId`. Each session ID
+pairs the Realm scope (main or a server UUID) with the stored `_id`. History
+sorts newest first and uses that ID for deduplication and SwiftUI row identity.
+Identical end positions can belong to separate sessions. Identical primary keys
+in separate Realm files can also identify separate sessions.
+
+The main Realm retains a preference key with no server provenance. A legacy row
+can appear for a shelf book when exactly one known library has that key. Known
+libraries include configured libraries even when their books are off the shelf.
+If several known libraries share the key, the legacy row stays on disk and is
+omitted from history and statistics. Sidecar reads use the book's server UUID
+and preference key. If multiple known libraries on that server share the key,
+their sidecar rows also have ambiguous ownership. An already removed server
+cannot be recovered from a legacy row. The historical sidecar migration copied
+per-book preference Realms into server Realms, so the main Realm does not serve
+as the source for that migration.
+
+Statistics capture one clock and calendar per refresh. The inclusive query
+window runs from local midnight seven calendar days ago through that clock.
+Both the book totals and day buckets use positive, finite elapsed time from
+completed sessions whose end is at or before the clock. The whole session
+counts on its start day. A session starting before the window contributes zero,
+even if it ends inside. Today is the eighth bucket and the seven previous days
+alone determine Avg and Max, including zero-reading days. The chart and empty
+states label that range. Realm schema 151 and the session write lifecycle are
+retained.
+
+The old implementation failed three real Realm regression tests with five
+assertion failures. The final tests use a main Realm and two server-scoped
+Realms to pin ownership, legacy ambiguity and same-endpoint sessions. Repeated
+reads keep their stored IDs and contribute once. Fixed-clock tests cover both
+query bounds, midnight attribution, 23-hour and 25-hour days, time-zone
+changes, and invalid or unfinished durations.
+
+Final verification passed 277 focused unit tests and the Recent/FolioReader
+history UI journey on iPhone 17 / iOS 26.5. The same UI journey and 60 focused
+unit tests passed on iPhone 7 / iOS 15.5. The journey opens the reader from the
+history row and position detail and checks both return paths. The iOS test
+build, Mac Catalyst build, Swift parse, project lint, Realm boundary scan and
+diff checks passed. Logs and test results are in `/tmp/YabrRH1`. Full suite,
+physical-device, Release and real Calibre service verification remain outside
+this run.
+
+RH2 takes the existing per-book reads and main-actor assembly into scoped
+repository/service queries, bounds the all-time local session list, and
+narrows the events that trigger refresh. RH3 owns presentation separation
+and carries forward pushed navigation, position detail, and the originating
+reader workspace.
+
 ## Recent Changes & Decisions
 
 - **BD3 review follow-up (2026-11-08):** Browse batch confirmation starts the

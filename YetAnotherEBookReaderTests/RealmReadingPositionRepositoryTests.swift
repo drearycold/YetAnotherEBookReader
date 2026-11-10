@@ -93,7 +93,7 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         let handle = try XCTUnwrap(repository.beginSession(at: pos, forBookId: bookId))
         XCTAssertEqual(handle.bookId, bookId)
         
-        let sessionsInitially = repository.sessions(forBookId: bookId, list: nil)
+        let sessionsInitially = repository.sessions(forBookId: bookId, startingIn: nil)
         // Note: sessions() returns only those with endPosition != nil
         XCTAssertTrue(sessionsInitially.isEmpty)
         
@@ -102,9 +102,11 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         repository.endSession(handle, at: endPos)
         
         // 3. Fetch Session
-        let sessions = repository.sessions(forBookId: bookId, list: nil)
+        let sessions = repository.sessions(forBookId: bookId, startingIn: nil)
         XCTAssertEqual(sessions.count, 1)
         let firstSession = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(firstSession.id.objectID, handle.historyId)
+        XCTAssertNil(firstSession.id.serverUUID)
         let startPosition = try XCTUnwrap(firstSession.startPosition)
         let endPosition = try XCTUnwrap(firstSession.endPosition)
         XCTAssertEqual(startPosition.lastReadPage, 5)
