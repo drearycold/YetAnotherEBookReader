@@ -59,6 +59,29 @@ extension CalibreActivityLogEntry {
         } ?? []
     }
 
+    func toSummary(libraryName: String?, bookTitle: String?) -> ActivityLogSummary {
+        let detail = activityState == .legacy ? errMsg : resultDetail
+        let preview: String?
+        if let detail, !detail.isEmpty {
+            let prefix = detail.prefix(160)
+            preview = String(prefix) + (prefix.endIndex == detail.endIndex ? "" : "…")
+        } else {
+            preview = httpStatusCode.map { "HTTP \($0)" }
+        }
+        return ActivityLogSummary(
+            id: ActivityID(rawValue: id),
+            kind: kind.flatMap(ActivityLogKind.init(rawValue:)),
+            state: activityState,
+            startDatetime: startDatetime,
+            finishDatetime: finishDatetime,
+            libraryName: libraryName,
+            bookTitle: bookTitle,
+            legacyType: type,
+            downloadFormat: downloadFormat,
+            resultPreview: preview
+        )
+    }
+
     func toSnapshot(libraryName: String?, bookTitle: String?) -> ActivityLogSnapshot {
         let headers = stride(from: 0, to: requestHeaders.count - 1, by: 2).map { index in
             ActivityLogHeader(key: requestHeaders[index], value: requestHeaders[index + 1])
@@ -100,33 +123,5 @@ extension CalibreActivityLogEntry {
         httpMethod = request.httpMethod
         httpBody = request.httpBody
         requestHeaders.append(objectsIn: request.headers.flatMap { [$0.key, $0.value] })
-    }
-
-    // AL4 removes this write adapter, while keeping legacy snapshot reads.
-    convenience init(legacyStart value: ActivityLogLegacyStartValue) {
-        self.init()
-        type = value.type
-        startDatetime = value.startDatetime
-        libraryId = value.libraryId
-        if let bookId = value.bookId, bookId != 0 {
-            bookIds.append(bookId)
-        }
-        storeRequest(value.request)
-    }
-
-    func apply(_ value: ActivityLogLegacyFinishValue) {
-        finishDatetime = value.finishDatetime
-        errMsg = value.errMsg
-    }
-
-    static func legacyPredicate(matching value: ActivityLogLegacyFinishValue) -> NSPredicate {
-        let endpoint: NSObject = value.endpointURL.map { $0 as NSObject } ?? NSNull()
-        return NSPredicate(
-            format: "status == %@ AND type == %@ AND startDatetime == %@ AND endpoingURL == %@",
-            "legacy",
-            value.type,
-            value.startDatetime as NSDate,
-            endpoint
-        )
     }
 }

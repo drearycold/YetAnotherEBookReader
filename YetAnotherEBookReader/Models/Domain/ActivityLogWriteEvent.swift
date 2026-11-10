@@ -14,7 +14,7 @@ struct ActivityID: Hashable, Sendable {
     }
 }
 
-enum ActivityLogKind: String, Sendable {
+enum ActivityLogKind: String, CaseIterable, Sendable {
     case bookMetadata, batchMetadata, bookManifest, updateMetadata
     case librarySummary, search, categories, probe
     case readingPosition, annotations, helper, download
@@ -32,6 +32,11 @@ enum ActivityLogState: Equatable, Sendable {
     case inProgress(ActivityLogProgress)
     case finished(ActivityLogCompletion)
     case legacy
+
+    func elapsed(from start: Date, to finish: Date?) -> TimeInterval? {
+        guard case .finished(let completion) = self, completion != .interrupted else { return nil }
+        return finish.map { max(0, $0.timeIntervalSince(start)) }
+    }
 }
 
 enum ActivityLogErrorCategory: String, Sendable {
@@ -171,30 +176,46 @@ struct ActivityLogSnapshot: Identifiable, Equatable, Sendable {
     var progressChanges: [ActivityLogProgressChange] = []
 }
 
+struct ActivityLogFilter: Equatable, Sendable {
+    var kind: ActivityLogKind?
+    var failuresOnly = false
+
+    var isActive: Bool { kind != nil || failuresOnly }
+}
+
+struct ActivityLogQuery: Equatable, Sendable {
+    let libraryId: String?
+    let bookId: Int32?
+    let since: Date
+    var filter = ActivityLogFilter()
+}
+
+struct ActivityLogSummary: Identifiable, Equatable, Sendable {
+    let id: ActivityID
+    let kind: ActivityLogKind?
+    let state: ActivityLogState
+    let startDatetime: Date
+    let finishDatetime: Date?
+    let libraryName: String?
+    let bookTitle: String?
+    let legacyType: String?
+    let downloadFormat: String?
+    let resultPreview: String?
+
+    var duration: TimeInterval? {
+        state.elapsed(from: startDatetime, to: finishDatetime)
+    }
+}
+
+struct ActivityLogPage: Equatable, Sendable {
+    var entries: [ActivityLogSummary] = []
+    var hasMore = false
+}
+
 enum ActivityLogWriteEvent: Equatable, Sendable {
     case start(ActivityLogStartValue)
     case update(id: ActivityID, ActivityLogUpdate)
     case remove(ActivityID)
     case prune(before: Date)
     case recoverAndPrune(at: Date)
-
-    // Temporary write adapter. Remove after AL2 service and AL3 download adoption in AL4.
-    case legacyStart(ActivityLogLegacyStartValue)
-    case legacyFinish(ActivityLogLegacyFinishValue)
-}
-
-struct ActivityLogLegacyStartValue: Equatable, Sendable {
-    let type: String
-    let request: ActivityLogRequestSnapshot
-    let startDatetime: Date
-    let bookId: Int32?
-    let libraryId: String?
-}
-
-struct ActivityLogLegacyFinishValue: Equatable, Sendable {
-    let type: String
-    let endpointURL: String?
-    let startDatetime: Date
-    let finishDatetime: Date
-    let errMsg: String
 }

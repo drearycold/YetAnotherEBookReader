@@ -206,6 +206,7 @@ class MockBookRepository: BookRepositoryProtocol {
     var getBookCalled = false
     var getBookIdParam: String?
     var getBookLibraryParam: CalibreLibrary?
+    var getBookInLibraryCount = 0
     var getBookBookIdParam: Int32?
     var getBookReturn: CalibreBook?
 
@@ -256,6 +257,7 @@ class MockBookRepository: BookRepositoryProtocol {
     }
 
     func getBook(library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
+        getBookInLibraryCount += 1
         getBookCalled = true
         getBookLibraryParam = library
         getBookBookIdParam = bookId
@@ -577,21 +579,24 @@ class MockAnnotationRepository: AnnotationRepositoryProtocol, @unchecked Sendabl
     }
 }
 
-final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
-    var fetchEntriesCalled = false
-    var fetchEntriesLibraryIdParam: String?
-    var fetchEntriesBookIdParam: Int32?
-    var fetchEntriesSinceParam: Date?
-    var fetchEntriesReturn: [ActivityLogSnapshot] = []
-
-    var observeEntriesCalled = false
-    var observeEntriesLibraryIdParam: String?
-    var observeEntriesBookIdParam: Int32?
-    var observeEntriesSinceParam: Date?
-    private let observeEntriesBroadcaster = TestAsyncStreamBroadcaster<[ActivityLogSnapshot]>()
-    var observeEntriesSubscriberCount: Int {
-        observeEntriesBroadcaster.subscriberCount
+extension ActivityLogRepositoryProtocol {
+    @MainActor
+    func fetchTestSnapshots(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot] {
+        let page = fetchPage(query: .init(libraryId: libraryId, bookId: bookId, since: since), limit: 100)
+        return page.entries.compactMap { fetchDetail(id: $0.id, bookId: bookId, since: since) }
     }
+}
+
+final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
+    var page = ActivityLogPage()
+    var details: [ActivityID: ActivityLogSnapshot] = [:]
+    var pageFetches: [(query: ActivityLogQuery, limit: Int)] = []
+    var pageObservations: [(query: ActivityLogQuery, limit: Int, stream: TestAsyncStreamBroadcaster<ActivityLogPage>)] = []
+    var detailObservations: [(id: ActivityID, bookId: Int32?, since: Date,
+                              stream: TestAsyncStreamBroadcaster<ActivityLogSnapshot?>)] = []
+
+    var pageSubscriberCount: Int { pageObservations.reduce(0) { $0 + $1.stream.subscriberCount } }
+    var detailSubscriberCount: Int { detailObservations.reduce(0) { $0 + $1.stream.subscriberCount } }
 
     var writeActivityLogEventsCalled = false
     var writeActivityLogEventsParam: [ActivityLogWriteEvent] = []
@@ -600,24 +605,26 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var writeFailuresRemaining = 0
     var beforeWrite: (() async -> Void)?
 
-    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot] {
-        fetchEntriesCalled = true
-        fetchEntriesLibraryIdParam = libraryId
-        fetchEntriesBookIdParam = bookId
-        fetchEntriesSinceParam = since
-        return fetchEntriesReturn
+    @MainActor func fetchPage(query: ActivityLogQuery, limit: Int) -> ActivityLogPage {
+        pageFetches.append((query, limit))
+        return page
     }
 
-    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogSnapshot]> {
-        observeEntriesCalled = true
-        observeEntriesLibraryIdParam = libraryId
-        observeEntriesBookIdParam = bookId
-        observeEntriesSinceParam = since
-        return observeEntriesBroadcaster.stream(initialValue: fetchEntriesReturn)
+    @MainActor func observePage(query: ActivityLogQuery, limit: Int) -> AsyncStream<ActivityLogPage> {
+        let broadcaster = TestAsyncStreamBroadcaster<ActivityLogPage>()
+        pageObservations.append((query, limit, broadcaster))
+        return broadcaster.stream(initialValue: page)
     }
 
-    func sendObservedEntries(_ entries: [ActivityLogSnapshot]) {
-        observeEntriesBroadcaster.send(entries)
+    @MainActor func fetchDetail(id: ActivityID, bookId: Int32?, since: Date) -> ActivityLogSnapshot? {
+        guard let detail = details[id], detail.startDatetime >= since else { return nil }
+        return detail
+    }
+
+    @MainActor func observeDetail(id: ActivityID, bookId: Int32?, since: Date) -> AsyncStream<ActivityLogSnapshot?> {
+        let broadcaster = TestAsyncStreamBroadcaster<ActivityLogSnapshot?>()
+        detailObservations.append((id, bookId, since, broadcaster))
+        return broadcaster.stream(initialValue: fetchDetail(id: id, bookId: bookId, since: since))
     }
 
     func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async throws {

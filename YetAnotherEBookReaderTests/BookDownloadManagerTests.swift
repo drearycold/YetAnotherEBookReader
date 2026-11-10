@@ -80,7 +80,7 @@ final class BookDownloadManagerTests: XCTestCase {
         await manager.waitForActivitySubmissions()
         let persisted = await logger.flush()
         XCTAssertTrue(persisted)
-        let entries = container.activityLogRepository.fetchEntries(
+        let entries = container.activityLogRepository.fetchTestSnapshots(
             libraryId: book.library.id, bookId: book.id, since: download.startDatetime
         )
         XCTAssertEqual(entries.map(\.id), [ActivityID(rawValue: download.id.uuidString)])
@@ -158,7 +158,7 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertEqual(pdfActivity.downloadFormat, "PDF")
         XCTAssertEqual(otherActivity.libraryId, otherLibrary.id)
         XCTAssertFalse(FileManager.default.fileExists(atPath: first.savedURL.path))
-        let scoped = container.activityLogRepository.fetchEntries(
+        let scoped = container.activityLogRepository.fetchTestSnapshots(
             libraryId: book.library.id, bookId: book.id, since: first.startDatetime
         )
         XCTAssertEqual(Set(scoped.map(\.id)), [first.activityID, retry.activityID, pdf.activityID])
@@ -262,7 +262,7 @@ final class BookDownloadManagerTests: XCTestCase {
         let logger = try XCTUnwrap(container.logger)
         await manager.waitForActivitySubmissions()
         _ = await logger.flush()
-        let entries = container.activityLogRepository.fetchEntries(
+        let entries = container.activityLogRepository.fetchTestSnapshots(
             libraryId: download.book.library.id, bookId: download.book.id, since: .distantPast
         ).filter { $0.id == download.activityID }
         XCTAssertEqual(entries.count, 1)

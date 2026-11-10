@@ -104,7 +104,7 @@ final class CalibreServerContractTests: XCTestCase {
         let byFormat = try JSONDecoder().decode([String: [CalibreBookLastReadPositionEntry]].self, from: data)
         XCTAssertEqual(byFormat["\(book.id):EPUB"]?.first { $0.device == device }?.cfi, position.cfi)
         await service.logger.flushPendingActivitiesForTesting()
-        let entries = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: book.id, since: .distantPast)
+        let entries = container.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: book.id, since: .distantPast)
         XCTAssertTrue(entries.contains { $0.kind == .readingPosition &&
             $0.state == .finished(.succeeded) && $0.request.endpointURL?.contains("/book-get-last-read-position/") == true })
     }
@@ -416,7 +416,7 @@ final class CalibreServerContractTests: XCTestCase {
         }
 
         await service.logger.flushPendingActivitiesForTesting()
-        let entries = container.activityLogRepository.fetchEntries(libraryId: readOnly.id, bookId: book.id, since: .distantPast)
+        let entries = container.activityLogRepository.fetchTestSnapshots(libraryId: readOnly.id, bookId: book.id, since: .distantPast)
         let activity = try XCTUnwrap(entries.first { $0.kind == .updateMetadata })
         XCTAssertEqual(activity.state, .finished(.failed))
         XCTAssertEqual(activity.result.httpStatusCode, 403)

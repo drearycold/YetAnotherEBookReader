@@ -206,7 +206,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         // A cache hit does not create another network operation.
         _ = try await libraryCategoryService.fetchAndCacheCategory(library: mockLibrary1, category: category)
         await serverService.logger.flushPendingActivitiesForTesting()
-        let entries = container.activityLogRepository.fetchEntries(libraryId: mockLibrary1.id, bookId: nil, since: .distantPast)
+        let entries = container.activityLogRepository.fetchTestSnapshots(libraryId: mockLibrary1.id, bookId: nil, since: .distantPast)
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries.first?.kind, .categories)
         XCTAssertEqual(entries.first?.state, .finished(.succeeded))
@@ -559,7 +559,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         }
 
         await serverService.logger.flushPendingActivitiesForTesting()
-        let entries = container.activityLogRepository.fetchEntries(
+        let entries = container.activityLogRepository.fetchTestSnapshots(
             libraryId: mockLibrary1.id, bookId: nil, since: .distantPast
         )
         XCTAssertEqual(entries.count, 1)

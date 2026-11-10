@@ -196,38 +196,3 @@ final class ActivityLogBackgroundFlush {
         lease = .invalid
     }
 }
-
-// Temporary compatibility adapter. Remove with the AppContainer wrappers in AL4.
-extension CalibreActivityLogger {
-    func logStartCalibreActivity(
-        type: String,
-        request: URLRequest,
-        startDatetime: Date,
-        bookId: Int32?,
-        libraryId: String?
-    ) {
-        submit(.legacyStart(ActivityLogLegacyStartValue(
-            type: type,
-            request: ActivityLogRequestSnapshot(request: request),
-            startDatetime: startDatetime,
-            bookId: bookId,
-            libraryId: libraryId
-        )))
-    }
-
-    func logFinishCalibreActivity(
-        type: String,
-        request: URLRequest,
-        startDatetime: Date,
-        finishDatetime: Date,
-        errMsg: String
-    ) {
-        submit(.legacyFinish(ActivityLogLegacyFinishValue(
-            type: type,
-            endpointURL: ActivityLogRequestSnapshot.redactedURL(request.url),
-            startDatetime: startDatetime,
-            finishDatetime: finishDatetime,
-            errMsg: errMsg
-        )))
-    }
-}

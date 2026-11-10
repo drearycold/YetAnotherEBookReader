@@ -30,7 +30,7 @@ class CalibreActivityLogEntry: Object, Identifiable {
     @Persisted var resultDetail: String?
     @Persisted var requestDiagnosticsData: Data?
 
-    // Historical type and result text. Keep these for reading old logs after the adapter is removed.
+    // Historical type and result text for reading existing logs.
     @Persisted var type: String?
     @Persisted var errMsg: String?
 }

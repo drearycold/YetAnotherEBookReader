@@ -667,11 +667,41 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
                 seedMockBrowseCategoryCache(books: mockBooks, library: library)
             }
 
-            cleanCalibreActivities(startDatetime: Date())
-            logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookId: 1, libraryId: library.id)
+            seedMockActivityLog(book: book)
             Task { @MainActor [weak self] in
                 self?.publishCalibreUpdate(.shelf)
             }
+        }
+    }
+
+    private func seedMockActivityLog(book: CalibreBook) {
+        guard let logger else { return }
+        let date = Date()
+        let showsFixture = UITestingConfiguration.isEnabled()
+            || ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+        let pagedFixture = UITestingConfiguration.isEnabled()
+            && ProcessInfo.processInfo.arguments.contains("--ui-testing-activity-log")
+        let request = ActivityLogRequestSnapshot(
+            endpointURL: "http://calibre-server.lan:8080/ajax/books", httpMethod: "GET",
+            httpBody: nil, headers: []
+        )
+        Task {
+            await logger.cleanCalibreActivities(startDatetime: date)
+            guard showsFixture else { return }
+            for index in 1...(pagedFixture ? 35 : 1) {
+                let id = ActivityID()
+                let started = date.addingTimeInterval(Double(index) / 1000)
+                let download = index >= 34
+                let failed = index == 35
+                let fixture = ActivityLogStartValue(id: id, kind: download ? .download : .bookMetadata,
+                    request: request, startDatetime: started, libraryId: book.library.id, bookIds: [book.id],
+                    downloadFormat: download ? "EPUB" : nil)
+                let result = ActivityLogResult(httpStatusCode: failed ? 503 : 200,
+                    errorCategory: failed ? .http : nil, detail: String(format: "Activity fixture %02d", index))
+                await logger.start(fixture)
+                await logger.update(id: id, .finish(failed ? .failed : .succeeded, at: started, result: result))
+            }
+            await logger.flush()
         }
     }
 
@@ -799,26 +829,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         return url
     }
 
-    func cleanCalibreActivities(startDatetime: Date) {
-        guard let logger = logger else { return }
-        Task {
-            await logger.cleanCalibreActivities(startDatetime: startDatetime)
-        }
-    }
-
-    func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
-        guard let logger = logger else { return }
-        Task {
-            await logger.logStartCalibreActivity(type: type, request: request, startDatetime: startDatetime, bookId: bookId, libraryId: libraryId)
-        }
-    }
-
-    func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
-        guard let logger = logger else { return }
-        Task {
-            await logger.logFinishCalibreActivity(type: type, request: request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
-        }
-    }
 }
 
 private struct AppContainerEnvironmentKey: EnvironmentKey {
