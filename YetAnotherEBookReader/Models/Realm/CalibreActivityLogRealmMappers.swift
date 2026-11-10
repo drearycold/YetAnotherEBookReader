@@ -7,10 +7,12 @@ import Foundation
 import RealmSwift
 
 extension CalibreActivityLogEntry {
-    convenience init(startValue: ActivityLogStartValue) {
+    convenience init(startValue: ActivityLogStartValue, ownerProcessID: String) {
         self.init()
         id = startValue.id.rawValue
         kind = startValue.kind.rawValue
+        self.ownerProcessID = ownerProcessID
+        downloadFormat = startValue.downloadFormat
         status = ActivityLogProgress.running.rawValue
         startDatetime = startValue.startDatetime
         libraryId = startValue.libraryId
@@ -32,10 +34,13 @@ extension CalibreActivityLogEntry {
         // Terminal and legacy records are immutable through the typed API.
         guard case .inProgress = activityState else { return }
         switch update {
-        case let .progress(progress, revision):
+        case let .progress(progress, revision, date):
             guard revision > progressRevision else { return }
             progressRevision = revision
             status = progress.rawValue
+            var changes = progressChanges
+            changes.append(.init(progress: progress, revision: revision, date: date))
+            progressChangesData = try? JSONEncoder().encode(changes)
         case let .finish(completion, date, result):
             status = completion.rawValue
             finishDatetime = date
@@ -46,6 +51,12 @@ extension CalibreActivityLogEntry {
                 requestDiagnosticsData = try? JSONEncoder().encode(result.requests)
             }
         }
+    }
+
+    private var progressChanges: [ActivityLogProgressChange] {
+        progressChangesData.flatMap {
+            try? JSONDecoder().decode([ActivityLogProgressChange].self, from: $0)
+        } ?? []
     }
 
     func toSnapshot(libraryName: String?, bookTitle: String?) -> ActivityLogSnapshot {
@@ -78,7 +89,9 @@ extension CalibreActivityLogEntry {
             libraryName: libraryName,
             bookTitle: bookTitle,
             legacyType: type,
-            legacyResult: errMsg
+            legacyResult: errMsg,
+            downloadFormat: downloadFormat,
+            progressChanges: progressChanges
         )
     }
 

@@ -69,6 +69,206 @@ final class BookDownloadManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testImmediateCancellationLogsOneTerminalActivityWithTheDownloadID() async throws {
+        let book = try makeDownloadableBook(id: 998, filenamePrefix: "activity-cancel")
+        _ = try manager.requestDownload(book: book, format: .EPUB, overwrite: true).get()
+        let download = try XCTUnwrap(manager.activeDownloads.values.first)
+        manager.cancelDownload(book, format: .EPUB)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.completion, .cancelled)
+
+        let logger = try XCTUnwrap(container.logger)
+        await manager.waitForActivitySubmissions()
+        let persisted = await logger.flush()
+        XCTAssertTrue(persisted)
+        let entries = container.activityLogRepository.fetchEntries(
+            libraryId: book.library.id, bookId: book.id, since: download.startDatetime
+        )
+        XCTAssertEqual(entries.map(\.id), [ActivityID(rawValue: download.id.uuidString)])
+        XCTAssertEqual(entries.first?.kind, .download)
+        XCTAssertEqual(entries.first?.state, .finished(.cancelled))
+    }
+
+    func testPauseAndResumeRecordOneAttemptAndRejectPausedTaskCompletion() async throws {
+        let book = try makeDownloadableBook(id: 998, filenamePrefix: "activity-pause")
+        removeSavedFile(for: book, format: .EPUB)
+        let first = try beginControlledAttempt(book, status: 200)
+        defer { try? FileManager.default.removeItem(at: first.savedURL) }
+        manager.pauseDownload(book, format: .EPUB)
+
+        let oldDelegate = BookFormatDownloadDelegate(download: first, manager: manager)
+        try stage(first, delegate: oldDelegate)
+        oldDelegate.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask), didCompleteWithError: nil)
+        let paused = try await activity(for: first)
+        XCTAssertEqual(paused.state, .inProgress(.paused))
+        XCTAssertNil(paused.finishDatetime)
+        XCTAssertEqual(paused.progressChanges.map(\.revision), [1])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.savedURL.path))
+
+        XCTAssertTrue(manager.resumeDownload(book, format: .EPUB))
+        let resumed = try replaceWithStub(at: first.sourceURL, status: 200)
+        XCTAssertEqual(resumed.id, first.id)
+        let delegate = BookFormatDownloadDelegate(download: resumed, manager: manager)
+        try stage(resumed, delegate: delegate)
+        let resumedTask = try XCTUnwrap(resumed.downloadTask)
+        delegate.urlSession(URLSession.shared, task: resumedTask, didCompleteWithError: nil)
+        try await waitForCompletion(resumed)
+        delegate.urlSession(URLSession.shared, task: resumedTask, didCompleteWithError: URLError(.timedOut))
+        let finished = try await activity(for: resumed)
+        XCTAssertEqual(finished.state, .finished(.succeeded))
+        XCTAssertEqual(finished.result.httpStatusCode, 200)
+        XCTAssertEqual(finished.downloadFormat, "EPUB")
+        XCTAssertEqual(finished.progressChanges.map(\.progress), [.paused, .running])
+        XCTAssertEqual(finished.progressChanges.map(\.revision), [1, 2])
+        XCTAssertGreaterThanOrEqual(finished.progressChanges[1].date, finished.progressChanges[0].date)
+        XCTAssertEqual(manager.activeDownloads[first.sourceURL]?.completion, .succeeded)
+        XCTAssertEqual(try Data(contentsOf: resumed.savedURL), Data("ebook".utf8))
+    }
+
+    func testRetryAtAnotherAddressAndOtherFormatsKeepSeparateActivities() async throws {
+        let book = try makeDownloadableBook(id: 998, formats: [.EPUB, .PDF], filenamePrefix: "activity-retry")
+        let first = try beginControlledAttempt(book, status: 500)
+        let oldDelegate = BookFormatDownloadDelegate(download: first, manager: manager)
+        oldDelegate.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask), didCompleteWithError: nil)
+        try await waitForCompletion(first)
+        let failed = try await activity(for: first)
+        XCTAssertEqual(failed.state, .finished(.failed))
+        XCTAssertEqual(failed.result.httpStatusCode, 500)
+
+        var movedLibrary = book.library
+        movedLibrary.server.baseUrl = "http://127.0.0.1:49999"
+        let moved = try makeDownloadableBook(id: book.id, formats: [.EPUB, .PDF], library: movedLibrary)
+        XCTAssertEqual(moved.inShelfId, book.inShelfId)
+        let retry = try beginControlledAttempt(moved, status: 200)
+        XCTAssertNotEqual(first.id, retry.id)
+        XCTAssertNotEqual(first.sourceURL, retry.sourceURL)
+        let pdf = try beginControlledAttempt(moved, format: .PDF, status: 200)
+        let otherLibrary = CalibreLibrary(server: book.library.server, key: "other-log-library", name: "Other Log Library")
+        let otherBook = try makeDownloadableBook(id: book.id, library: otherLibrary)
+        let other = try beginControlledAttempt(otherBook, status: 200)
+
+        try stage(first, delegate: oldDelegate)
+        oldDelegate.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask), didCompleteWithError: nil)
+        manager.cancelDownload(moved, format: .EPUB)
+        let cancelledRetry = try await activity(for: retry)
+        XCTAssertEqual(cancelledRetry.state, .finished(.cancelled))
+        let firstAfterRetry = try await activity(for: first)
+        let pdfActivity = try await activity(for: pdf)
+        let otherActivity = try await activity(for: other)
+        XCTAssertEqual(firstAfterRetry, failed)
+        XCTAssertEqual(pdfActivity.downloadFormat, "PDF")
+        XCTAssertEqual(otherActivity.libraryId, otherLibrary.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.savedURL.path))
+        let scoped = container.activityLogRepository.fetchEntries(
+            libraryId: book.library.id, bookId: book.id, since: first.startDatetime
+        )
+        XCTAssertEqual(Set(scoped.map(\.id)), [first.activityID, retry.activityID, pdf.activityID])
+        manager.cancelDownload(moved, format: .PDF)
+        manager.cancelDownload(otherBook, format: .EPUB)
+    }
+
+    func testDownloadFailureActivityMatchesSnapshotForHTTPAndFileErrors() async throws {
+        for (index, code) in ([401, 403, 500, 200, 200, 200, nil] as [Int?]).enumerated() {
+            let book = try makeDownloadableBook(id: 990 + Int32(index), filenamePrefix: "activity-failure")
+            removeSavedFile(for: book, format: .EPUB)
+            let download = try beginControlledAttempt(book, status: code)
+            defer { try? FileManager.default.removeItem(at: download.savedURL) }
+            let fileManager = FailingDownloadFileManager()
+            if index == 4 {
+                // A failed attribute write must leave the previously cached file intact.
+                try Data("old cached file".utf8).write(to: download.savedURL)
+                fileManager.failAttributes = true
+            }
+            if index == 5 { fileManager.failedDestination = download.savedURL }
+            let delegate = BookFormatDownloadDelegate(download: download, manager: manager, fileManager: fileManager)
+            try stage(download, delegate: delegate, contents: index == 3 ? Data() : Data("ebook".utf8))
+            let error = code == nil ? URLError(.notConnectedToInternet,
+                userInfo: [NSURLErrorFailingURLStringErrorKey: "https://example.invalid/private-token"]) : nil
+            delegate.urlSession(URLSession.shared, task: try XCTUnwrap(download.downloadTask), didCompleteWithError: error)
+            try await waitForCompletion(download)
+
+            let logged = try await activity(for: download)
+            guard case .failed(let message) = manager.activeDownloads[download.sourceURL]?.completion else {
+                return XCTFail("Expected a failed download for fixture \(index)")
+            }
+            XCTAssertEqual(logged.result.detail, message)
+            XCTAssertEqual(logged.state, .finished(.failed))
+            XCTAssertEqual(logged.result.httpStatusCode, code)
+            let expected: ActivityLogErrorCategory = code == nil ? .transport : index < 2 ? .authentication : index == 2 ? .http : .file
+            XCTAssertEqual(logged.result.errorCategory, expected)
+            XCTAssertFalse(message.contains("private-token"))
+            if index == 4 {
+                XCTAssertEqual(try Data(contentsOf: download.savedURL), Data("old cached file".utf8))
+            }
+        }
+    }
+
+    func testProgressAndSuccessFromSupersededAddressDoNotMutateEitherAttempt() async throws {
+        let book = try makeDownloadableBook(id: 997, filenamePrefix: "superseded")
+        removeSavedFile(for: book, format: .EPUB)
+        let old = try beginControlledAttempt(book, status: 200)
+        var library = book.library
+        library.server.baseUrl = "http://127.0.0.1:49998"
+        let moved = try makeDownloadableBook(id: book.id, library: library)
+        let next = try beginControlledAttempt(moved, status: 200)
+        XCTAssertEqual(manager.activeDownloads[old.sourceURL]?.completion, .cancelled)
+
+        let delegate = BookFormatDownloadDelegate(download: old, manager: manager)
+        let oldTask = try XCTUnwrap(old.downloadTask)
+        delegate.urlSession(URLSession.shared, downloadTask: oldTask, didWriteData: 50,
+                            totalBytesWritten: 50, totalBytesExpectedToWrite: 100)
+        try stage(old, delegate: delegate)
+        delegate.urlSession(URLSession.shared, task: oldTask, didCompleteWithError: nil)
+        let oldActivity = try await activity(for: old)
+        XCTAssertEqual(oldActivity.state, .finished(.cancelled))
+        XCTAssertEqual(manager.activeDownloads[old.sourceURL]?.progress, 0)
+        XCTAssertEqual(manager.activeDownloads[next.sourceURL]?.progress, 0)
+        XCTAssertTrue(manager.activeDownloads[next.sourceURL]?.isDownloading == true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.savedURL.path))
+        manager.cancelDownload(moved, format: .EPUB)
+    }
+
+    private func beginControlledAttempt(_ book: CalibreBook, format: Format = .EPUB, status: Int?) throws -> BookFormatDownload {
+        _ = try manager.requestDownload(book: book, format: format, overwrite: true).get()
+        return try replaceWithStub(at: downloadURL(for: book, format: format), status: status)
+    }
+
+    private func replaceWithStub(at url: URL, status: Int?) throws -> BookFormatDownload {
+        var download = try XCTUnwrap(manager.activeDownloads[url])
+        let original = download.downloadTask
+        let response = status.map { httpResponse(url: url, statusCode: $0) }
+        download.downloadTask = StubDownloadTask(request: URLRequest(url: url), response: response)
+        manager.activeDownloads[url] = download
+        original?.cancel()
+        return download
+    }
+
+    private func stage(_ download: BookFormatDownload, delegate: BookFormatDownloadDelegate,
+                       contents: Data = Data("ebook".utf8)) throws {
+        let url = try makeTempFile(name: UUID().uuidString, contents: contents)
+        defer { try? FileManager.default.removeItem(at: url) }
+        delegate.urlSession(URLSession.shared, downloadTask: try XCTUnwrap(download.downloadTask),
+                            didFinishDownloadingTo: url)
+    }
+
+    private func waitForCompletion(_ download: BookFormatDownload) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while manager.activeDownloads[download.sourceURL]?.completion == nil, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertNotNil(manager.activeDownloads[download.sourceURL]?.completion)
+    }
+
+    private func activity(for download: BookFormatDownload) async throws -> ActivityLogSnapshot {
+        let logger = try XCTUnwrap(container.logger)
+        await manager.waitForActivitySubmissions()
+        _ = await logger.flush()
+        let entries = container.activityLogRepository.fetchEntries(
+            libraryId: download.book.library.id, bookId: download.book.id, since: .distantPast
+        ).filter { $0.id == download.activityID }
+        XCTAssertEqual(entries.count, 1)
+        return try XCTUnwrap(entries.first)
+    }
+
     func testRequestDownload_addsToActiveDownloads() throws {
         let book = try makeDownloadableBook(id: 998, filenamePrefix: "request")
         removeSavedFile(for: book, format: .EPUB)
@@ -888,5 +1088,21 @@ private final class StubDownloadTask: URLSessionDownloadTask, @unchecked Sendabl
     func completePause() {
         pauseCompletionHandler?(stubResumeData)
         pauseCompletionHandler = nil
+    }
+}
+
+
+private final class FailingDownloadFileManager: FileManager, @unchecked Sendable {
+    var failAttributes = false
+    var failedDestination: URL?
+
+    override func setAttributes(_ attributes: [FileAttributeKey: Any], ofItemAtPath path: String) throws {
+        if failAttributes { throw CocoaError(.fileWriteNoPermission) }
+        try super.setAttributes(attributes, ofItemAtPath: path)
+    }
+
+    override func moveItem(at srcURL: URL, to dstURL: URL) throws {
+        if dstURL == failedDestination { throw CocoaError(.fileWriteNoPermission) }
+        try super.moveItem(at: srcURL, to: dstURL)
     }
 }

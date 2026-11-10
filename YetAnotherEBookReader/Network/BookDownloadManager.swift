@@ -39,6 +39,7 @@ class BookDownloadManager {
     @MainActor
     private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
+    @MainActor private var lastActivitySubmission: Task<Void, Never>?
     var container: AppContainerProtocol?
     @MainActor
     var sessionConfiguration: URLSessionConfiguration = .default
@@ -91,30 +92,73 @@ class BookDownloadManager {
         _ = requestDownload(book: book, format: format)
     }
 
+    // MainActor publishes snapshots immediately. Each task waits only for the previous
+    // submission to be accepted by the logger, independently of disk I/O.
+    @MainActor
+    private func submitActivity(_ event: ActivityLogWriteEvent) {
+        guard let logger = container?.logger else { return }
+        let previous = lastActivitySubmission
+        lastActivitySubmission = Task {
+            await previous?.value
+            await logger.submit(event)
+        }
+    }
+
+    @MainActor
+    func waitForActivitySubmissions() async {
+        await lastActivitySubmission?.value
+    }
+
+    @MainActor
+    private func recordProgress(at url: URL, _ progress: ActivityLogProgress) {
+        guard var download = activeDownloads[url], download.completion == nil else { return }
+        download.activityRevision += 1
+        activeDownloads[url] = download
+        submitActivity(.update(id: download.activityID, .progress(progress, revision: download.activityRevision)))
+    }
+
+    @MainActor
+    fileprivate func completeDownload(at url: URL, completion: BookFormatDownload.Completion, result: ActivityLogResult) {
+        guard var download = activeDownloads[url], download.completion == nil else { return }
+        download.isDownloading = false
+        download.isPausing = false
+        download.isPaused = false
+        download.resumeData = nil
+        download.completion = completion
+
+        var result = result
+        let terminal: ActivityLogCompletion
+        switch completion {
+        case .succeeded:
+            terminal = .succeeded
+        case .failed(let message):
+            terminal = .failed
+            result.detail = message
+        case .cancelled:
+            terminal = .cancelled
+            download.progress = 0
+        }
+        activeDownloads[url] = download
+        submitActivity(.update(id: download.activityID, .finish(terminal, at: Date(), result: result)))
+    }
+
     @MainActor
     func cancelDownload(_ book: CalibreBook, format: Format) {
-        guard let download = activeDownloads.filter({
-                    $1.book.inShelfId == book.inShelfId && $1.format == format
-            && $1.isActive
-        }).first else {
-            return
-        }
-        
-        download.value.downloadTask?.cancel()
-        
-        if let request = download.value.downloadTask?.originalRequest {
-            container?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: download.value.startDatetime, finishDatetime: Date(), errMsg: "Cancelled")
-        }
+        guard let download = activeDownloads.first(where: {
+            $0.value.book.inShelfId == book.inShelfId && $0.value.format == format && $0.value.isActive
+        }) else { return }
 
-        activeDownloads[download.key]?.isDownloading = false
-        activeDownloads[download.key]?.isPausing = false
-        activeDownloads[download.key]?.isPaused = false
-        activeDownloads[download.key]?.progress = 0.0
-        activeDownloads[download.key]?.resumeData = nil
-        activeDownloads[download.key]?.completion = .cancelled
+        cancelAttempt(at: download.key, download: download.value)
         publishDownloadSnapshot()
     }
-    
+
+    @MainActor
+    private func cancelAttempt(at url: URL, download: BookFormatDownload) {
+        let status = (download.downloadTask?.response as? HTTPURLResponse)?.statusCode
+        completeDownload(at: url, completion: .cancelled, result: .init(httpStatusCode: status))
+        download.downloadTask?.cancel()
+    }
+
     @MainActor
     func pauseDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
@@ -126,17 +170,14 @@ class BookDownloadManager {
         activeDownloads[download.key]?.isDownloading = false
         activeDownloads[download.key]?.isPausing = true
         activeDownloads[download.key]?.isPaused = true
+        recordProgress(at: download.key, .paused)
         publishDownloadSnapshot()
         
         download.value.downloadTask?.cancel(byProducingResumeData: { [weak self] resumeData in
             Task { @MainActor in
-                guard let self else { return }
-                if let currentTask = self.activeDownloads[download.key]?.downloadTask,
-                   let pausedTask = download.value.downloadTask,
-                   currentTask !== pausedTask {
-                    return
-                }
-                guard self.activeDownloads[download.key]?.completion == nil else { return }
+                guard let self, let current = self.activeDownloads[download.key],
+                      current.id == download.value.id, current.completion == nil, current.isPausing,
+                      current.downloadTask === download.value.downloadTask else { return }
                 self.activeDownloads[download.key]?.isDownloading = false
                 self.activeDownloads[download.key]?.isPausing = false
                 self.activeDownloads[download.key]?.isPaused = true
@@ -145,15 +186,12 @@ class BookDownloadManager {
             }
         })
         
-        if let request = download.value.downloadTask?.originalRequest {
-            container?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: download.value.startDatetime, finishDatetime: Date(), errMsg: "Paused")
-        }
     }
-    
+
     @MainActor
     func resumeDownload(_ book: CalibreBook, format: Format) -> Bool {
         guard let bookFormatDownloadIndex = activeDownloads.firstIndex (where: {
-                $1.book.inShelfId == book.inShelfId && $1.format == format && ($1.resumeData != nil || $1.isPaused)
+                $1.book.inShelfId == book.inShelfId && $1.format == format && $1.completion == nil && ($1.resumeData != nil || $1.isPaused)
         }) else {
             cancelDownload(book, format: format)
             return false
@@ -180,11 +218,8 @@ class BookDownloadManager {
         activeDownloads[bookFormatDownload.sourceURL]?.isPaused = false
         activeDownloads[bookFormatDownload.sourceURL]?.resumeData = nil
         activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
+        recordProgress(at: bookFormatDownload.sourceURL, .running)
         publishDownloadSnapshot()
-
-        if let request = downloadTask.originalRequest {
-            container?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, finishDatetime: Date(), errMsg: "Resumed")
-        }
 
         downloadTask.resume()
 
@@ -206,7 +241,8 @@ class BookDownloadManager {
             return .failure(.invalidURL)
         }
 
-        defaultLog.info("prepare downloadURL: \(url.absoluteString)")
+        let diagnosticURL = ActivityLogRequestSnapshot.redactedURL(url) ?? ""
+        defaultLog.info("prepare downloadURL: \(diagnosticURL)")
         
         guard let savedURL = getSavedUrl(book: book, format: format) else {
             return .failure(.missingSavedURL)
@@ -232,11 +268,7 @@ class BookDownloadManager {
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
         let downloadTask = downloadSession.downloadTask(with: url)
         
-        if let request = downloadTask.originalRequest {
-            container?.logStartCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, bookId: book.id, libraryId: book.library.id)
-        }
-
-        if book.library.server.username.count > 0 && book.library.server.password.count > 0 {
+        if let host = url.host, !book.library.server.username.isEmpty, !book.library.server.password.isEmpty {
             var authMethod = NSURLAuthenticationMethodDefault
             if url.scheme == "http" {
                 authMethod = NSURLAuthenticationMethodHTTPDigest
@@ -244,7 +276,7 @@ class BookDownloadManager {
             if url.scheme == "https" {
                 authMethod = NSURLAuthenticationMethodHTTPBasic
             }
-            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+            let protectionSpace = URLProtectionSpace.init(host: host,
                                                           port: url.port ?? 0,
                                                           protocol: url.scheme,
                                                           realm: "calibre",
@@ -258,17 +290,27 @@ class BookDownloadManager {
             }
         }
         
-        activeDownloads[url]?.downloadTask?.cancel()
+        for (oldURL, oldDownload) in activeDownloads.filter({
+            $0.value.isActive && ($0.key == url || ($0.value.book.inShelfId == book.inShelfId && $0.value.format == format))
+        }) {
+            cancelAttempt(at: oldURL, download: oldDownload)
+        }
         
         bookFormatDownload.isDownloading = true
         bookFormatDownload.downloadTask = downloadTask
         
         activeDownloads[url] = bookFormatDownload
+        let request = downloadTask.originalRequest ?? URLRequest(url: url)
+        submitActivity(.start(.init(
+            id: bookFormatDownload.activityID, kind: .download, request: .init(request: request),
+            startDatetime: bookFormatDownload.startDatetime, libraryId: book.library.id,
+            bookIds: [book.id], downloadFormat: format.rawValue
+        )))
         publishDownloadSnapshot()
         
         downloadTask.resume()
         
-        defaultLog.info("start downloadURL: \(url.absoluteString)")
+        defaultLog.info("start downloadURL: \(diagnosticURL)")
         
         return .success(())
     }
@@ -316,6 +358,8 @@ struct BookFormatDownload {
 
     /// A retry is a new download; pause/resume retains the same identity.
     var id = UUID()
+    var activityRevision = 0
+    var activityID: ActivityID { ActivityID(rawValue: id.uuidString) }
     var completion: Completion?
     var isDownloading = false
     var isPaused = false
@@ -339,168 +383,140 @@ struct BookFormatDownload {
     }
 }
 
-struct DownloadError: Error {
-    let msg: String
-}
+class BookFormatDownloadDelegate: CalibreServerDiagnosticTaskDelegate, URLSessionDownloadDelegate {
+    private struct StagedFile {
+        let url: URL
+        let size: UInt64
+    }
 
-class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadDelegate {
-    private var defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookFormatDownloadDelegate")
+    private static let saveFailure = "The downloaded file could not be saved. Please try again."
+    private let fileManager: FileManager
+    private let started = DispatchTime.now().uptimeNanoseconds
+    private let download: BookFormatDownload
+    private weak var manager: BookDownloadManager?
+    // URLSession delivers file and completion callbacks on its serial delegate queue.
+    private var stagedFile: StagedFile?
+    private var stagingFailure: String?
 
-    var download: BookFormatDownload
-    weak var manager: BookDownloadManager?
-    
-    var isFileExist = false
-    var fileSize = UInt64.zero
-    private var stagedURL: URL?
-    
-    init(download: BookFormatDownload, manager: BookDownloadManager) {
+    init(download: BookFormatDownload, manager: BookDownloadManager, fileManager: FileManager = .default) {
         self.download = download
         self.manager = manager
+        self.fileManager = fileManager
         super.init(download.book.library.server)
     }
-    
+
     deinit {
-        if let stagedURL { try? FileManager.default.removeItem(at: stagedURL) }
+        if let stagedFile { try? fileManager.removeItem(at: stagedFile.url) }
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: location.path)
+            let attributes = try fileManager.attributesOfItem(atPath: location.path)
             guard let size = attributes[.size] as? NSNumber, size.uint64Value > 0 else {
-                throw DownloadError(msg: "Empty file")
+                stagingFailure = "The server returned an empty file."
+                return
             }
-            // URLSession removes its temporary file after this callback. Keep a private copy until
-            // the main actor validates the HTTP result, download identity and cancellation state.
+            // The URLSession temporary file expires at callback return. Commit its private
+            // staging file only after checking that this task still owns the download.
             let staging = download.savedURL.deletingLastPathComponent()
                 .appendingPathComponent(".\(UUID().uuidString).download")
-            try FileManager.default.moveItem(at: location, to: staging)
-            stagedURL = staging
-            fileSize = size.uint64Value
-            isFileExist = true
+            try fileManager.moveItem(at: location, to: staging)
+            stagedFile = StagedFile(url: staging, size: size.uint64Value)
         } catch {
-            self.defaultLog.error("file error: \(error.localizedDescription)")
+            stagingFailure = Self.saveFailure
         }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let response = task.response,
-           let httpResponse = response as? HTTPURLResponse,
-           (200...299).contains(httpResponse.statusCode),
-           error == nil, isFileExist {
-            Task { @MainActor [self] in
-                defer { discardStagedFile() }
-                guard let manager = self.manager, let container = manager.container,
-                      let current = manager.activeDownloads[download.sourceURL],
-                      current.id == download.id, current.isActive else { return }
-                if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
-                   currentTask !== task {
-                    return
-                }
-                guard manager.activeDownloads[self.download.sourceURL]?.completion == nil else { return }
+        let response = task.response as? HTTPURLResponse
+        let urlError = error as? URLError
+        // A challenge can precede a successful login. Use it only when URLSession cancels
+        // without a final response, as it does when credentials are rejected.
+        let status = response?.statusCode ?? (urlError?.code == .cancelled ? authenticationStatusCode : nil)
+        let request = ActivityLogRequestSnapshot(request: task.currentRequest ?? task.originalRequest ?? URLRequest(url: download.sourceURL))
+        let responseURL = ActivityLogRequestSnapshot.redactedURL(response?.url)
+        let duration = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
+        let diagnostic = ActivityLogRequestDiagnostic(
+            request: request, responseURL: responseURL == request.endpointURL ? nil : responseURL,
+            httpStatusCode: status, duration: duration
+        )
+        let staged = stagedFile
+        let stagingFailure = self.stagingFailure
+        stagedFile = nil
 
-                do {
-                    if let stagedURL {
-                        if FileManager.default.fileExists(atPath: download.savedURL.path) {
-                            _ = try FileManager.default.replaceItemAt(download.savedURL, withItemAt: stagedURL)
-                        } else {
-                            try FileManager.default.moveItem(at: stagedURL, to: download.savedURL)
-                        }
-                        try FileManager.default.setAttributes([.modificationDate: download.modificationDate], ofItemAtPath: download.savedURL.path)
-                    }
-                } catch {
-                    manager.activeDownloads[download.sourceURL]?.isDownloading = false
-                    manager.activeDownloads[download.sourceURL]?.isPausing = false
-                    manager.activeDownloads[download.sourceURL]?.isPaused = false
-                    manager.activeDownloads[download.sourceURL]?.resumeData = nil
-                    manager.activeDownloads[download.sourceURL]?.completion = .failed("The downloaded file could not be saved. Please try again.")
-                    manager.publishDownloadSnapshot()
-                    return
-                }
-                let book = container.bookRepository.getBook(id: download.book.inShelfId) ?? download.book
-                container.bookManager.addedCache(book: book, format: self.download.format)
-                manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
-                manager.activeDownloads[self.download.sourceURL]?.isPausing = false
-                manager.activeDownloads[self.download.sourceURL]?.isPaused = false
-                manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
-                manager.activeDownloads[self.download.sourceURL]?.completion = .succeeded
-                manager.publishDownloadSnapshot()
+        Task { @MainActor [self] in
+            defer { if let staged { try? fileManager.removeItem(at: staged.url) } }
+            guard let manager, let current = manager.activeDownloads[download.sourceURL],
+                  isCurrent(current, for: task) else { return }
 
-                let updatedBook = container.bookRepository.getBook(id: book.inShelfId) ?? book
-                container.publishCalibreUpdate(.book(updatedBook))
-
-                guard let request = task.originalRequest else { return }
-                let logger = container.logger
-                let startDatetime = self.download.startDatetime
-                let format = self.download.format
-                let fileSize = self.fileSize
-                Task {
-                    await logger?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(fileSize)")
-                }
-            }
-        } else {
-            Task { @MainActor [self] in
-                defer { discardStagedFile() }
-                guard let manager = self.manager, let container = manager.container,
-                      manager.activeDownloads[download.sourceURL]?.id == download.id,
-                      let request = task.originalRequest
-                       else { return }
-                if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
-                   currentTask !== task {
-                    return
-                }
-                guard manager.activeDownloads[self.download.sourceURL]?.completion == nil else { return }
-
-                let nsError = error as NSError?
-                if manager.activeDownloads[self.download.sourceURL]?.isPaused == true,
-                   nsError?.domain == NSURLErrorDomain,
-                   nsError?.code == NSURLErrorCancelled {
-                    return
-                }
-
-                manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
-                manager.activeDownloads[self.download.sourceURL]?.isPausing = false
-                manager.activeDownloads[self.download.sourceURL]?.isPaused = false
-                manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
-                let message: String
-                if let error {
-                    message = error.localizedDescription
-                } else if let response = task.response as? HTTPURLResponse,
-                          !(200...299).contains(response.statusCode) {
-                    message = "Server returned HTTP \(response.statusCode)."
+            let completion: BookFormatDownload.Completion
+            var result = ActivityLogResult(httpStatusCode: status, requests: [diagnostic])
+            if let status, !(200...299).contains(status) {
+                result.errorCategory = status == 401 || status == 403 ? .authentication : .http
+                completion = .failed("Server returned HTTP \(status).")
+            } else if error != nil {
+                if urlError?.code == .cancelled {
+                    completion = .cancelled
                 } else {
-                    message = "The downloaded file could not be saved."
+                    result.errorCategory = .transport
+                    let message = urlError.map { URLError($0.code).localizedDescription } ?? "The download failed."
+                    completion = .failed(message)
                 }
-                manager.activeDownloads[self.download.sourceURL]?.completion = .failed(message)
-                manager.publishDownloadSnapshot()
+            } else if response == nil {
+                result.errorCategory = .transport
+                completion = .failed("The server did not return an HTTP response.")
+            } else if let staged {
+                do {
+                    try commit(staged)
+                    completion = .succeeded
+                    result.detail = "Saved \(staged.size) bytes."
+                } catch {
+                    result.errorCategory = .file
+                    completion = .failed(Self.saveFailure)
+                }
+            } else {
+                result.errorCategory = .file
+                completion = .failed(stagingFailure ?? Self.saveFailure)
+            }
 
-                let logger = container.logger
-                let startDatetime = self.download.startDatetime
-                let format = self.download.format
-                let errDescription = error?.localizedDescription
-                Task {
-                    await logger?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: errDescription))")
-                }
+            if completion == .succeeded, let container = manager.container {
+                let book = container.bookRepository.getBook(id: download.book.inShelfId) ?? download.book
+                container.bookManager.addedCache(book: book, format: download.format)
+                manager.completeDownload(at: download.sourceURL, completion: completion, result: result)
+                manager.publishDownloadSnapshot()
+                container.publishCalibreUpdate(.book(container.bookRepository.getBook(id: book.inShelfId) ?? book))
+            } else {
+                manager.completeDownload(at: download.sourceURL, completion: completion, result: result)
+                manager.publishDownloadSnapshot()
             }
         }
-    }
-    
-    private func discardStagedFile() {
-        if let stagedURL { try? FileManager.default.removeItem(at: stagedURL) }
-        stagedURL = nil
+        if session !== URLSession.shared { session.finishTasksAndInvalidate() }
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
-        
-        guard let manager = manager else { return }
+    private func isCurrent(_ current: BookFormatDownload, for task: URLSessionTask) -> Bool {
+        current.id == download.id && current.isDownloading && current.completion == nil
+            && (current.downloadTask == nil || current.downloadTask === task)
+    }
 
-        Task { @MainActor in
-            if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
-               currentTask !== downloadTask {
-                return
-            }
-            guard progress > (manager.activeDownloads[self.download.sourceURL]?.progress ?? 0.0) + 0.01 else { return }
-            manager.activeDownloads[self.download.sourceURL]?.progress = progress
+    private func commit(_ staged: StagedFile) throws {
+        // Set the metadata before replacing anything so a failed attribute write leaves
+        // the existing cached book intact. Keep the staged metadata during replacement.
+        try fileManager.setAttributes([.modificationDate: download.modificationDate], ofItemAtPath: staged.url.path)
+        if fileManager.fileExists(atPath: download.savedURL.path) {
+            _ = try fileManager.replaceItemAt(download.savedURL, withItemAt: staged.url, options: .usingNewMetadataOnly)
+        } else {
+            try fileManager.moveItem(at: staged.url, to: download.savedURL)
+        }
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        let progress = min(Float(totalBytesWritten) / Float(totalBytesExpectedToWrite), 1)
+        Task { @MainActor [self] in
+            guard let manager, let current = manager.activeDownloads[download.sourceURL],
+                  isCurrent(current, for: downloadTask), progress > current.progress + 0.01 else { return }
+            manager.activeDownloads[download.sourceURL]?.progress = progress
             manager.publishDownloadSnapshot()
         }
     }

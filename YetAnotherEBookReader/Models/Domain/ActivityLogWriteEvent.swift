@@ -20,7 +20,7 @@ enum ActivityLogKind: String, Sendable {
     case readingPosition, annotations, helper, download
 }
 
-enum ActivityLogProgress: String, Sendable {
+enum ActivityLogProgress: String, Codable, Sendable {
     case running, paused
 }
 
@@ -125,6 +125,18 @@ struct ActivityLogRequestSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+enum ActivityLogRetention {
+    static func cutoff(at date: Date = Date()) -> Date {
+        date.addingTimeInterval(-7 * 24 * 60 * 60)
+    }
+}
+
+struct ActivityLogProgressChange: Codable, Equatable, Sendable {
+    let progress: ActivityLogProgress
+    let revision: Int
+    let date: Date
+}
+
 struct ActivityLogStartValue: Equatable, Sendable {
     let id: ActivityID
     let kind: ActivityLogKind
@@ -132,11 +144,12 @@ struct ActivityLogStartValue: Equatable, Sendable {
     let startDatetime: Date
     let libraryId: String?
     let bookIds: Set<Int32>
+    var downloadFormat: String?
 }
 
 enum ActivityLogUpdate: Equatable, Sendable {
     // A start has revision 0. Callers order progress updates with increasing revisions.
-    case progress(ActivityLogProgress, revision: Int)
+    case progress(ActivityLogProgress, revision: Int, at: Date = Date())
     case finish(ActivityLogCompletion, at: Date, result: ActivityLogResult = .init())
 }
 
@@ -154,11 +167,16 @@ struct ActivityLogSnapshot: Identifiable, Equatable, Sendable {
     let bookTitle: String?
     let legacyType: String?
     let legacyResult: String?
+    var downloadFormat: String?
+    var progressChanges: [ActivityLogProgressChange] = []
 }
 
 enum ActivityLogWriteEvent: Equatable, Sendable {
     case start(ActivityLogStartValue)
     case update(id: ActivityID, ActivityLogUpdate)
+    case remove(ActivityID)
+    case prune(before: Date)
+    case recoverAndPrune(at: Date)
 
     // Temporary write adapter. Remove after AL2 service and AL3 download adoption in AL4.
     case legacyStart(ActivityLogLegacyStartValue)

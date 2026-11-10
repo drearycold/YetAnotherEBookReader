@@ -990,6 +990,49 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("p3-explicit-read-after-return")
     }
 
+    func testRealDownloadFailureRetryPauseResumeAndCancellation() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DOWNLOAD_READ_CONTROL_URL"] == nil,
+                      "Requires the real-calibre download-control proxy")
+        connect(name: "AL3 Download Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        element("browse.book.mock").tap()
+        element("screen.book-detail")
+        waitForReadLabel("Download and Read")
+
+        try downloadMode("fail_once")
+        element("book-detail.read").tap()
+        XCTAssertTrue(app.alerts["Error Download Book"].waitForExistence(timeout: 20), app.debugDescription)
+        app.alerts.buttons.firstMatch.tap()
+        waitForReadLabel("Download and Read")
+
+        try downloadMode("slow")
+        element("book-detail.read").tap()
+        openFilesMenu()
+        element("Pause EPUB Download").tap()
+        openFilesMenu()
+        let resume = element("Resume EPUB Download")
+        waitForEnabled(resume)
+        resume.tap()
+        element("reader.folio.content")
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+
+        clearDownloadedFiles()
+        try downloadMode("slow")
+        element("book-detail.read").tap()
+        element("book-detail.cancel-download").tap()
+        waitForReadLabel("Download and Read")
+        XCTAssertFalse(app.webViews["reader.folio.content"].waitForExistence(timeout: 9))
+
+        let logs = app.buttons["Activity Logs"].firstMatch
+        reveal(logs, maxDrags: 28)
+        logs.tap()
+        XCTAssertTrue(app.navigationBars["Activity Logs"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Cancelled"].firstMatch.waitForExistence(timeout: 10))
+    }
+
     func testPreviewLifecycleAndFormatActionsPreserveReadingPosition() throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_PREVIEW_CONTROL_URL"] == nil,
                       "Requires the BD3 loopback manifest fixture")

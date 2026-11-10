@@ -578,10 +578,8 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
         // A later workspace focus change must not redirect the original read request.
         viewModel.targetWorkspaceID = UUID()
-        try FileManager.default.createDirectory(at: savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("EPUB".utf8).write(to: savedURL)
         let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
-        delegate.isFileExist = true
+        try stageReadDownload(download, task: task, delegate: delegate)
         delegate.urlSession(URLSession.shared, task: task, didCompleteWithError: nil)
         await waitUntil { !requests.isEmpty }
 
@@ -666,7 +664,7 @@ class BookDetailViewModelTests: XCTestCase {
         let second = try controlledDownload(for: book)
         XCTAssertNotEqual(first.id, second.id)
         XCTAssertNil(viewModel.alertItem)
-        failed.isFileExist = true
+        try stageReadDownload(first, task: XCTUnwrap(first.downloadTask), delegate: failed)
         failed.urlSession(URLSession.shared, task: try XCTUnwrap(first.downloadTask), didCompleteWithError: nil)
         await Task.yield()
         XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
@@ -753,12 +751,11 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, book.inShelfId)
     }
 
-    func testSuccessfulSignalWithMissingFileDoesNotOpenAndAllowsRetry() async throws {
+    func testCompletionWithoutStagedFileDoesNotOpenAndAllowsRetry() async throws {
         let book = try makeDownloadReadBook()
         viewModel.readBook(book: book)
         let download = try controlledDownload(for: book)
         let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
-        delegate.isFileExist = true
         delegate.urlSession(URLSession.shared, task: try XCTUnwrap(download.downloadTask), didCompleteWithError: nil)
         await waitUntil { !self.viewModel.isWaitingToRead(book) }
         XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
@@ -963,12 +960,21 @@ class BookDetailViewModelTests: XCTestCase {
         return download
     }
 
+    private func stageReadDownload(_ download: BookFormatDownload, task: URLSessionDownloadTask,
+                                   delegate: BookFormatDownloadDelegate) throws {
+        let directory = download.savedURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporary = directory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try Data("EPUB".utf8).write(to: temporary)
+        delegate.urlSession(URLSession.shared, downloadTask: task, didFinishDownloadingTo: temporary)
+    }
+
     private func completeReadDownload(_ download: BookFormatDownload) async throws {
-        try FileManager.default.createDirectory(at: download.savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("EPUB".utf8).write(to: download.savedURL)
+        let task = try XCTUnwrap(download.downloadTask)
         let delegate = BookFormatDownloadDelegate(download: download, manager: mockAppContainer.downloadManager)
-        delegate.isFileExist = true
-        delegate.urlSession(URLSession.shared, task: try XCTUnwrap(download.downloadTask), didCompleteWithError: nil)
+        try stageReadDownload(download, task: task, delegate: delegate)
+        delegate.urlSession(URLSession.shared, task: task, didCompleteWithError: nil)
         await Task.yield()
         await waitUntil { self.mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion != nil }
         XCTAssertNotNil(mockAppContainer.downloadManager.activeDownloads[download.sourceURL]?.completion)

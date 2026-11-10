@@ -123,7 +123,7 @@ extension CalibreServerService {
 
 /// Keep an HTTP authentication challenge's status when URLSession cancels after rejection.
 /// This delegate is per request and follows the shared delegate's credential/retry policy.
-final class CalibreServerDiagnosticTaskDelegate: CalibreServerTaskDelegate {
+class CalibreServerDiagnosticTaskDelegate: CalibreServerTaskDelegate {
     private let lock = NSLock()
     private var statusCode: Int?
 

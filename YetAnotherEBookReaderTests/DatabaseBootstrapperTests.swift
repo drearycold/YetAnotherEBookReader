@@ -12,6 +12,7 @@
 
 import XCTest
 import RealmSwift
+import UIKit
 @testable import YetAnotherEBookReader
 
 @MainActor
@@ -209,7 +210,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
         XCTAssertEqual(try schemaVersionAtURL(fileURL), 149)
         try databaseService.prepareProductionConfiguration(fileURL: fileURL) { _ in }
         try databaseService.openMainRealm(conf: XCTUnwrap(databaseService.realmConf))
-        XCTAssertEqual(try schemaVersionAtURL(fileURL), 150)
+        XCTAssertEqual(try schemaVersionAtURL(fileURL), DatabaseSchema.version)
 
         let repository = RealmActivityLogRepository(
             databaseService: databaseService, bookRepository: MockBookRepository(), container: nil
@@ -226,6 +227,134 @@ final class DatabaseBootstrapperTests: XCTestCase {
         XCTAssertEqual(legacy.legacyResult, "Success")
         XCTAssertEqual(databaseService.realm?.object(ofType: FolioReaderPreferenceRealm.self,
                                                        forPrimaryKey: "Saved AL1 Profile")?.currentFont, "Avenir")
+    }
+
+    func testSchema150PreservesDiagnosticsAndRecoversUnownedTypedRows() async throws {
+        let previousConfiguration = Realm.Configuration.defaultConfiguration
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Activity150-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            databaseService.reset(clearConfiguration: true)
+            Realm.Configuration.defaultConfiguration = previousConfiguration
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let fileURL = directory.appendingPathComponent("activity.realm")
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let diagnostic = ActivityLogRequestDiagnostic(
+            request: .init(endpointURL: "https://calibre.local/ajax/books", httpMethod: "GET", httpBody: nil, headers: []),
+            responseURL: nil, httpStatusCode: 200, duration: 0.25
+        )
+        let requestData = try JSONEncoder().encode([diagnostic])
+        try autoreleasepool {
+            let realm = try Realm(configuration: Realm.Configuration(
+                fileURL: fileURL, schemaVersion: 150,
+                objectTypes: [CalibreActivityLogEntryAtSchema150.self, FolioReaderPreferenceRealm.self]
+            ))
+            let schema = try XCTUnwrap(realm.schema[CalibreActivityLogEntryAtSchema150.className()])
+            XCTAssertNotNil(schema["requestDiagnosticsData"])
+            XCTAssertNil(schema["ownerProcessID"])
+            try realm.write {
+                for (id, kind, status) in [("al2", "librarySummary", "succeeded"),
+                                           ("running", "search", "running"), ("legacy", nil, "legacy")] {
+                    let entry = CalibreActivityLogEntryAtSchema150()
+                    entry.id = id
+                    entry.kind = kind
+                    entry.status = status
+                    entry.startDatetime = date
+                    if id == "al2" {
+                        entry.finishDatetime = date.addingTimeInterval(1)
+                        entry.requestDiagnosticsData = requestData
+                    } else if id == "legacy" {
+                        entry.errMsg = "OK"
+                    }
+                    realm.add(entry)
+                }
+                let profile = FolioReaderPreferenceRealm()
+                profile.id = "Saved AL2 Profile"
+                profile.currentFont = "Avenir"
+                realm.add(profile)
+            }
+        }
+
+        XCTAssertEqual(try schemaVersionAtURL(fileURL), 150)
+        try databaseService.prepareProductionConfiguration(fileURL: fileURL) { _ in }
+        try databaseService.openMainRealm(conf: XCTUnwrap(databaseService.realmConf))
+        XCTAssertEqual(try schemaVersionAtURL(fileURL), 151)
+        let repository = RealmActivityLogRepository(databaseService: databaseService,
+                                                     bookRepository: MockBookRepository(), container: nil)
+        let recoveredAt = date.addingTimeInterval(30)
+        try await repository.writeActivityLogEvents([.recoverAndPrune(at: recoveredAt)])
+        let entries = Dictionary(uniqueKeysWithValues: repository.fetchEntries(
+            libraryId: nil, bookId: nil, since: date
+        ).map { ($0.id.rawValue, $0) })
+        XCTAssertEqual(entries["al2"]?.result.requests, [diagnostic])
+        XCTAssertEqual(entries["al2"]?.state, .finished(.succeeded))
+        XCTAssertEqual(entries["running"]?.state, .finished(.interrupted))
+        XCTAssertEqual(entries["running"]?.finishDatetime, recoveredAt)
+        XCTAssertEqual(entries["legacy"]?.state, .legacy)
+        XCTAssertEqual(entries["legacy"]?.legacyResult, "OK")
+        XCTAssertEqual(databaseService.realm?.object(ofType: FolioReaderPreferenceRealm.self,
+                                                     forPrimaryKey: "Saved AL2 Profile")?.currentFont, "Avenir")
+    }
+
+    func testBackgroundFlushWaitsForLastSceneAndRunsOncePerTransition() async {
+        let repository = MockActivityLogRepository()
+        let logger = CalibreActivityLogger(repository: repository, flushDelayNanoseconds: 60_000_000_000)
+        container.logger = logger
+        let ended = expectation(description: "Background execution lease ended")
+        let identifier = UIBackgroundTaskIdentifier(rawValue: 42)
+        var starts = 0
+        container.activityLogBackgroundFlush = ActivityLogBackgroundFlush(begin: { _ in
+            starts += 1
+            return identifier
+        }, end: {
+            XCTAssertEqual($0, identifier)
+            ended.fulfill()
+        })
+        let first = UUID()
+        let second = UUID()
+        container.markAppSceneActive(id: first)
+        container.markAppSceneActive(id: second)
+        container.markAppSceneBackground(id: first)
+        XCTAssertEqual(starts, 0)
+        container.setActivityLogApplicationBackgrounded(true)
+        XCTAssertEqual(starts, 0)
+        container.markAppSceneBackground(id: second)
+        XCTAssertEqual(starts, 1)
+        await fulfillment(of: [ended], timeout: 5)
+        container.setActivityLogApplicationBackgrounded(true)
+        XCTAssertEqual(starts, 1)
+        guard case .recoverAndPrune = repository.writeActivityLogBatches.last?.last else {
+            return XCTFail("Expected a persisted background maintenance event")
+        }
+        container.setActivityLogApplicationBackgrounded(false)
+    }
+
+    func testBackgroundExpirationReleasesLeaseOnce() async {
+        let identifier = UIBackgroundTaskIdentifier(rawValue: 43)
+        var expiration: (() -> Void)?
+        var releases = [UIBackgroundTaskIdentifier]()
+        let coordinator = ActivityLogBackgroundFlush(begin: {
+            expiration = $0
+            return identifier
+        }, end: { releases.append($0) })
+        let started = expectation(description: "Flush work started")
+        let completed = expectation(description: "Flush work returned")
+        var releaseWork: AsyncStream<Void>.Continuation?
+        let gate = AsyncStream<Void> { releaseWork = $0 }
+        defer { releaseWork?.finish() }
+        coordinator.setBackgrounded(true)
+        coordinator.requestIfNeeded(hasActiveScenes: false) {
+            started.fulfill()
+            for await _ in gate {}
+            completed.fulfill()
+        }
+        await fulfillment(of: [started], timeout: 5)
+        expiration?()
+        expiration?()
+        releaseWork?.finish()
+        await fulfillment(of: [completed], timeout: 5)
+        XCTAssertEqual(releases, [identifier])
     }
 
     /// The main Realm open inside `bootstrap` is a `do/try/catch/throw`
@@ -452,6 +581,36 @@ private final class CalibreActivityLogEntryAtSchema149: Object {
     @Persisted var httpStatusCode: Int?
     @Persisted var errorCategory: String?
     @Persisted var resultDetail: String?
+
+    // Historical type and result text. Keep these for reading old logs after the adapter is removed.
+    @Persisted var type: String?
+    @Persisted var errMsg: String?
+}
+
+// The AL2 table as shipped at schema 150.
+private final class CalibreActivityLogEntryAtSchema150: Object {
+    override class func _realmIgnoreClass() -> Bool { true }
+    override class func _realmObjectName() -> String { "CalibreActivityLogEntry" }
+
+    @Persisted(primaryKey: true) var id = UUID().uuidString
+    @Persisted var kind: String?
+    @Persisted var status = "legacy"
+    @Persisted var progressRevision = 0
+
+    @Persisted var startDatetime = Date.distantPast
+    @Persisted var finishDatetime: Date?
+    @Persisted var libraryId: String?
+    @Persisted var bookIds: List<Int32>
+
+    @Persisted var endpoingURL: String?
+    @Persisted var httpMethod: String?
+    @Persisted var httpBody: Data?
+    @Persisted var requestHeaders: List<String> // Alternating keys and values.
+
+    @Persisted var httpStatusCode: Int?
+    @Persisted var errorCategory: String?
+    @Persisted var resultDetail: String?
+    @Persisted var requestDiagnosticsData: Data?
 
     // Historical type and result text. Keep these for reading old logs after the adapter is removed.
     @Persisted var type: String?

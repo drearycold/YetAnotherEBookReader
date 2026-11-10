@@ -11,13 +11,21 @@ import os.log
 
 enum DatabaseSchema {
     // Independent of CFBundleVersion. Increment only for schema or data migrations.
-    static let version: UInt64 = 150
+    static let version: UInt64 = 151
 }
 
 class DatabaseService: ObservableObject {
     static let metadataWriteQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
 
-    @Published var realmConf: Realm.Configuration?
+    private let configurationLock = NSLock()
+    private var configuration: Realm.Configuration?
+
+    // Bootstrap replaces this value while background repositories take snapshots.
+    var realmConf: Realm.Configuration? {
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        return configuration
+    }
     @Published var realm: Realm?
     var metadataRealm: Realm?
     
@@ -52,7 +60,13 @@ class DatabaseService: ObservableObject {
     }
 
     func configure(conf: Realm.Configuration) {
-        self.realmConf = conf
+        setConfiguration(conf)
+    }
+
+    private func setConfiguration(_ configuration: Realm.Configuration?) {
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        self.configuration = configuration
     }
 
     func setup(conf: Realm.Configuration) {
@@ -82,7 +96,7 @@ class DatabaseService: ObservableObject {
         realm = nil
         metadataRealm = nil
         if clearConfiguration {
-            realmConf = nil
+            setConfiguration(nil)
         }
     }
 }

@@ -90,6 +90,14 @@ struct ActivityDetailView: View {
                     LabeledActivityValue(title: "Result", value: detail)
                 }
             }
+            if !entry.progressChanges.isEmpty {
+                Section("Progress") {
+                    ForEach(entry.progressChanges, id: \.revision) { change in
+                        LabeledActivityValue(title: change.progress == .paused ? "Paused" : "Resumed",
+                                             value: change.date.formatted(date: .long, time: .complete))
+                    }
+                }
+            }
             if entry.result.requests.isEmpty {
                 Section("Request") {
                     requestValues(entry.request)
@@ -151,7 +159,9 @@ extension ActivityLogSnapshot {
         case .readingPosition: return String(localized: "Reading Position")
         case .annotations: return String(localized: "Annotations")
         case .helper: return String(localized: "DSReader Helper")
-        case .download: return String(localized: "Download")
+        case .download:
+            if let format = downloadFormat { return String(localized: "Download \(format)") }
+            return String(localized: "Download")
         case nil: return legacyType ?? String(localized: "Unknown Type")
         }
     }
