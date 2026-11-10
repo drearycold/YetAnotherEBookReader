@@ -56,6 +56,16 @@ narrows the events that trigger refresh. RH3 owns presentation separation
 and carries forward pushed navigation, position detail, and the originating
 reader workspace.
 
+### PR #145 CI follow-up
+
+The first hosted unit-test run failed six assertions in the schema 150
+migration test. The mock container's queued startup maintenance could read
+the test's replacement Realm configuration and prune the fixed-date fixture
+using the current clock. Forcing that ordering reproduced the six failures
+locally. The test now opens its migration fixture through a separate
+`DatabaseService`. Its explicit recovery still runs at the fixture's fixed
+time. [First CI run](https://github.com/drearycold/YetAnotherEBookReader/actions/runs/42802341319)
+
 ## Recent Changes & Decisions
 
 - **BD3 review follow-up (2026-11-08):** Browse batch confirmation starts the

@@ -230,6 +230,8 @@ final class DatabaseBootstrapperTests: XCTestCase {
     }
 
     func testSchema150PreservesDiagnosticsAndRecoversUnownedTypedRows() async throws {
+        // Isolate the migration from the mock container's asynchronous startup maintenance.
+        let databaseService = DatabaseService()
         let previousConfiguration = Realm.Configuration.defaultConfiguration
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Activity150-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
