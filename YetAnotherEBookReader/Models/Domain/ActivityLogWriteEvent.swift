@@ -42,14 +42,22 @@ struct ActivityLogResult: Equatable, Sendable {
     var httpStatusCode: Int?
     var errorCategory: ActivityLogErrorCategory?
     var detail: String?
+    var requests: [ActivityLogRequestDiagnostic] = []
 }
 
-struct ActivityLogHeader: Equatable, Sendable {
+struct ActivityLogRequestDiagnostic: Codable, Equatable, Sendable {
+    let request: ActivityLogRequestSnapshot
+    let responseURL: String?
+    let httpStatusCode: Int?
+    let duration: TimeInterval
+}
+
+struct ActivityLogHeader: Codable, Equatable, Sendable {
     let key: String
     let value: String
 }
 
-struct ActivityLogRequestSnapshot: Equatable, Sendable {
+struct ActivityLogRequestSnapshot: Codable, Equatable, Sendable {
     let endpointURL: String?
     let httpMethod: String?
     let httpBody: Data?
@@ -64,13 +72,56 @@ struct ActivityLogRequestSnapshot: Equatable, Sendable {
 
     init(request: URLRequest) {
         self.init(
-            endpointURL: request.url?.absoluteString,
+            endpointURL: Self.redactedURL(request.url),
             httpMethod: request.httpMethod,
-            httpBody: request.httpBody,
+            httpBody: Self.bodyPreview(request.httpBody),
             headers: (request.allHTTPHeaderFields ?? [:]).sorted { $0.key < $1.key }.map {
-                ActivityLogHeader(key: $0.key, value: $0.value)
+                let value = Self.safeHeaders.contains($0.key.lowercased()) ? String($0.value.prefix(256)) : "[redacted]"
+                return ActivityLogHeader(key: $0.key, value: value)
             }
         )
+    }
+
+    private static let safeHeaders: Set<String> = ["accept", "accept-encoding", "content-type", "content-length", "range"]
+    private static let safeQueryItems: Set<String> = [
+        "ids", "library_id", "sort", "sort_order", "num", "offset", "category_urls", "action"
+    ]
+    private static let bodyLimit = 4096
+
+    static func redactedURL(_ url: URL?) -> String? {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else { return nil }
+        components.user = nil
+        components.password = nil
+        components.fragment = nil
+        if let query = components.queryItems {
+            components.queryItems = query.map { item in
+                guard item.value != nil, !safeQueryItems.contains(item.name.lowercased()) else { return item }
+                return URLQueryItem(name: item.name, value: "[redacted]")
+            }
+        }
+        return components.string
+    }
+
+    private static func bodyPreview(_ body: Data?) -> Data? {
+        guard let body, !body.isEmpty else { return nil }
+        // Request bodies may contain arbitrary annotations, reading data or plugin credentials.
+        // Keep only bounded structural diagnostics. Never copy raw body text into the log.
+        guard body.count <= bodyLimit, let json = try? JSONSerialization.jsonObject(with: body),
+              let preview = try? JSONSerialization.data(withJSONObject: redactedJSON(json), options: [.sortedKeys]),
+              preview.count <= bodyLimit else {
+            return Data("Body omitted (\(body.count) bytes)".utf8)
+        }
+        return preview
+    }
+
+    private static func redactedJSON(_ value: Any) -> Any {
+        if let fields = value as? [String: Any] {
+            return fields.mapValues(redactedJSON)
+        }
+        if let items = value as? [Any] {
+            return items.map(redactedJSON)
+        }
+        return value is NSNull ? NSNull() : "[redacted]"
     }
 }
 

@@ -214,10 +214,13 @@ actor LibrarySearchService {
         var finalTask = task
         if task.booksListUrl.isHTTP {
             do {
-                let (data, _) = try await service.validatedData(from: task.booksListUrl, server: library.server)
-                try Task.checkCancellation()
-
-                finalTask.ajaxSearchResult = try service.decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: data)
+                finalTask.ajaxSearchResult = try await service.withRequestActivity(
+                    .search, request: URLRequest(url: task.booksListUrl), server: library.server, libraryId: library.id
+                ) { data, response in
+                    try Task.checkCancellation()
+                    try service.requireJSON(response)
+                    return try service.decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: data)
+                }
             } catch is CancellationError {
                 throw SearchError.cancelled
             } catch {

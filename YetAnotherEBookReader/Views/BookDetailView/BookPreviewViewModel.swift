@@ -13,23 +13,34 @@ final class BookPreviewViewModel: ObservableObject, Identifiable {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     @Published private(set) var contentsState: ContentsState = .loading
-    private let loadManifest: () async throws -> Data
+    private let loadRemoteContents: () async throws -> ContentsState
     private let loadLocalContents: () async throws -> String
     private var contentsTask: Task<Void, Never>?
     private var requestID: UUID?
 
-    init(book: CalibreBook, readerInfo: ReaderInfo,
+    convenience init(book: CalibreBook, readerInfo: ReaderInfo,
          loadManifest: @escaping () async throws -> Data,
          loadLocalContents: @escaping () async throws -> String) {
+        self.init(book: book, readerInfo: readerInfo,
+                  loadRemoteContents: { Self.parseManifest(try await loadManifest()) },
+                  loadLocalContents: loadLocalContents)
+    }
+
+    private init(book: CalibreBook, readerInfo: ReaderInfo,
+                 loadRemoteContents: @escaping () async throws -> ContentsState,
+                 loadLocalContents: @escaping () async throws -> String) {
         self.book = book
         self.readerInfo = readerInfo
-        self.loadManifest = loadManifest
+        self.loadRemoteContents = loadRemoteContents
         self.loadLocalContents = loadLocalContents
     }
 
     convenience init(container: AppContainer, book: CalibreBook, readerInfo: ReaderInfo) {
         self.init(book: book, readerInfo: readerInfo,
-            loadManifest: { try await container.calibreServerService.getBookManifest(book: book, format: readerInfo.format) },
+            loadRemoteContents: {
+                let manifest = try await container.calibreServerService.getBookManifestContents(book: book, format: readerInfo.format)
+                return Self.contentsState(manifest)
+            },
             loadLocalContents: { try await Self.localContents(url: readerInfo.url) })
     }
 
@@ -47,7 +58,7 @@ final class BookPreviewViewModel: ObservableObject, Identifiable {
         contentsState = .loading
         let local = book.library.server.isLocal
         let savedManifest = book.formats[readerInfo.format.rawValue]?.manifest
-        let loadManifest = loadManifest
+        let loadRemoteContents = loadRemoteContents
         let loadLocalContents = loadLocalContents
         contentsTask = Task { [weak self] in
             let result: ContentsState
@@ -59,7 +70,7 @@ final class BookPreviewViewModel: ObservableObject, Identifiable {
                     result = .loaded(text)
                 } else {
                     do {
-                        result = Self.parseManifest(try await loadManifest())
+                        result = try await loadRemoteContents()
                     } catch {
                         try Task.checkCancellation()
                         // A downloaded book is also previewable without its server.
@@ -86,49 +97,24 @@ final class BookPreviewViewModel: ObservableObject, Identifiable {
     }
 
     static func parseManifest(_ data: Data) -> ContentsState {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            return .failed("The server returned an invalid table of contents. Please try again.")
-        }
-        if root["aborted"] as? Bool == true || (root["traceback"] as? String)?.isEmpty == false {
-            return .failed("The server could not generate the table of contents. Please try again.")
-        }
-        if let status = root["job_status"] as? String {
-            if ["waiting", "running", "working"].contains(status) { return .generating }
-            if ["failed", "error"].contains(status) { return .failed("The server could not generate the table of contents. Please try again.") }
-        }
-        guard let toc = root["toc"], !(toc is NSNull) else { return .empty }
-        guard let node = toc as? [String: Any] else {
-            return .failed("The server returned an invalid table of contents. Please try again.")
-        }
-        do {
-            let text = try contents(node: node, level: 0, includeTitle: false)
-            return text.isEmpty ? .empty : .loaded(text)
-        } catch {
-            return .failed("The server returned an invalid table of contents. Please try again.")
-        }
+        contentsState(CalibreBookManifestContents(data: data))
     }
 
-    private enum ContentsError: Error { case invalid }
-
-    private static func contents(node: [String: Any], level: Int, includeTitle: Bool) throws -> String {
-        guard level < 64 else { throw ContentsError.invalid }
-        var text = ""
-        if let title = node["title"], !(title is String), !(title is NSNull) { throw ContentsError.invalid }
-        if includeTitle, let title = node["title"] as? String, !title.isEmpty {
-            text = String(repeating: "  ", count: max(0, level - 1)) + title + "\n"
+    private static func contentsState(_ manifest: CalibreBookManifestContents) -> ContentsState {
+        switch manifest {
+        case .loaded(let text): return .loaded(text)
+        case .empty: return .empty
+        case .generating: return .generating
+        case .invalid: return .failed("The server returned an invalid table of contents. Please try again.")
+        case .rejected: return .failed("The server could not generate the table of contents. Please try again.")
         }
-        if let value = node["children"] {
-            guard let children = value as? [[String: Any]] else { throw ContentsError.invalid }
-            for child in children { text += try contents(node: child, level: level + 1, includeTitle: true) }
-        }
-        return text
     }
 
     /// Use the same publication parser as the Readium reader, without creating a reader/session.
     static func localContents(url: URL) async throws -> String {
         let client = DefaultHTTPClient()
         let retriever = AssetRetriever(httpClient: client)
-        guard let absoluteURL = url.anyURL.absoluteURL else { throw ContentsError.invalid }
+        guard let absoluteURL = url.anyURL.absoluteURL else { throw URLError(.badURL) }
         let asset = try await retriever.retrieve(url: absoluteURL).get()
         try Task.checkCancellation()
         let opener = PublicationOpener(parser: DefaultPublicationParser(

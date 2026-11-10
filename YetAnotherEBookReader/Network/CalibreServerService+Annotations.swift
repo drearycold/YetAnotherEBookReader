@@ -15,16 +15,25 @@ extension CalibreServerService {
         }
 
         do {
-            let (data, _) = try await validatedData(from: annotationsUrl, server: task.library.server)
-            var resultTask = task
-            resultTask.annotationsData = data
-            do {
-                resultTask.booksAnnotationsEntry = try JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
-            } catch {
-                resultTask.booksError.formUnion(task.books)
-                resultTask.error = CalibreAPIError(error: error)
+            let (result, _): (CalibreBooksTask, CalibreAPIError?) = try await withRequestActivity(
+                .annotations, request: URLRequest(url: annotationsUrl), server: task.library.server,
+                libraryId: task.library.id, bookIds: Set(task.books), resultError: { $0.1 }
+            ) { data, response in
+                var result = task
+                result.annotationsData = data
+                do {
+                    try requireJSON(response)
+                    result.booksAnnotationsEntry = try decodePayload([String: CalibreBookAnnotationsResult].self, from: data)
+                    // The task can already carry a metadata error. This activity covers annotations only.
+                    return (result, nil)
+                } catch {
+                    let annotationError = CalibreAPIError(error: error)
+                    result.booksError.formUnion(task.books)
+                    result.error = annotationError
+                    return (result, annotationError)
+                }
             }
-            return resultTask
+            return result
         } catch {
             var resultTask = task
             resultTask.error = CalibreAPIError(error: error)
@@ -64,28 +73,18 @@ extension CalibreServerService {
     }
 
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) async -> CalibreBookUpdateAnnotationsTask {
-        await logger.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
-
-        var resultTask = task
+        var result = task
         do {
-            let (data, response) = try await validatedData(for: task.urlRequest, server: task.library.server)
-            resultTask.urlResponse = response
-            resultTask.data = data
+            (result.data, result.urlResponse) = try await withRequestActivity(
+                .annotations, request: task.urlRequest, server: task.library.server,
+                libraryId: task.library.id, bookIds: [task.bookId]
+            ) { data, response in
+                try validateMutationResponse(data, response: response)
+                return (data, response)
+            }
         } catch {
-            resultTask.error = CalibreAPIError(error: error)
+            result.error = CalibreAPIError(error: error)
         }
-
-        let logErrMsg: String
-        if let calibreError = resultTask.error {
-            logErrMsg = calibreError.localizedDescription
-        } else if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
-            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
-        } else {
-            logErrMsg = "Unknown"
-        }
-        await logger.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
-
-        return resultTask
+        return result
     }
-
 }

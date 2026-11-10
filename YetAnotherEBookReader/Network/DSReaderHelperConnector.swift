@@ -83,28 +83,43 @@ struct DSReaderHelperConnector {
             throw URLError(.badURL)
         }
 
-        return try await refreshConfiguration(from: url)
+        let result: (Data, Error?) = try await calibreServerService.withRequestActivity(
+            .helper, request: URLRequest(url: url), server: server, resultError: { $0.1 }
+        ) { data, response in
+            do {
+                try calibreServerService.requireJSON(response)
+                _ = try decodeConfiguration(data, requiresPluginPreferences: true)
+                return (data, nil)
+            } catch {
+                // The legacy settings UI separately reports an unreadable configuration.
+                return (data, error)
+            }
+        }
+        return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: result.0)
     }
 
-    private func refreshConfiguration(from url: URL) async throws -> (id: String, port: Int, data: Data) {
-        let request = URLRequest(url: url)
-        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
-        return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: data)
-    }
-
-    func refreshConfiguration(_ libraryKey: String) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
+    func refreshConfiguration(_ libraryKey: String, libraryId: String? = nil) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
         guard let url = endpointConfigurationV1(libraryKey: libraryKey)?.url else {
             throw URLError(.badURL)
         }
 
-        let request = URLRequest(url: url)
-        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
-        let config = try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
-
-        return (config, data)
+        return try await calibreServerService.withRequestActivity(
+            .helper, request: URLRequest(url: url), server: server, libraryId: libraryId
+        ) { data, response in
+            try calibreServerService.requireJSON(response)
+            return (try decodeConfiguration(data, requiresPluginPreferences: libraryKey == "_"), data)
+        }
     }
 
-    func addToShelf(goodreads_id: String, shelfName: String) async throws {
+    private func decodeConfiguration(_ data: Data, requiresPluginPreferences: Bool) throws -> CalibreDSReaderHelperConfiguration {
+        let config = try calibreServerService.decodePayload(CalibreDSReaderHelperConfiguration.self, from: data)
+        if requiresPluginPreferences && config.dsreader_helper_prefs == nil {
+            throw CalibreAPIError.serverRejected(nil)
+        }
+        return config
+    }
+
+    func addToShelf(goodreads_id: String, shelfName: String, book: CalibreBook? = nil) async throws {
         guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
             throw CalibreAPIError.invalidURL("addToShelf")
         }
@@ -114,11 +129,10 @@ struct DSReaderHelperConnector {
             throw CalibreAPIError.invalidURL("addToShelf")
         }
 
-        let request = URLRequest(url: url)
-        _ = try await calibreServerService.validatedData(for: request, server: server)
+        try await submitGoodreadsJob(url: url, book: book)
     }
 
-    func removeFromShelf(goodreads_id: String, shelfName: String) async throws {
+    func removeFromShelf(goodreads_id: String, shelfName: String, book: CalibreBook? = nil) async throws {
         guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
             throw CalibreAPIError.invalidURL("removeFromShelf")
         }
@@ -128,11 +142,10 @@ struct DSReaderHelperConnector {
             throw CalibreAPIError.invalidURL("removeFromShelf")
         }
 
-        let request = URLRequest(url: url)
-        _ = try await calibreServerService.validatedData(for: request, server: server)
+        try await submitGoodreadsJob(url: url, book: book)
     }
 
-    func updateReadingProgress(goodreads_id: String, progress: Double) async throws {
+    func updateReadingProgress(goodreads_id: String, progress: Double, book: CalibreBook? = nil) async throws {
         guard var endpointBaseUrl = endpointBaseUrlPrecent(goodreads_id: goodreads_id) else {
             throw CalibreAPIError.invalidURL("updateReadingProgress")
         }
@@ -142,8 +155,22 @@ struct DSReaderHelperConnector {
             throw CalibreAPIError.invalidURL("updateReadingProgress")
         }
 
-        let request = URLRequest(url: url)
-        _ = try await calibreServerService.validatedData(for: request, server: server)
+        try await submitGoodreadsJob(url: url, book: book)
+    }
+    private func submitGoodreadsJob(url: URL, book: CalibreBook?) async throws {
+        try await calibreServerService.withRequestActivity(
+            .helper, request: URLRequest(url: url), server: server,
+            libraryId: book?.library.id, bookIds: book.map { Set([$0.id]) } ?? []
+        ) { data, _ in
+            // The Helper responds with a plain-text job ID or an error such as "-1".
+            let reply = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if reply == "-1" || reply.hasPrefix("missing ") {
+                throw CalibreAPIError.serverRejected(nil)
+            }
+            guard let jobId = Int(reply), jobId >= 0 else {
+                throw CalibreAPIError.unsupportedPayload
+            }
+        }
     }
 
 }

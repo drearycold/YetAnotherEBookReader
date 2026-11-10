@@ -42,6 +42,9 @@ extension CalibreActivityLogEntry {
             httpStatusCode = result.httpStatusCode
             errorCategory = result.errorCategory?.rawValue
             resultDetail = result.detail
+            if !result.requests.isEmpty {
+                requestDiagnosticsData = try? JSONEncoder().encode(result.requests)
+            }
         }
     }
 
@@ -49,6 +52,9 @@ extension CalibreActivityLogEntry {
         let headers = stride(from: 0, to: requestHeaders.count - 1, by: 2).map { index in
             ActivityLogHeader(key: requestHeaders[index], value: requestHeaders[index + 1])
         }
+        let diagnostics = requestDiagnosticsData.flatMap {
+            try? JSONDecoder().decode([ActivityLogRequestDiagnostic].self, from: $0)
+        } ?? []
         return ActivityLogSnapshot(
             id: ActivityID(rawValue: id),
             kind: kind.flatMap(ActivityLogKind.init(rawValue:)),
@@ -58,7 +64,8 @@ extension CalibreActivityLogEntry {
             result: ActivityLogResult(
                 httpStatusCode: httpStatusCode,
                 errorCategory: errorCategory.flatMap(ActivityLogErrorCategory.init(rawValue:)),
-                detail: resultDetail
+                detail: resultDetail,
+                requests: diagnostics
             ),
             request: ActivityLogRequestSnapshot(
                 endpointURL: endpoingURL,

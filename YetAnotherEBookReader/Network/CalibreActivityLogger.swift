@@ -101,7 +101,7 @@ extension CalibreActivityLogger {
     ) {
         enqueue(.legacyFinish(ActivityLogLegacyFinishValue(
             type: type,
-            endpointURL: request.url?.absoluteString,
+            endpointURL: ActivityLogRequestSnapshot.redactedURL(request.url),
             startDatetime: startDatetime,
             finishDatetime: finishDatetime,
             errMsg: errMsg

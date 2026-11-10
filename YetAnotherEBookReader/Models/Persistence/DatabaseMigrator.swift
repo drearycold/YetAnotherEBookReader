@@ -86,6 +86,10 @@ final class DatabaseMigrator {
                         }
                     }
                 }
+                if oldSchemaVersion < 150 {
+                    // Realm adds the optional request diagnostics column. Existing request and
+                    // result fields remain readable when there are no per-request diagnostics.
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         if let publicUrl = oldObject!["publicUrl"] as? String {

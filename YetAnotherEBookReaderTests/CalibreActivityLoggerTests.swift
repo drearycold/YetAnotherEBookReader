@@ -52,7 +52,7 @@ final class CalibreActivityLoggerTests: XCTestCase {
         XCTAssertEqual(startValue.libraryId, "library")
         XCTAssertEqual(startValue.request.endpointURL, "http://calibre.local/ajax/books")
         XCTAssertEqual(startValue.request.httpMethod, "POST")
-        XCTAssertEqual(startValue.request.httpBody, Data("body".utf8))
+        XCTAssertEqual(startValue.request.httpBody, Data("Body omitted (4 bytes)".utf8))
         XCTAssertTrue(startValue.request.headers.contains(ActivityLogHeader(key: "Content-Type", value: "application/json")))
 
         XCTAssertEqual(finishValue.type, "Sync")
@@ -85,6 +85,31 @@ final class CalibreActivityLoggerTests: XCTestCase {
         await logger.flushPendingActivitiesForTesting()
 
         XCTAssertEqual(repository.writeActivityLogEventsParam, [.start(start), .update(id: id, pause), .update(id: id, finish)])
+    }
+
+    func testRequestSnapshotRedactsCredentialsAndBoundsPayload() throws {
+        var request = URLRequest(url: try XCTUnwrap(URL(string:
+            "https://user:password@calibre.local/ajax/books?ids=7&api_key=secret&q=private#fragment")))
+        request.setValue("Bearer credential", forHTTPHeaderField: "Authorization")
+        request.setValue("session=credential", forHTTPHeaderField: "Cookie")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"nested":{"token":"secret"},"notes":["private",123]}"#.utf8)
+
+        let snapshot = ActivityLogRequestSnapshot(request: request)
+        let endpoint = try XCTUnwrap(snapshot.endpointURL)
+        XCTAssertTrue(endpoint.contains("ids=7"))
+        for sensitive in ["user:", "password", "secret", "private", "#fragment"] {
+            XCTAssertFalse(endpoint.contains(sensitive))
+        }
+        XCTAssertEqual(snapshot.headers.map(\.value), ["[redacted]", "application/json", "[redacted]"])
+        let body = String(decoding: try XCTUnwrap(snapshot.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("nested"))
+        XCTAssertFalse(body.contains("secret"))
+        XCTAssertFalse(body.contains("private"))
+        XCTAssertFalse(body.contains("123"))
+
+        request.httpBody = Data(repeating: 65, count: 50_000)
+        XCTAssertEqual(ActivityLogRequestSnapshot(request: request).httpBody, Data("Body omitted (50000 bytes)".utf8))
     }
 
     func testLoggerDelegatesDeleteAndClean() async throws {

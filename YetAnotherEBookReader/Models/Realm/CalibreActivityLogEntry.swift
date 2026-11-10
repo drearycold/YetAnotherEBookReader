@@ -25,6 +25,7 @@ class CalibreActivityLogEntry: Object, Identifiable {
     @Persisted var httpStatusCode: Int?
     @Persisted var errorCategory: String?
     @Persisted var resultDetail: String?
+    @Persisted var requestDiagnosticsData: Data?
 
     // Historical type and result text. Keep these for reading old logs after the adapter is removed.
     @Persisted var type: String?

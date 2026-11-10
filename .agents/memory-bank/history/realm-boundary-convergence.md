@@ -4,6 +4,73 @@ Archived records for Realm boundary shrinkage, repository ownership, mapper extr
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Activity Log AL2 (2026-11-09)
+
+`CalibreServerService.withActivity` gives each service operation an ActivityID.
+The owner finishes the activity after validating and parsing the response,
+including errors returned inside task values. The HTTP layer records each
+request's status before mapping 401/403 to `authFailed`, and keeps the last
+authentication challenge status when URLSession cancels. Request timings
+use a monotonic clock. AL2 treats a parsed pending manifest as a successful
+status retrieval and a rejected or malformed manifest as a failure.
+
+Schema 150 adds optional per-request diagnostics to the main Realm.
+A migrated 149 row still exposes its AL1 request and result, and legacy rows
+still expose their original request and text. New snapshots remove URL
+userinfo and fragments, redact query values outside the structural allowlist
+and header values outside the safe list, and retain only JSON body structure
+within a 4 KiB limit. Oversized and non-JSON bodies retain a byte count.
+Diagnostic details avoid copying server response bodies. Legacy download
+starts use the same request redaction and keep their existing write adapter.
+
+| Actual route and owner | Kind | Scope | Completion boundary | Verification |
+| --- | --- | --- | --- | --- |
+| `/ajax/books/{library}` through Book Detail, shelf and browse | `batchMetadata` | Library and all IDs in the request | Dictionary decode and keys for all requested IDs. Explicit null is a valid answer. Partial data still returns to callers. | Service matrix and concurrent batch tests, Book Detail and unified search integration, Calibre contract |
+| `/ajax/search/{library}` through `LibrarySearchService` | `search` | Library | Search result decode and cancellation check | Unified search integration |
+| `/ajax/categories/{library}` and returned category page URLs | `categories` | Library | List or page decode. A fresh cache hit creates no HTTP activity. | Service tests, category service cache and pagination tests, Calibre contract |
+| Summary `/ajax/search` and optional `/ajax/books` | `librarySummary` | Library | Count and newest book decode. One operation keeps ordered URL, status and duration for both calls. | Second-call 403 regression, summary and restricted-library contracts |
+| `/ajax/library-info` and library probe `/ajax/search?num=0` | `probe` | Global server or library | Decode and validate server libraries, or decode the probe result | Service tests and real Digest probe contracts |
+| `/get/json/{book}/{library}` and `/cdb/cmd/set_metadata/0` | `bookMetadata`, `updateMetadata` | Library and book | Decode book metadata or check the command result and rejection envelope | Service tests and successful and read-only Calibre contracts |
+| `/book-manifest/{book}/{format}` | `bookManifest` | Library and book | MIME validation and the same TOC parse used by Book Preview | Service rejection and preview lifecycle tests |
+| `/book-get-last-read-position` and `/book-set-last-read-position` | `readingPosition` | Library and requested book IDs | Position map decode or upload acknowledgement | Service and Calibre round-trip tests |
+| `/book-get-annotations` and `/book-update-annotations` | `annotations` | Library and requested book IDs | Decode annotations and accompanying positions, or validate the upload acknowledgement. Metadata errors are independent. | Service tests, Book Detail integration and real merge contracts |
+| `/dshelper/configuration`, `/dshelper/1/configuration/{library}`, Goodreads shelf and progress routes | `helper` | Global config, per-library config, or the originating book | Parse and validate configuration or accept a nonnegative Helper job ID. The Helper owns asynchronous Goodreads work. | URLProtocol stubs |
+
+Sources for the command envelope, position and annotation responses, and
+Helper job submission are the [Calibre command routes](https://github.com/kovidgoyal/calibre/blob/v9.11.0/src/calibre/srv/cdb.py),
+[Calibre reader routes](https://github.com/kovidgoyal/calibre/blob/v9.11.0/src/calibre/srv/books.py),
+and [DSReader Helper Goodreads routes](https://github.com/dsreader/DSReaderHelper/blob/main/srv/goodreads_sync.py).
+
+The dictionary endpoint builder only returns a URL. Reader WebKit navigation
+and the separate dictionary hint client stay outside the service operation
+boundary. Local and cached search paths remain free of HTTP activities.
+For AL3, pass the download UUID through the existing typed logger, keep
+pause/resume revisions monotonic, reject late callbacks, and handle
+background flush and previous-process interruption. AL4 owns removal of the
+download write adapter and live detail observation.
+
+The final iPhone 17 run passed 200 tests including 21 contracts against
+Calibre 9.11 with Digest authentication. The minimum iOS 15.5 simulator
+passed 102 tests, including the preview lifecycle, the schema migration,
+and the Book Detail observation and dismissal regressions. The final Mac
+Catalyst build, Swift parse, project plist, Realm boundary and diff checks
+passed. The file-backed 149 fixture preserves typed and legacy logs and a
+saved Folio profile. The 147/148 fixture still upgrades successfully.
+Logs and result bundles are under `/tmp/YabrAL2` as `final`, `ios15` and
+`catalyst-final.log`. A private loopback Calibre process and a temporary
+library supported the contracts alongside the open desktop app. Helper
+coverage uses stubs. Full-suite and native UI interaction were outside
+this run.
+
+### Category diagnostics review follow-up (2026-11-10)
+
+HTTP category pages now use the shared Calibre decoder. The regression
+reproduced the unknown error before the fix and verifies that malformed
+JSON with HTTP 200 writes one failed activity with a decoding error, keeps
+the 200 status, and leaves the cache empty. The iPhone 17 run passed all
+82 category, service and search integration tests. The Mac Catalyst
+build, Swift parse and diff checks passed. See `/tmp/YabrAL2/category-review-*.log`.
+
 ## Activity Log AL1 (2026-11-09)
 
 The logger accepts Sendable start and update values with the same

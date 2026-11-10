@@ -1533,6 +1533,14 @@ class BookDetailViewModelTests: XCTestCase {
         }
         
         await waitUntil { self.viewModel.refreshState == .synced }
+        await calibreServerService.logger.flushPendingActivitiesForTesting()
+        let activities = mockAppContainer.activityLogRepository.fetchEntries(libraryId: library.id, bookId: book.id, since: .distantPast)
+        let batches = activities.filter { $0.kind == .batchMetadata }
+        XCTAssertEqual(batches.count, 1)
+        XCTAssertEqual(batches.first?.bookIds, [book.id])
+        XCTAssertEqual(batches.first?.state, .finished(.succeeded))
+        XCTAssertEqual(batches.first?.result.requests.count, 1)
+        XCTAssertEqual(activities.filter { $0.kind == .annotations }.count, 1)
         XCTAssertEqual(viewModel.refreshState, .synced)
         XCTAssertEqual(viewModel.calibreBook?.title, "Refreshed Title")
         XCTAssertEqual(

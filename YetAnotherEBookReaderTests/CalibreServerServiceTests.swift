@@ -15,10 +15,12 @@ final class CalibreServerServiceTests: XCTestCase {
     var service: CalibreServerService!
     var server: CalibreServer!
     var library: CalibreLibrary!
+    private var activitySince = Date.distantPast
 
     override func setUp() async throws {
         try await super.setUp()
 
+        activitySince = Date()
         container = MockAppContainerFactory.makeContainer(testName: "CalibreServerServiceTests")
         service = container.calibreServerService
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -213,6 +215,170 @@ final class CalibreServerServiceTests: XCTestCase {
         } catch {
             XCTAssertEqual(error.localizedDescription, "bad search request")
         }
+    }
+
+    func testSummarySecondRequestFailureRecordsBothActualRequests() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let searching = url.path == "/ajax/search/lib1"
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: searching ? 200 : 403,
+                                                        httpVersion: nil, headerFields: nil))
+            return (response, Data((searching ? Self.searchJSON(bookIds: [7], count: 1) : "private response").utf8))
+        }
+        do {
+            _ = try await service.getLibrarySummary(library: library)
+            XCTFail("The books request failed")
+        } catch let error as CalibreAPIError {
+            XCTAssertEqual(error, .authFailed)
+        }
+        let entries = await activityEntries()
+        let entry = try XCTUnwrap(entries.first)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entry.kind, .librarySummary)
+        XCTAssertEqual(entry.libraryId, library.id)
+        XCTAssertEqual(entry.state, .finished(.failed))
+        XCTAssertEqual(entry.result.httpStatusCode, 403)
+        XCTAssertEqual(entry.result.errorCategory, .authentication)
+        XCTAssertEqual(entry.result.requests.map(\.httpStatusCode), [200, 403])
+        XCTAssertEqual(entry.result.requests.compactMap { $0.request.endpointURL }.compactMap { URL(string: $0)?.path },
+                       ["/ajax/search/lib1", "/ajax/books/lib1"])
+        XCTAssertTrue(entry.result.requests.allSatisfy { $0.duration >= 0 })
+        XCTAssertFalse(entry.result.detail?.contains("private response") ?? false)
+    }
+
+    func testBatchActivityRecordsTypedFailuresAndDoesNotLeakResponseBody() async throws {
+        let scenarios: [(Int?, URLError.Code?, ActivityLogCompletion, ActivityLogErrorCategory, String, String)] = [
+            (401, nil, .failed, .authentication, "private response", "text/plain"),
+            (403, nil, .failed, .authentication, "private response", "text/plain"),
+            (500, nil, .failed, .http, "private response", "text/plain"),
+            (nil, .timedOut, .failed, .transport, "", "text/plain"),
+            (nil, .cancelled, .cancelled, .transport, "", "text/plain"),
+            (200, nil, .failed, .decoding, "invalid json", "application/json"),
+            (200, nil, .failed, .decoding, "{}", "text/html")
+        ]
+        for (index, scenario) in scenarios.enumerated() {
+            let (status, urlError, _, _, body, mime) = scenario
+            let bookID = Int32(index + 1)
+            MockURLProtocol.requestHandler = { request in
+                if let urlError { throw URLError(urlError) }
+                let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url),
+                    statusCode: try XCTUnwrap(status), httpVersion: nil, headerFields: ["Content-Type": mime]))
+                return (response, Data(body.utf8))
+            }
+            let task = try XCTUnwrap(service.buildBooksMetadataTask(library: library, books: [CalibreBook(id: bookID, library: library)]))
+            let result = await service.getBooksMetadata(task: task)
+            XCTAssertNotNil(result.error)
+        }
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, scenarios.count)
+        for (index, scenario) in scenarios.enumerated() {
+            let (status, _, completion, category, _, _) = scenario
+            let entry = try XCTUnwrap(entries.first { $0.bookIds == [Int32(index + 1)] })
+            XCTAssertEqual(entry.kind, .batchMetadata)
+            XCTAssertEqual(entry.state, .finished(completion))
+            XCTAssertEqual(entry.result.httpStatusCode, status)
+            XCTAssertEqual(entry.result.errorCategory, category)
+            XCTAssertEqual(entry.result.requests.count, 1)
+            XCTAssertEqual(entry.result.requests.first?.httpStatusCode, status)
+            XCTAssertFalse(entry.result.detail?.contains("private response") ?? false)
+        }
+    }
+
+    func testMissingBatchKeyFailsActivityWhilePreservingThePartialAnswer() async throws {
+        MockURLProtocol.requestHandler = { request in
+            (try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)), Data(#"{"7":null}"#.utf8))
+        }
+        let task = try XCTUnwrap(service.buildBooksMetadataTask(library: library,
+            books: [7, 9].map { CalibreBook(id: $0, library: library) }))
+        let result = await service.getBooksMetadata(task: task)
+        XCTAssertNil(result.error)
+        XCTAssertEqual(result.booksMetadataEntry?.keys.sorted(), ["7"])
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.state, .finished(.failed))
+        XCTAssertEqual(entries.first?.bookIds, [7, 9])
+        XCTAssertEqual(entries.first?.result.httpStatusCode, 200)
+        XCTAssertEqual(entries.first?.result.errorCategory, .decoding)
+    }
+
+    func testSameURLConcurrentBatchesRetainIndependentLibraryAndBookScope() async throws {
+        // Two libraries can share a server URL/key during configuration, while their domain IDs differ.
+        let other = CalibreLibrary(server: server, key: library.key, name: "Other library")
+        let first = try XCTUnwrap(service.buildBooksMetadataTask(library: library,
+            books: [7, 9].map { CalibreBook(id: $0, library: library) }))
+        let second = try XCTUnwrap(service.buildBooksMetadataTask(library: other,
+            books: [7, 9].map { CalibreBook(id: $0, library: other) }))
+        XCTAssertEqual(first.metadataUrl, second.metadataUrl)
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                                        httpVersion: nil, headerFields: nil))
+            return (response, Data(#"{"7":null,"9":null}"#.utf8))
+        }
+        let service = try XCTUnwrap(service)
+        async let left = service.getBooksMetadata(task: first)
+        async let right = service.getBooksMetadata(task: second)
+        let results = await [left, right]
+        XCTAssertTrue(results.allSatisfy { $0.error == nil })
+
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 2)
+        for library in [library!, other] {
+            let scoped = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: 7, since: activitySince)
+            XCTAssertEqual(scoped.count, 1)
+            XCTAssertEqual(scoped.first?.bookIds, [7, 9])
+            XCTAssertEqual(scoped.first?.state, .finished(.succeeded))
+        }
+    }
+
+    func testManifestAndMetadataRejectionAreFailuresAfterHTTP200() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let data = url.path.hasPrefix("/book-manifest")
+                ? Data(#"{"aborted":true,"traceback":"private traceback"}"#.utf8)
+                : Data(#"{"err":"private error","tb":"private traceback"}"#.utf8)
+            return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                                  headerFields: ["Content-Type": "application/json"])), data)
+        }
+        let manifest = try await service.getBookManifestContents(book: CalibreBook(id: 123, library: library), format: .EPUB)
+        guard case .rejected = manifest else { return XCTFail("Expected rejected manifest") }
+        do {
+            try await service.updateMetadata(library: library, bookId: 123, metadata: [])
+            XCTFail("Expected cdb rejection")
+        } catch let error as CalibreAPIError {
+            XCTAssertEqual(error, .serverRejected(nil))
+        }
+        let entries = await activityEntries()
+        XCTAssertEqual(Set(entries.compactMap(\.kind)), [.bookManifest, .updateMetadata])
+        XCTAssertEqual(entries.count, 2)
+        for entry in entries {
+            XCTAssertEqual(entry.state, .finished(.failed))
+            XCTAssertEqual(entry.result.httpStatusCode, 200)
+            XCTAssertEqual(entry.result.errorCategory, .serverRejected)
+            XCTAssertFalse(entry.result.detail?.contains("private") ?? false)
+        }
+    }
+
+    func testSwiftCancellationCompletesAnOperationOnce() async throws {
+        let request = URLRequest(url: try XCTUnwrap(URL(string: "http://localhost/cancel")))
+        do {
+            let _: Void = try await service.withActivity(.probe, request: request) { _ in
+                try Task.checkCancellation()
+                throw CancellationError()
+            }
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.state, .finished(.cancelled))
+        XCTAssertEqual(entries.first?.result.requests, [])
+    }
+
+    private func activityEntries() async -> [ActivityLogSnapshot] {
+        await service.logger.flushPendingActivitiesForTesting()
+        return container.activityLogRepository.fetchEntries(libraryId: nil, bookId: nil, since: activitySince)
+            .filter { $0.kind != nil }
     }
 
     private static func searchJSON(bookIds: [Int32], count: Int) -> String {
@@ -431,6 +597,28 @@ final class CalibreServerServiceTests: XCTestCase {
         let receivedTask = await service.getAnnotations(task: task)
         XCTAssertNil(receivedTask.error)
         XCTAssertNotNil(receivedTask.booksAnnotationsEntry?["123:epub"])
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .annotations)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
+    }
+
+    func testAnnotationsActivityIgnoresErrorFromTheEarlierMetadataRequest() async throws {
+        MockURLProtocol.requestHandler = { request in
+            (try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)), Data("{}".utf8))
+        }
+        var task = try XCTUnwrap(service.buildBooksMetadataTask(library: library,
+            books: [CalibreBook(id: 7, library: library)], getAnnotations: true))
+        task.error = .httpStatus(500, nil)
+        let result = await service.getAnnotations(task: task)
+        XCTAssertEqual(result.error, .httpStatus(500, nil))
+        XCTAssertNotNil(result.booksAnnotationsEntry)
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .annotations)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
+        XCTAssertEqual(entries.first?.result.httpStatusCode, 200)
     }
 
     func testGetAnnotationsAsyncFailure() async throws {
@@ -549,7 +737,7 @@ final class CalibreServerServiceTests: XCTestCase {
             annotationsUrl: URL(string: "http://localhost/annotations")!
         )
 
-        let mockData = Data("last-read-data".utf8)
+        let mockData = Data(#"{"123:EPUB":[]}"#.utf8)
 
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
@@ -563,6 +751,10 @@ final class CalibreServerServiceTests: XCTestCase {
 
         let receivedTask = try await service.getLastReadPosition(task: task)
         XCTAssertEqual(receivedTask.lastReadPositionsData, mockData)
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .readingPosition)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
     }
 
     func testGetLastReadPositionAsyncSuccess() async throws {
@@ -573,7 +765,7 @@ final class CalibreServerServiceTests: XCTestCase {
             lastReadPositionUrl: URL(string: "http://localhost/last_read")!,
             annotationsUrl: URL(string: "http://localhost/annotations")!
         )
-        let mockData = Data("async-last-read-data".utf8)
+        let mockData = Data("{}".utf8)
 
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
@@ -965,11 +1157,11 @@ final class CalibreServerServiceTests: XCTestCase {
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             )!
-            return (response, Data("manifest-data".utf8))
+            return (response, Data(#"{"toc":{"children":[{"title":"Intro"}]}}"#.utf8))
         }
 
         let data = try await service.getBookManifest(book: book, format: .EPUB)
-        XCTAssertEqual(String(data: data, encoding: .utf8), "manifest-data")
+        XCTAssertEqual(String(data: data, encoding: .utf8), #"{"toc":{"children":[{"title":"Intro"}]}}"#)
     }
 
     func testGetBookManifestAsyncFailure() async throws {
@@ -1003,7 +1195,7 @@ final class CalibreServerServiceTests: XCTestCase {
                 httpVersion: nil,
                 headerFields: nil
             )!
-            return (response, Data())
+            return (response, Data(#"{"result":null}"#.utf8))
         }
 
         try await service.updateMetadata(library: library, bookId: 123, metadata: [])
@@ -1131,6 +1323,12 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(result.defaultLibrary, "lib1")
         XCTAssertEqual(result.libraryMap["lib1"], "Library 1")
         XCTAssertEqual(result.errorMsg, "Success")
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .probe)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
+        XCTAssertEqual(entries.first?.result.httpStatusCode, 200)
+        XCTAssertNil(entries.first?.libraryId)
     }
 
     func testProbeLibrarySuccess() async throws {
@@ -1162,6 +1360,11 @@ final class CalibreServerServiceTests: XCTestCase {
         let resultTask = await service.probeLibrary(library: library)
         XCTAssertNotNil(resultTask.probeResult)
         XCTAssertEqual(resultTask.probeResult?.total_num, 10)
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .probe)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
+        XCTAssertEqual(entries.first?.libraryId, library.id)
     }
 
     func testGetLibraryCategoriesSuccess() async throws {
@@ -1187,6 +1390,10 @@ final class CalibreServerServiceTests: XCTestCase {
         let categories = try await service.getLibraryCategories(library: library)
         XCTAssertEqual(categories.count, 1)
         XCTAssertEqual(categories.first?.name, "Authors")
+        let entries = await activityEntries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .categories)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
     }
 
     func testValidatedDataAsyncSuccess() async throws {

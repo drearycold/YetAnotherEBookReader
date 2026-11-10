@@ -294,6 +294,12 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         XCTAssertEqual(finalResult?.books.count, 1)
         XCTAssertEqual(finalResult?.books.first?.title, "Quick Start Guide")
         XCTAssertEqual(finalResult?.books.first?.authors.first, "John Schember")
+        await container.calibreServerService.logger.flushPendingActivitiesForTesting()
+        let entries = await container.activityLogRepository.fetchEntries(libraryId: mockLibrary.id, bookId: nil, since: .distantPast)
+        XCTAssertEqual(entries.filter { $0.kind == .search }.count, 1)
+        XCTAssertEqual(entries.filter { $0.kind == .batchMetadata }.count, 1)
+        XCTAssertTrue(entries.allSatisfy { $0.state == .finished(.succeeded) })
+        XCTAssertFalse(entries.first { $0.kind == .search }?.request.endpointURL?.contains("Integration") ?? true)
     }
 
     func testSearchCacheSaveInsertsMissingDomainBooks() throws {

@@ -237,20 +237,63 @@ final class CalibreServerService {
         return request
     }
 
-    func validatedData(from url: URL, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) async throws -> (Data, HTTPURLResponse) {
-        try await validatedData(for: URLRequest(url: url), server: server, timeout: timeout, qos: qos)
+    func withActivity<T>(
+        _ kind: ActivityLogKind, request: URLRequest, libraryId: String? = nil, bookIds: Set<Int32> = [],
+        resultError: (T) -> Error? = { _ in nil },
+        perform: (CalibreOperationRequests) async throws -> T
+    ) async rethrows -> T {
+        let id = ActivityID()
+        let logger = self.logger
+        let activity = CalibreOperationRequests()
+        await logger.start(.init(id: id, kind: kind, request: .init(request: request),
+                                 startDatetime: Date(), libraryId: libraryId, bookIds: bookIds))
+        do {
+            let value = try await perform(activity)
+            await logger.update(id: id, activity.completion(error: resultError(value)))
+            return value
+        } catch {
+            await logger.update(id: id, activity.completion(error: error))
+            throw error
+        }
     }
 
-    func validatedData(for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) async throws -> (Data, HTTPURLResponse) {
+    func withRequestActivity<T>(
+        _ kind: ActivityLogKind, request: URLRequest, server: CalibreServer,
+        libraryId: String? = nil, bookIds: Set<Int32> = [], timeout: Double = 600,
+        qos: DispatchQoS.QoSClass = .default, resultError: (T) -> Error? = { _ in nil },
+        parse: (Data, HTTPURLResponse) throws -> T
+    ) async throws -> T {
+        try await withActivity(kind, request: request, libraryId: libraryId, bookIds: bookIds, resultError: resultError) { activity in
+            let (data, response) = try await validatedData(for: request, server: server, timeout: timeout, qos: qos, activity: activity)
+            return try parse(data, response)
+        }
+    }
+
+    func validatedData(
+        from url: URL, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default,
+        activity: CalibreOperationRequests? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
+        try await validatedData(for: URLRequest(url: url), server: server, timeout: timeout, qos: qos, activity: activity)
+    }
+
+    func validatedData(
+        for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default,
+        activity: CalibreOperationRequests? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
+        let started = DispatchTime.now().uptimeNanoseconds
+        let delegate = activity.map { _ in CalibreServerDiagnosticTaskDelegate(server) }
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await withURLSession(server: server, timeout: timeout, qos: qos) {
-                try await $0.data(for: request)
+            (data, response) = try await withURLSession(server: server, timeout: timeout, qos: qos) {
+                try await $0.data(for: request, delegate: delegate)
             }
-            let httpResponse = try validateHTTPResponse(data: data, response: response)
-            return (data, httpResponse)
         } catch {
+            activity?.record(request, since: started, status: delegate?.authenticationStatusCode)
             throw CalibreAPIError(error: error)
         }
+        activity?.record(request, since: started, response: response)
+        return (data, try validateHTTPResponse(data: data, response: response))
     }
 
     func validateHTTPResponse(data: Data, response: URLResponse) throws -> HTTPURLResponse {
@@ -268,12 +311,110 @@ final class CalibreServerService {
         }
     }
 
+    // Some older Calibre responses omit Content-Type. The decoder still validates their body.
+    func requireJSON(_ response: HTTPURLResponse) throws {
+        if let mime = declaredMIME(response), mime != "application/json", !mime.hasSuffix("+json") {
+            throw CalibreAPIError.unsupportedPayload
+        }
+    }
+
+    private func declaredMIME(_ response: HTTPURLResponse) -> String? {
+        guard response.value(forHTTPHeaderField: "Content-Type") != nil else { return nil }
+        return response.mimeType?.lowercased()
+    }
+
+    func jsonObject(_ data: Data) throws -> [String: Any] {
+        let decoded: Any
+        do {
+            decoded = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw CalibreAPIError.decoding(error)
+        }
+        guard let object = decoded as? [String: Any] else { throw CalibreAPIError.unsupportedPayload }
+        return object
+    }
+
+    func validateMutationResponse(_ data: Data, response: HTTPURLResponse) throws {
+        // Calibre normally acknowledges these uploads with an empty body.
+        guard !data.isEmpty else { return }
+        let mime = declaredMIME(response)
+        if mime == "application/json" || mime?.hasSuffix("+json") == true {
+            let payload = try jsonObject(data)
+            if payload["err"] != nil || payload["success"] as? Bool == false {
+                throw CalibreAPIError.serverRejected(nil)
+            }
+            return
+        }
+        let reply = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard (mime == nil || mime == "text/plain"), ["ok", "success"].contains(reply) else {
+            throw CalibreAPIError.unsupportedPayload
+        }
+    }
+
     func decodePayload<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {
             throw CalibreAPIError.decoding(error)
         }
+    }
+}
+
+/// Request diagnostics belong to a single operation. The caller awaits each request
+/// before reading or appending diagnostics. Only the resulting value crosses to the logger.
+final class CalibreOperationRequests {
+    private var requests: [ActivityLogRequestDiagnostic] = []
+
+    var httpStatusCode: Int? { requests.last?.httpStatusCode }
+
+    func record(_ request: URLRequest, since started: UInt64, response: URLResponse? = nil, status: Int? = nil) {
+        let elapsed = DispatchTime.now().uptimeNanoseconds - started
+        let snapshot = ActivityLogRequestSnapshot(request: request)
+        let responseURL = ActivityLogRequestSnapshot.redactedURL(response?.url)
+        requests.append(.init(request: snapshot, responseURL: responseURL == snapshot.endpointURL ? nil : responseURL,
+                              httpStatusCode: (response as? HTTPURLResponse)?.statusCode ?? status,
+                              duration: Double(elapsed) / 1_000_000_000))
+    }
+
+    func completion(error: Error?) -> ActivityLogUpdate {
+        let date = Date()
+        var result = ActivityLogResult(httpStatusCode: httpStatusCode, requests: requests)
+        guard let error else { return .finish(.succeeded, at: date, result: result) }
+
+        let apiError = CalibreAPIError(error: error)
+        var cancelled = error is CancellationError
+        switch apiError {
+        case .transport(let transport):
+            cancelled = transport.code == .cancelled
+            result.errorCategory = .transport
+            result.detail = URLError(transport.code).localizedDescription
+        case .authFailed:
+            result.errorCategory = .authentication
+            result.detail = apiError.localizedDescription
+        case .httpStatus(let code, _):
+            result.errorCategory = .http
+            result.detail = "HTTP \(code)"
+        case .invalidURL:
+            result.errorCategory = .invalidRequest
+            result.detail = "Invalid URL"
+        case .serverUnreachable:
+            result.errorCategory = .transport
+            result.detail = apiError.localizedDescription
+        case .decoding, .unsupportedPayload, .emptyResponse:
+            result.errorCategory = .decoding
+            result.detail = apiError.localizedDescription
+        case .serverRejected:
+            result.errorCategory = .serverRejected
+            result.detail = "Server rejected request"
+        case .unknown(let underlying):
+            cancelled = underlying is CancellationError
+            result.errorCategory = cancelled ? .transport : .unknown
+            result.detail = cancelled ? "Cancelled" : "Unexpected error"
+        }
+        if httpStatusCode == 401 || httpStatusCode == 403 {
+            result.errorCategory = .authentication
+        }
+        return .finish(cancelled ? .cancelled : .failed, at: date, result: result)
     }
 }
 

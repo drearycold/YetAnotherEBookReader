@@ -143,7 +143,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             XCTAssertTrue(query.contains("shelf_name=currently-reading"))
             XCTAssertTrue(query.contains("action=add"))
 
-            return (response, Data("{}".utf8))
+            return (response, Data("42".utf8))
         }
 
         do {
@@ -229,7 +229,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             XCTAssertTrue(query.contains("goodreads_id=123"))
             XCTAssertTrue(query.contains("percent=45.5"))
 
-            return (response, Data("{}".utf8))
+            return (response, Data("42".utf8))
         }
 
         do {
@@ -307,6 +307,30 @@ final class DSReaderHelperConnectorTests: XCTestCase {
         XCTAssertEqual(received.id, server.uuid.uuidString)
         XCTAssertEqual(received.port, 8080)
         XCTAssertEqual(received.data, payload)
+    }
+
+    func testHelperConfigurationFailureKeepsHTTPStatusAndScope() async throws {
+        let connector = DSReaderHelperConnector(calibreServerService: service, server: server,
+                                                dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/dshelper/1/configuration/lib1")
+            return (try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                                   httpVersion: nil, headerFields: ["Content-Type": "application/json"])),
+                    Data("invalid JSON".utf8))
+        }
+        do {
+            _ = try await connector.refreshConfiguration(library.key, libraryId: library.id)
+            XCTFail("Invalid configuration")
+        } catch let error as CalibreAPIError {
+            guard case .decoding = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        await service.logger.flushPendingActivitiesForTesting()
+        let entries = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: nil, since: .distantPast)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .helper)
+        XCTAssertEqual(entries.first?.state, .finished(.failed))
+        XCTAssertEqual(entries.first?.result.httpStatusCode, 200)
+        XCTAssertEqual(entries.first?.result.errorCategory, .decoding)
     }
 
     func testRefreshConfigurationAsyncThrowsForInvalidEndpoint() async throws {

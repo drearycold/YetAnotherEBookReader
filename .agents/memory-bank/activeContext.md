@@ -5,6 +5,15 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Activity Log AL2 (2026-11-09)
+
+`codex/activity-log-al2` starts from the AL1 merge `e2ab1e74` and bumps
+Realm to schema 150. Calibre service operations finish after parsing and
+retain sanitized per-request diagnostics. AL3 should adopt the typed
+logger for downloads with the existing download UUID, handle progress
+ordering and late callbacks, and add background flush and recovery.
+The coverage matrix and validation are in [Realm Boundary Convergence](history/realm-boundary-convergence.md#activity-log-al2-2026-11-09).
+
 ## Activity Log AL1 (2026-11-09)
 
 `codex/activity-log-al1` starts at main `850e5ac4` and migrates the main

@@ -160,6 +160,74 @@ final class DatabaseBootstrapperTests: XCTestCase {
         }
     }
 
+    func testSchema149KeepsTypedAndLegacyRowsWithoutRequestDiagnostics() throws {
+        let previousConfiguration = Realm.Configuration.defaultConfiguration
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Activity149-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            databaseService.reset(clearConfiguration: true)
+            Realm.Configuration.defaultConfiguration = previousConfiguration
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let fileURL = directory.appendingPathComponent("activity.realm")
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        try autoreleasepool {
+            let realm = try Realm(configuration: Realm.Configuration(
+                fileURL: fileURL, schemaVersion: 149,
+                objectTypes: [CalibreActivityLogEntryAtSchema149.self, FolioReaderPreferenceRealm.self]
+            ))
+            let schema = try XCTUnwrap(realm.schema[CalibreActivityLogEntryAtSchema149.className()])
+            XCTAssertNotNil(schema["kind"])
+            XCTAssertNil(schema["requestDiagnosticsData"])
+            try realm.write {
+                let typed = CalibreActivityLogEntryAtSchema149()
+                typed.id = "typed"
+                typed.kind = "batchMetadata"
+                typed.status = "failed"
+                typed.libraryId = "library"
+                typed.bookIds.append(objectsIn: [1, 2])
+                typed.startDatetime = date
+                typed.finishDatetime = date.addingTimeInterval(1)
+                typed.httpStatusCode = 403
+                typed.errorCategory = "authentication"
+                typed.resultDetail = "Refused"
+                typed.endpoingURL = "https://calibre.local/ajax/books"
+                realm.add(typed)
+
+                let legacy = CalibreActivityLogEntryAtSchema149()
+                legacy.id = "legacy"
+                legacy.startDatetime = date
+                legacy.errMsg = "Success"
+                realm.add(legacy)
+
+                let profile = FolioReaderPreferenceRealm()
+                profile.id = "Saved AL1 Profile"
+                profile.currentFont = "Avenir"
+                realm.add(profile)
+            }
+        }
+        XCTAssertEqual(try schemaVersionAtURL(fileURL), 149)
+        try databaseService.prepareProductionConfiguration(fileURL: fileURL) { _ in }
+        try databaseService.openMainRealm(conf: XCTUnwrap(databaseService.realmConf))
+        XCTAssertEqual(try schemaVersionAtURL(fileURL), 150)
+
+        let repository = RealmActivityLogRepository(
+            databaseService: databaseService, bookRepository: MockBookRepository(), container: nil
+        )
+        let typed = try XCTUnwrap(repository.fetchEntries(libraryId: "library", bookId: 2, since: date).first)
+        XCTAssertEqual(typed.id.rawValue, "typed")
+        XCTAssertEqual(typed.kind, .batchMetadata)
+        XCTAssertEqual(typed.state, .finished(.failed))
+        XCTAssertEqual(typed.finishDatetime, date.addingTimeInterval(1))
+        XCTAssertEqual(typed.request.endpointURL, "https://calibre.local/ajax/books")
+        XCTAssertEqual(typed.result, ActivityLogResult(httpStatusCode: 403, errorCategory: .authentication, detail: "Refused"))
+        let legacy = try XCTUnwrap(repository.fetchEntries(libraryId: nil, bookId: nil, since: date).first { $0.id.rawValue == "legacy" })
+        XCTAssertEqual(legacy.state, .legacy)
+        XCTAssertEqual(legacy.legacyResult, "Success")
+        XCTAssertEqual(databaseService.realm?.object(ofType: FolioReaderPreferenceRealm.self,
+                                                       forPrimaryKey: "Saved AL1 Profile")?.currentFont, "Avenir")
+    }
+
     /// The main Realm open inside `bootstrap` is a `do/try/catch/throw`
     /// against `DatabaseBootstrapError.realmOpenFailed`. A Realm
     /// configuration that targets a non-existent directory forces the
@@ -357,5 +425,35 @@ private final class CalibreActivityLogEntryAtSchema148: Object {
     @Persisted var httpMethod: String?
     @Persisted var httpBody: Data?
     @Persisted var requestHeaders: List<String>
+    @Persisted var errMsg: String?
+}
+
+
+// The AL1 table as shipped at schema 149.
+private final class CalibreActivityLogEntryAtSchema149: Object {
+    override class func _realmIgnoreClass() -> Bool { true }
+    override class func _realmObjectName() -> String { "CalibreActivityLogEntry" }
+
+    @Persisted(primaryKey: true) var id = UUID().uuidString
+    @Persisted var kind: String?
+    @Persisted var status = "legacy"
+    @Persisted var progressRevision = 0
+
+    @Persisted var startDatetime = Date.distantPast
+    @Persisted var finishDatetime: Date?
+    @Persisted var libraryId: String?
+    @Persisted var bookIds: List<Int32>
+
+    @Persisted var endpoingURL: String?
+    @Persisted var httpMethod: String?
+    @Persisted var httpBody: Data?
+    @Persisted var requestHeaders: List<String> // Alternating keys and values.
+
+    @Persisted var httpStatusCode: Int?
+    @Persisted var errorCategory: String?
+    @Persisted var resultDetail: String?
+
+    // Historical type and result text. Keep these for reading old logs after the adapter is removed.
+    @Persisted var type: String?
     @Persisted var errMsg: String?
 }

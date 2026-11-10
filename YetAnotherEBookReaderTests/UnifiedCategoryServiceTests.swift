@@ -202,6 +202,15 @@ class UnifiedCategoryServiceTests: XCTestCase {
         let cached = try repository.fetchLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors")
         XCTAssertNotNil(cached)
         XCTAssertEqual(cached?.totalNumber, 2)
+
+        // A cache hit does not create another network operation.
+        _ = try await libraryCategoryService.fetchAndCacheCategory(library: mockLibrary1, category: category)
+        await serverService.logger.flushPendingActivitiesForTesting()
+        let entries = container.activityLogRepository.fetchEntries(libraryId: mockLibrary1.id, bookId: nil, since: .distantPast)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .categories)
+        XCTAssertEqual(entries.first?.state, .finished(.succeeded))
+        XCTAssertTrue(entries.first?.request.endpointURL?.contains("/ajax/category/Authors") ?? false)
     }
 
     func testFetchAndCacheCategoryPagination() async throws {
@@ -527,6 +536,42 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.items.map(\.name), ["Scoped Author"])
         XCTAssertTrue(viewModel.hasMore)
         XCTAssertNil(viewModel.items.first { $0.name == "Other Author" })
+    }
+
+    func testInvalidCategoryPayloadRecordsDecodingFailureWithHTTP200() async throws {
+        let category = CalibreLibraryCategory(
+            name: "Authors", url: "http://localhost/1/ajax/category/Authors", icon: "user", is_category: true
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            ))
+            return (response, Data("invalid JSON".utf8))
+        }
+
+        let fetchError: Error?
+        do {
+            _ = try await libraryCategoryService.fetchAndCacheCategory(library: mockLibrary1, category: category)
+            fetchError = nil
+        } catch {
+            fetchError = error
+        }
+
+        await serverService.logger.flushPendingActivitiesForTesting()
+        let entries = container.activityLogRepository.fetchEntries(
+            libraryId: mockLibrary1.id, bookId: nil, since: .distantPast
+        )
+        XCTAssertEqual(entries.count, 1)
+        let activity = try XCTUnwrap(entries.first)
+        XCTAssertEqual(activity.kind, .categories)
+        XCTAssertEqual(activity.state, .finished(.failed))
+        XCTAssertEqual(activity.result.httpStatusCode, 200)
+        XCTAssertEqual(activity.result.errorCategory, .decoding)
+        XCTAssertNil(try repository.fetchLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: category.name))
+        guard case .decoding = fetchError as? CalibreAPIError else {
+            return XCTFail("Expected CalibreAPIError.decoding, got \(String(describing: fetchError))")
+        }
     }
 
     func testFetchAndCacheCategoryFailureHttpStatus() async throws {

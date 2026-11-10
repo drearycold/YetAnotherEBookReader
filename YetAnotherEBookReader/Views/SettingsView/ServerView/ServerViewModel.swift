@@ -429,13 +429,14 @@ class ServerViewModel: ObservableObject {
                     var libraryConfigs: [String: CalibreCountPagesPrefs.LibraryConfig] = [:]
 
                     try await withThrowingTaskGroup(of: (String, CalibreDSReaderHelperConfiguration).self) { group in
-                        let activeLibraries = container.libraryManager.calibreLibraries.filter {
-                            $0.value.server.uuid == server.uuid && !$0.value.hidden
-                        }.map { $0.value.key }
+                        let activeLibraries = container.libraryManager.calibreLibraries.values.filter {
+                            $0.server.uuid == server.uuid && !$0.hidden
+                        }
 
-                        for libraryKey in activeLibraries {
+                        for library in activeLibraries {
                             group.addTask {
-                                return (libraryKey, try await connector.refreshConfiguration(libraryKey).0)
+                                let config = try await connector.refreshConfiguration(library.key, libraryId: library.id).0
+                                return (library.key, config)
                             }
                         }
 
