@@ -1540,7 +1540,7 @@ class BookDetailViewModelTests: XCTestCase {
         
         await waitUntil { self.viewModel.refreshState == .synced }
         await calibreServerService.logger.flushPendingActivitiesForTesting()
-        let activities = mockAppContainer.activityLogRepository.fetchEntries(libraryId: library.id, bookId: book.id, since: .distantPast)
+        let activities = mockAppContainer.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: book.id, since: .distantPast)
         let batches = activities.filter { $0.kind == .batchMetadata }
         XCTAssertEqual(batches.count, 1)
         XCTAssertEqual(batches.first?.bookIds, [book.id])
@@ -1934,90 +1934,150 @@ class ReadingPositionViewModelTests: XCTestCase {
 
 @MainActor
 class ActivityListViewModelTests: XCTestCase {
-    func testActivityObservationFollowsVisibility() async throws {
+    func testObservationFollowsVisibilityAndRetainsTheLoadedWindow() async throws {
         let repository = MockActivityLogRepository()
-        let initialEntry = ActivityLogSnapshot(
-            id: ActivityID(),
-            kind: .bookMetadata,
-            state: .inProgress(.running),
-            startDatetime: Date(timeIntervalSince1970: 1_700_000_000),
-            finishDatetime: nil,
-            result: ActivityLogResult(),
-            request: ActivityLogRequestSnapshot(endpointURL: "http://localhost", httpMethod: "GET", httpBody: nil, headers: []),
-            libraryId: "library-id",
-            bookIds: [7],
-            libraryName: "Library",
-            bookTitle: "Book",
-            legacyType: nil,
-            legacyResult: nil
-        )
-        repository.fetchEntriesReturn = [initialEntry]
+        let initial = summary()
+        repository.page = .init(entries: [initial], hasMore: true)
+        var date = Date(timeIntervalSince1970: 1_700_000_000)
+        let model = ActivityListViewModel(repository: repository, libraryId: "library-id", bookId: 7,
+                                          pageSize: 2, now: { date })
+        XCTAssertTrue(repository.pageFetches.isEmpty)
+        model.start()
+        model.start()
+        XCTAssertEqual(repository.pageObservations.count, 1)
+        XCTAssertEqual(model.page.entries, [initial])
+        XCTAssertEqual(repository.pageFetches.last?.query.libraryId, "library-id")
+        XCTAssertEqual(repository.pageFetches.last?.query.bookId, 7)
+        XCTAssertEqual(repository.pageFetches.last?.query.since, ActivityLogRetention.cutoff(at: date))
 
-        let viewModel = ActivityListViewModel(
-            repository: repository,
-            libraryId: "library-id",
-            bookId: 7
-        )
+        model.loadMore()
+        XCTAssertEqual(repository.pageObservations.last?.limit, 4)
+        let newer = summary()
+        let changed = ActivityLogPage(entries: [newer, initial])
+        repository.pageObservations[1].stream.send(changed)
+        try await waitUntil { model.page == changed }
+        model.stop()
+        model.stop()
+        repository.pageObservations[1].stream.send(.init())
+        try await waitUntil { repository.pageSubscriberCount == 0 }
+        XCTAssertEqual(model.page, changed)
 
-        XCTAssertFalse(repository.fetchEntriesCalled)
-        XCTAssertEqual(repository.observeEntriesSubscriberCount, 0)
-        viewModel.start()
-        viewModel.start()
-        XCTAssertTrue(repository.fetchEntriesCalled)
-        XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
-        XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
-        XCTAssertEqual(viewModel.activities, [initialEntry])
-        // The updates reach the view model on the main actor. As the suite's first class, this
-        // runs while a freshly installed test host is still starting on a CI runner.
+        date = date.addingTimeInterval(60)
+        repository.page = changed
+        model.start()
+        XCTAssertEqual(repository.pageFetches.last?.limit, 4)
+        XCTAssertEqual(repository.pageFetches.last?.query.since, ActivityLogRetention.cutoff(at: date))
+        date = date.addingTimeInterval(60)
+        model.refreshIfVisible()
+        XCTAssertEqual(repository.pageFetches.last?.limit, 4)
+        XCTAssertEqual(repository.pageFetches.last?.query.since, ActivityLogRetention.cutoff(at: date))
+        model.stop()
+    }
+
+    func testChangingFiltersResetsPagingAndRejectsLateResults() async throws {
+        let repository = MockActivityLogRepository()
+        let original = summary()
+        repository.page = .init(entries: [original], hasMore: true)
+        let model = ActivityListViewModel(repository: repository, libraryId: "A", bookId: 7, pageSize: 2)
+        model.start()
+        model.loadMore()
+        XCTAssertEqual(repository.pageFetches.last?.limit, 4)
+
+        repository.page = .init()
+        model.filter = .init(kind: .download, failuresOnly: true)
+        XCTAssertEqual(repository.pageFetches.last?.limit, 2)
+        XCTAssertEqual(repository.pageFetches.last?.query.filter, model.filter)
+        XCTAssertEqual(repository.pageFetches.last?.query.libraryId, "A")
+        XCTAssertEqual(repository.pageFetches.last?.query.bookId, 7)
+        model.loadMore()
+        XCTAssertEqual(repository.pageObservations.count, 3)
+
+        let failure = summary(kind: .download, state: .finished(.failed))
+        let expected = ActivityLogPage(entries: [failure])
+        repository.pageObservations[2].stream.send(expected)
+        repository.pageObservations[1].stream.send(.init(entries: [original], hasMore: true))
+        try await waitUntil { model.page == expected && repository.pageSubscriberCount == 1 }
+        XCTAssertEqual(model.page.entries, [failure])
+
+        model.filter = .init()
+        XCTAssertEqual(repository.pageObservations.last?.query.filter, .init())
+        XCTAssertEqual(repository.pageObservations.last?.limit, 2)
+        model.stop()
+    }
+
+    func testDetailObservesItsIDAfterListStopsAndClearsDeletedRecord() async throws {
+        let repository = MockActivityLogRepository()
+        let first = snapshot(state: .inProgress(.running))
+        let other = snapshot(state: .finished(.succeeded))
+        repository.details = [first.id: first, other.id: other]
+        let list = ActivityListViewModel(repository: repository, libraryId: "A", bookId: 7)
+        list.start()
+        let detail = list.makeDetailViewModel(id: first.id)
+        list.stop()
+        detail.start()
+        detail.start()
+        XCTAssertEqual(detail.entry, first)
+        XCTAssertEqual(repository.detailObservations.count, 1)
+        XCTAssertEqual(repository.detailObservations[0].id, first.id)
+        XCTAssertEqual(repository.detailObservations[0].bookId, 7)
+
+        let completed = snapshot(id: first.id, state: .finished(.failed))
+        repository.detailObservations[0].stream.send(completed)
+        try await waitUntil { detail.entry == completed && repository.pageSubscriberCount == 0 }
+        repository.details.removeValue(forKey: first.id)
+        repository.detailObservations[0].stream.send(nil)
+        try await waitUntil { detail.entry == nil }
+
+        detail.stop()
+        detail.stop()
+        let next = list.makeDetailViewModel(id: other.id)
+        next.start()
+        repository.detailObservations[0].stream.send(completed)
+        try await waitUntil { repository.detailSubscriberCount == 1 }
+        XCTAssertNil(detail.entry)
+        XCTAssertEqual(next.entry, other)
+        next.stop()
+    }
+
+    func testDetailRechecksRetentionAndCancelsWhenReleased() async throws {
+        let repository = MockActivityLogRepository()
+        let activity = snapshot(state: .inProgress(.paused))
+        repository.details[activity.id] = activity
+        var date = activity.startDatetime
+        var detail: ActivityDetailViewModel? = ActivityDetailViewModel(
+            id: activity.id, repository: repository, now: { date }
+        )
+        weak var retained = detail
+        detail?.start()
+        XCTAssertEqual(detail?.entry, activity)
+        date = date.addingTimeInterval(8 * 24 * 60 * 60)
+        detail?.refreshIfVisible()
+        XCTAssertNil(detail?.entry)
+        XCTAssertEqual(repository.detailObservations.last?.since, ActivityLogRetention.cutoff(at: date))
+        detail = nil
+        XCTAssertNil(retained)
+        try await waitUntil { repository.detailSubscriberCount == 0 }
+    }
+
+    private func summary(kind: ActivityLogKind = .bookMetadata, state: ActivityLogState = .inProgress(.running)) -> ActivityLogSummary {
+        .init(id: ActivityID(), kind: kind, state: state, startDatetime: Date(),
+              finishDatetime: nil, libraryName: "Library", bookTitle: "Book",
+              legacyType: nil, downloadFormat: nil, resultPreview: nil)
+    }
+
+    private func snapshot(id: ActivityID = ActivityID(), state: ActivityLogState) -> ActivityLogSnapshot {
+        .init(id: id, kind: .download, state: state, startDatetime: Date(), finishDatetime: nil,
+              result: .init(), request: .init(endpointURL: "http://localhost", httpMethod: "GET", httpBody: nil, headers: []),
+              libraryId: "A", bookIds: [7], libraryName: "Library", bookTitle: "Book",
+              legacyType: nil, legacyResult: nil, downloadFormat: "EPUB")
+    }
+
+    private func waitUntil(_ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
         let deadline = Date().addingTimeInterval(10)
-        while repository.observeEntriesSubscriberCount == 0 && Date() < deadline {
+        while !predicate(), Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
-        XCTAssertTrue(repository.observeEntriesCalled)
-        XCTAssertEqual(repository.observeEntriesLibraryIdParam, "library-id")
-        XCTAssertEqual(repository.observeEntriesBookIdParam, 7)
-        XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
-
-        let updatedEntry = ActivityLogSnapshot(
-            id: initialEntry.id,
-            kind: initialEntry.kind,
-            state: .finished(.failed),
-            startDatetime: initialEntry.startDatetime,
-            finishDatetime: initialEntry.startDatetime.addingTimeInterval(5),
-            result: ActivityLogResult(httpStatusCode: 503, errorCategory: .http, detail: "Unavailable"),
-            request: initialEntry.request,
-            libraryId: initialEntry.libraryId,
-            bookIds: initialEntry.bookIds,
-            libraryName: initialEntry.libraryName,
-            bookTitle: initialEntry.bookTitle,
-            legacyType: nil,
-            legacyResult: nil
-        )
-        repository.sendObservedEntries([updatedEntry])
-        // The update is applied on the main actor, which the starting test host can hold for over
-        // 10 s on a fresh CI runner. Start the deadline once the main actor runs, so the wait
-        // measures delivery rather than the host's startup.
-        await MainActor.run {}
-        let updateDeadline = Date().addingTimeInterval(10)
-        while viewModel.activities != [updatedEntry] && Date() < updateDeadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-
-        XCTAssertEqual(viewModel.activities, [updatedEntry])
-
-        viewModel.stop()
-        repository.sendObservedEntries([initialEntry])
-        let cancelDeadline = Date().addingTimeInterval(10)
-        while repository.observeEntriesSubscriberCount != 0 && Date() < cancelDeadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTAssertEqual(repository.observeEntriesSubscriberCount, 0)
-        XCTAssertEqual(viewModel.activities, [updatedEntry])
-
-        viewModel.start()
-        XCTAssertEqual(viewModel.activities, [initialEntry])
-        XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
-        viewModel.stop()
+        XCTAssertTrue(predicate(), file: file, line: line)
     }
 }
 

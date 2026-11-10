@@ -9,8 +9,10 @@ import Foundation
 import RealmSwift
 
 protocol ActivityLogRepositoryProtocol {
-    @MainActor func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot]
-    @MainActor func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogSnapshot]>
+    @MainActor func fetchPage(query: ActivityLogQuery, limit: Int) -> ActivityLogPage
+    @MainActor func observePage(query: ActivityLogQuery, limit: Int) -> AsyncStream<ActivityLogPage>
+    @MainActor func fetchDetail(id: ActivityID, bookId: Int32?, since: Date) -> ActivityLogSnapshot?
+    @MainActor func observeDetail(id: ActivityID, bookId: Int32?, since: Date) -> AsyncStream<ActivityLogSnapshot?>
     func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async throws
 }
 
@@ -45,76 +47,104 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
         self.ownerProcessID = ownerProcessID ?? Self.processID
     }
 
-    private func predicate(libraryId: String?, bookId: Int32?, since: Date) -> NSPredicate {
-        if let libraryId = libraryId {
-            if let bookId = bookId {
-                return NSPredicate(
-                    format: "startDatetime >= %@ AND libraryId == %@ AND ANY bookIds == %d",
-                    since as NSDate,
-                    libraryId,
-                    bookId
-                )
+    @MainActor private func pageResults(_ query: ActivityLogQuery, in realm: Realm) -> Results<CalibreActivityLogEntry> {
+        var results = realm.objects(CalibreActivityLogEntry.self).filter("startDatetime >= %@", query.since as NSDate)
+        if let libraryId = query.libraryId {
+            results = results.filter("libraryId == %@", libraryId)
+            if let bookId = query.bookId {
+                results = results.filter("ANY bookIds == %d", bookId)
             }
-            return NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", since as NSDate, libraryId)
+        } else if query.bookId != nil {
+            // Calibre's numeric book IDs only have meaning within a library.
+            results = results.filter(NSPredicate(value: false))
         }
-
-        return NSPredicate(format: "startDatetime >= %@", since as NSDate)
+        if let kind = query.filter.kind {
+            results = results.filter("kind == %@", kind.rawValue)
+        }
+        if query.filter.failuresOnly {
+            results = results.filter("kind != nil AND status == %@", ActivityLogCompletion.failed.rawValue)
+        }
+        return results.sorted(by: [
+            SortDescriptor(keyPath: "startDatetime", ascending: false),
+            SortDescriptor(keyPath: "id", ascending: true)
+        ])
     }
 
-    @MainActor private func snapshot(_ entry: CalibreActivityLogEntry, scopedBookId: Int32?) -> ActivityLogSnapshot {
+    @MainActor private func titles(_ entry: CalibreActivityLogEntry, bookId: Int32?) -> (library: String?, book: String?) {
         let library = entry.libraryId.flatMap { librarySnapshotProvider?.calibreLibraries[$0] }
-        let bookId = scopedBookId ?? (entry.bookIds.count == 1 ? entry.bookIds.first : nil)
-        let bookTitle: String?
-        if let library, let bookId {
-            bookTitle = bookRepository.getBook(library: library, bookId: bookId)?.title
-        } else {
-            bookTitle = nil
+        let scopedId = bookId ?? (entry.bookIds.count == 1 ? entry.bookIds.first : nil)
+        if let library, let scopedId {
+            return (library.name, bookRepository.getBook(library: library, bookId: scopedId)?.title)
         }
-        return entry.toSnapshot(libraryName: library?.name, bookTitle: bookTitle)
+        return (library?.name, nil)
     }
 
-    @MainActor func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogSnapshot] {
-        guard let realm = databaseService.realm else { return [] }
+    @MainActor private func page(_ results: Results<CalibreActivityLogEntry>, bookId: Int32?, limit: Int) -> ActivityLogPage {
+        let limit = max(1, limit)
+        return ActivityLogPage(entries: results.prefix(limit).map { entry in
+            let names = titles(entry, bookId: bookId)
+            return entry.toSummary(libraryName: names.library, bookTitle: names.book)
+        }, hasMore: results.count > limit)
+    }
+
+    @MainActor private func detail(_ entry: CalibreActivityLogEntry?, bookId: Int32?) -> ActivityLogSnapshot? {
+        guard let entry else { return nil }
+        let names = titles(entry, bookId: bookId)
+        return entry.toSnapshot(libraryName: names.library, bookTitle: names.book)
+    }
+
+    @MainActor func fetchPage(query: ActivityLogQuery, limit: Int) -> ActivityLogPage {
+        guard let realm = databaseService.realm else { return .init() }
         realm.refresh()
-
-        return realm.objects(CalibreActivityLogEntry.self)
-            .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
-            .sorted(byKeyPath: "startDatetime", ascending: false)
-            .map { snapshot($0, scopedBookId: libraryId == nil ? nil : bookId) }
+        return page(pageResults(query, in: realm), bookId: query.bookId, limit: limit)
     }
 
-    @MainActor func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogSnapshot]> {
-        guard let realm = databaseService.realm else {
-            return AsyncStream { continuation in
-                continuation.yield([])
+    @MainActor func observePage(query: ActivityLogQuery, limit: Int) -> AsyncStream<ActivityLogPage> {
+        // Observe the ordered query as a live prefix. Inserts and deletions shift the prefix
+        // atomically, including at the load-more boundary. Map only the requested rows.
+        let results = databaseService.realm.map { pageResults(query, in: $0) }
+        return observe(results, unavailable: ActivityLogPage(), keyPaths: [
+            "id", "startDatetime", "finishDatetime", "status", "kind", "libraryId", "bookIds",
+            "type", "errMsg", "downloadFormat", "resultDetail", "httpStatusCode"
+        ]) { self.page($0, bookId: query.bookId, limit: limit) }
+    }
+
+    @MainActor func fetchDetail(id: ActivityID, bookId: Int32?, since: Date) -> ActivityLogSnapshot? {
+        guard let realm = databaseService.realm else { return nil }
+        realm.refresh()
+        let entry = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue)
+        guard let entry, entry.startDatetime >= since else { return nil }
+        return detail(entry, bookId: bookId)
+    }
+
+    @MainActor func observeDetail(id: ActivityID, bookId: Int32?, since: Date) -> AsyncStream<ActivityLogSnapshot?> {
+        let results = databaseService.realm?.objects(CalibreActivityLogEntry.self)
+            .filter("id == %@ AND startDatetime >= %@", id.rawValue, since as NSDate)
+        return observe(results, unavailable: nil) { self.detail($0.first, bookId: bookId) }
+    }
+
+    @MainActor private func observe<Value: Sendable>(
+        _ results: Results<CalibreActivityLogEntry>?,
+        unavailable: Value,
+        keyPaths: [String]? = nil,
+        snapshot: @escaping @MainActor (Results<CalibreActivityLogEntry>) -> Value
+    ) -> AsyncStream<Value> {
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            guard let results else {
+                continuation.yield(unavailable)
                 continuation.finish()
+                return
             }
-        }
-
-        _ = realm.refresh()
-
-        let results = realm.objects(CalibreActivityLogEntry.self)
-            .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
-            .sorted(byKeyPath: "startDatetime", ascending: false)
-
-        return AsyncStream { [weak self] continuation in
-            let token = results.observe { [weak self] change in
-                guard let self else {
-                    continuation.yield([])
-                    return
-                }
+            let token = results.observe(keyPaths: keyPaths) { change in
                 switch change {
                 case .initial(let collection), .update(let collection, _, _, _):
-                    continuation.yield(collection.map {
-                        self.snapshot($0, scopedBookId: libraryId == nil ? nil : bookId)
-                    })
+                    continuation.yield(snapshot(collection))
                 case .error:
-                    continuation.yield([])
+                    continuation.yield(unavailable)
+                    continuation.finish()
                 }
             }
-            continuation.onTermination = { _ in
-                token.invalidate()
-            }
+            continuation.onTermination = { _ in token.invalidate() }
         }
     }
 
@@ -143,13 +173,6 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
                                        entry.ownerProcessID == self.ownerProcessID {
                                         entry.apply(update)
                                     }
-                                case .legacyStart(let value):
-                                    guard value.startDatetime >= cutoff else { continue }
-                                    realm.add(CalibreActivityLogEntry(legacyStart: value))
-                                case .legacyFinish(let value):
-                                    realm.objects(CalibreActivityLogEntry.self)
-                                        .filter(CalibreActivityLogEntry.legacyPredicate(matching: value))
-                                        .first?.apply(value)
                                 case .remove(let id):
                                     if let entry = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id.rawValue) {
                                         realm.delete(entry)

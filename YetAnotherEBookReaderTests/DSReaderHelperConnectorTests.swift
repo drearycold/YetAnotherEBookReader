@@ -325,7 +325,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             guard case .decoding = error else { return XCTFail("Unexpected error: \(error)") }
         }
         await service.logger.flushPendingActivitiesForTesting()
-        let entries = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: nil, since: .distantPast)
+        let entries = container.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: nil, since: .distantPast)
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries.first?.kind, .helper)
         XCTAssertEqual(entries.first?.state, .finished(.failed))

@@ -5,6 +5,14 @@
 `codex/yabr-pdf-optimization`: fix YabrPDF single-page margin-crop viewport
 placement (content right of center, top offset / drift after page turns).
 
+## Activity Log AL4 (2026-11-10)
+
+`codex/activity-log-al4` starts at the AL3 merge `68135e51`. Activity
+Logs uses a 30-row live summary window, typed filters, and independent
+detail observation by activity ID. The legacy write adapter is removed
+and schema 151 continues to read old logs. See [Realm Boundary Convergence](history/realm-boundary-convergence.md#activity-log-al4-2026-11-10)
+for paging, filter semantics and verification.
+
 ## Activity Log AL3 (2026-11-10)
 
 `codex/activity-log-al3` starts from the AL2 merge `f0443280` and migrates

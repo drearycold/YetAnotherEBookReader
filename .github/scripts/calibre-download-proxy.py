@@ -26,7 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 def serve(upstream, port):
     state = {"mode": "success", "attempts": 0, "detail_mode": "success", "manifest_mode": "real"}
     state["description_mode"] = None
-    lock = threading.Lock()
+    lock = threading.Condition()
     # A system proxy must never send these loopback requests to another machine.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -37,11 +37,12 @@ def serve(upstream, port):
                 query = urllib.parse.parse_qs(parsed.query)
                 with lock:
                     mode = query.get("mode", [state["mode"]])[0]
-                    if mode not in ("success", "slow", "fail_once"):
+                    if mode not in ("success", "slow", "fail_once", "hold"):
                         self.reply(400, b"Unknown download mode", "text/plain")
                         return
                     if "mode" in query:
                         state.update(mode=mode, attempts=0)
+                        lock.notify_all()
                     body = json.dumps(state).encode()
                 self.reply(200, body, "application/json")
                 return
@@ -114,6 +115,13 @@ def serve(upstream, port):
                     return
                 if mode == "slow":
                     time.sleep(7)
+                if mode == "hold":
+                    # Let the UI open the live activity before allowing the EPUB to finish.
+                    with lock:
+                        released = lock.wait_for(lambda: state["mode"] != "hold", timeout=45)
+                    if not released:
+                        self.reply(504, b"Download was not released", "text/plain")
+                        return
             try:
                 with opener.open(upstream + self.path, timeout=30) as response:
                     body = response.read()

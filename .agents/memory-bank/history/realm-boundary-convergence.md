@@ -4,6 +4,53 @@ Archived records for Realm boundary shrinkage, repository ownership, mapper extr
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Activity Log AL4 (2026-11-10)
+
+The list consumes lightweight Realm summaries, sorted by descending start
+time and ascending activity ID. It starts with 30 rows and expands the same
+live query by 30 on each Load More. Inserts, updates and deletions reconcile
+against the ordered prefix as a unit. Only that prefix resolves book titles
+and builds values. Request bodies, headers, request steps and progress
+history are read only by the detail query.
+
+All three entrances share the list and retain their original scope. Numeric
+book IDs are filtered within their library, including batch membership.
+The task filter matches typed kinds. Failures Only matches typed Failed
+rows and excludes cancellation, interruption and legacy records. Filter
+changes replace the subscription and reset the window. Returning from a
+detail keeps the window and stable row identities. Foreground and appearance
+recalculate the same seven-day cutoff used by maintenance.
+
+Detail reads and observes one stable activity ID with its own main-actor
+view model. It can finish while the list is offscreen and shows an
+unavailable message after deletion or expiry. Status, full saved request
+diagnostics, headers and progress changes stay in the detail. Paused rows
+have no finish time. Legacy timestamps are shown as last recorded, and
+recovery timestamps are marked interrupted without inferring elapsed time.
+
+The string write adapter and AppContainer forwarding are removed. Preview
+and mock activities use typed writes. Realm schema 151 still reads the
+historical type, result and request fields. AL3 ownership, retention,
+background flush and download behavior remain in use.
+
+The focused iPhone 17 suite passed 159 tests. The final full app test
+target ran 1072 tests with one skip and zero failures, including 21 real
+Calibre 9.11 contracts. All five standard UI journeys passed. The dedicated
+Activity Log journey verified the three entrances, task and failure
+filters, clearing, paging, and the expanded window on return. It passed
+on iPhone 17, iPhone 7 / iOS 15.5, and iPad mini / iPadOS 26.5 at the largest
+accessibility text size. The iPhone 7 run also passed 38 focused units.
+An isolated iPhone 17 app against the real download proxy displayed a
+running activity, then updated the same detail to succeeded with a finish
+time while the list was hidden.
+
+Legacy request and result preservation and interrupted recovery were verified
+with file-backed migration fixtures and repository tests. Native interaction
+with a historical row and Catalyst UI interaction were outside this run.
+The final Catalyst build, Swift parse, project plist, Python syntax, Realm
+boundary, legacy writer scan and diff checks passed. Logs and result bundles
+are under `/tmp/YabrAL4`.
+
 ## Activity Log AL3 (2026-11-10)
 
 Download activities use the attempt UUID and carry the library, book, format,

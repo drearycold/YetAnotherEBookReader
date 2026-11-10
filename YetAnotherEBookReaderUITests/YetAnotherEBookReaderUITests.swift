@@ -647,6 +647,110 @@ final class YetAnotherEBookReaderBrowseCategoriesUITests: UIJourneyTestCase {
 
 /// Opt-in native journeys against real calibre servers and a separately installed app copy.
 /// Supply the three YABR_ONBOARDING_* variables through the UI runner's xctestrun environment.
+final class ActivityLogUITests: UIJourneyTestCase {
+    func testActivityEntrancesFiltersAndLoadMore() {
+        app.launchArguments.append("--ui-testing-activity-log")
+        let largeType = ProcessInfo.processInfo.environment["YABR_AL4_LARGE_TYPE"] == "1"
+        if largeType {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        launchApp()
+        tapTab(label: "Settings", screen: AccessibilityID.settingsScreen)
+        revealActivityElement(app.buttons["Activity Logs"].firstMatch)
+        app.buttons["Activity Logs"].firstMatch.tap()
+        waitForActivityLog()
+        waitForFixture("35")
+        if largeType {
+            XCTAssertGreaterThan(app.staticTexts["Activity fixture 35"].firstMatch.frame.height, 24)
+        }
+
+        let filters = app.buttons["activity-log.filters"].firstMatch
+        waitForElement(filters, description: "activity filters")
+        filters.tap()
+        let taskType = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Task Type")).firstMatch
+        waitForElement(taskType, description: "task type")
+        taskType.tap()
+        let download = app.buttons["Download"].firstMatch
+        if !download.isHittable {
+            let menu = app.collectionViews.containing(.button, identifier: "All Tasks").firstMatch
+            waitForElement(menu, description: "scrollable task menu")
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let x = menu.frame.midX
+            let y = menu.frame.minY
+            let start = origin.withOffset(CGVector(dx: x, dy: y + min(menu.frame.height * 0.75, 400)))
+            let end = origin.withOffset(CGVector(dx: x, dy: y + 100))
+            for _ in 0..<8 where !download.isHittable { start.press(forDuration: 0.05, thenDragTo: end) }
+        }
+        waitForElement(download, description: "download task filter")
+        download.tap()
+        waitForFixture("34")
+        XCTAssertFalse(app.staticTexts["Activity fixture 33"].exists)
+
+        filters.tap()
+        let failures = app.buttons["Failures Only"].firstMatch
+        waitForElement(failures, description: "failures-only filter")
+        failures.tap()
+        waitForFixture("35")
+        waitForCondition("Successful downloads should be filtered out") {
+            !self.app.staticTexts["Activity fixture 34"].exists
+        }
+
+        filters.tap()
+        let clear = app.buttons["Clear Filters"].firstMatch
+        waitForElement(clear, description: "clear activity filters")
+        clear.tap()
+        waitForFixture("33")
+
+        let more = app.buttons["activity-log.load-more"].firstMatch
+        revealActivityElement(more)
+        more.tap()
+        let oldest = app.staticTexts["Activity fixture 01"].firstMatch
+        revealActivityElement(oldest)
+        oldest.tap()
+        waitForElement(app.navigationBars["Activity Details"], description: "activity detail")
+        navigateBackFromNavigationStack()
+        waitForActivityLog()
+        XCTAssertTrue(oldest.exists, "Returning should retain the expanded activity window")
+        navigateBackFromNavigationStack()
+
+        let server = waitForIdentifier(AccessibilityID.settingsServer)
+        for _ in 0..<8 where !server.isHittable { app.swipeDown() }
+        server.tap()
+        let library = app.staticTexts["UI Test Library"].firstMatch
+        waitForElement(library, description: "library in server settings")
+        library.tap()
+        revealActivityElement(app.buttons["Activity Logs"].firstMatch)
+        app.buttons["Activity Logs"].firstMatch.tap()
+        waitForActivityLog()
+        waitForFixture("35")
+
+        tapTab(label: "Recent", screen: AccessibilityID.recentScreen)
+        waitForIdentifier(AccessibilityID.recentBookOptions).tap()
+        waitForIdentifier(AccessibilityID.recentBookDetails).tap()
+        waitForIdentifier(AccessibilityID.bookDetailScreen)
+        let bookLogs = app.buttons["Activity Logs"].firstMatch
+        revealActivityElement(bookLogs)
+        bookLogs.tap()
+        waitForActivityLog()
+        waitForFixture("35")
+        app.navigationBars["Activity Logs"].buttons["Close"].tap()
+        waitForIdentifier(AccessibilityID.bookDetailScreen)
+    }
+
+    private func waitForFixture(_ suffix: String) {
+        waitForElement(app.staticTexts["Activity fixture \(suffix)"].firstMatch, description: "activity fixture \(suffix)")
+    }
+
+    private func waitForActivityLog() {
+        waitForElement(app.navigationBars["Activity Logs"], description: "Activity Logs")
+    }
+
+    private func revealActivityElement(_ element: XCUIElement) {
+        for _ in 0..<36 where !element.isHittable { app.swipeUp() }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
+    }
+}
+
 final class CalibreOnboardingUITests: XCTestCase {
     private var app: XCUIApplication!
     private var singleURL = ""
@@ -1031,6 +1135,40 @@ final class CalibreOnboardingUITests: XCTestCase {
         logs.tap()
         XCTAssertTrue(app.navigationBars["Activity Logs"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Cancelled"].firstMatch.waitForExistence(timeout: 10))
+    }
+
+    func testDownloadActivityDetailUpdatesWhileTheListIsHidden() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DOWNLOAD_READ_CONTROL_URL"] == nil,
+                      "Requires the real-calibre download-control proxy")
+        connect(name: "AL4 Activity Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        element("screen.browse.book-list")
+        element("browse.book.mock").tap()
+        element("screen.book-detail")
+        waitForReadLabel("Download and Read")
+
+        try downloadMode("hold")
+        element("book-detail.download-only").tap()
+        let logs = app.buttons["Activity Logs"].firstMatch
+        reveal(logs, maxDrags: 28)
+        logs.tap()
+        XCTAssertTrue(app.navigationBars["Activity Logs"].waitForExistence(timeout: 10))
+        let row = app.staticTexts["Download EPUB"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Activity Details"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Running"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["Finished"].firstMatch.exists)
+
+        try downloadMode("success")
+        XCTAssertTrue(app.staticTexts["Succeeded"].firstMatch.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Finished"].firstMatch.exists)
+        back()
+        XCTAssertTrue(app.navigationBars["Activity Logs"].waitForExistence(timeout: 10))
+        app.navigationBars["Activity Logs"].buttons["Close"].tap()
+        XCTAssertTrue(app.navigationBars["Book Details"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.webViews["reader.folio.content"].exists)
     }
 
     func testPreviewLifecycleAndFormatActionsPreserveReadingPosition() throws {

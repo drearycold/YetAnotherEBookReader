@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ActivityList: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: ActivityListViewModel
     let close: (() -> Void)?
 
@@ -18,16 +19,24 @@ struct ActivityList: View {
 
     var body: some View {
         List {
-            if viewModel.activities.isEmpty {
-                Text("No activity in the last 7 days")
-                    .foregroundColor(.secondary)
+            if viewModel.page.entries.isEmpty {
+                if viewModel.filter.isActive {
+                    Text("No activity matches these filters").foregroundColor(.secondary)
+                } else {
+                    Text("No activity in the last 7 days").foregroundColor(.secondary)
+                }
             }
-            ForEach(viewModel.activities) { entry in
+            ForEach(viewModel.page.entries) { entry in
                 NavigationLink {
-                    ActivityDetailView(entry: entry)
+                    ActivityDetailView(viewModel: viewModel.makeDetailViewModel(id: entry.id))
+                        .id(entry.id)
                 } label: {
                     row(entry)
                 }
+            }
+            if viewModel.page.hasMore {
+                Button("Load More", action: viewModel.loadMore)
+                    .accessibilityIdentifier("activity-log.load-more")
             }
         }
         .navigationTitle("Activity Logs")
@@ -38,89 +47,135 @@ struct ActivityList: View {
                     Button("Close", action: close)
                 }
             }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Menu("Task Type") {
+                        Picker("Task Type", selection: $viewModel.filter.kind) {
+                            Text("All Tasks").tag(nil as ActivityLogKind?)
+                            ForEach(ActivityLogKind.allCases, id: \.self) { kind in
+                                Text(kind.activityTitle()).tag(Optional(kind))
+                            }
+                        }
+                    }
+                    Toggle("Failures Only", isOn: $viewModel.filter.failuresOnly)
+                    Button("Clear Filters") { viewModel.filter = ActivityLogFilter() }
+                        .disabled(!viewModel.filter.isActive)
+                } label: {
+                    Label("Filters", systemImage: viewModel.filter.isActive
+                          ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                .accessibilityIdentifier("activity-log.filters")
+            }
         }
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
+        .onChange(of: scenePhase) { if $0 == .active { viewModel.refreshIfVisible() } }
     }
 
-    private func row(_ entry: ActivityLogSnapshot) -> some View {
-        VStack {
-            HStack {
-                Text(entry.entityText)
-                Spacer()
+    private func row(_ entry: ActivityLogSummary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(activityEntity(libraryName: entry.libraryName, bookTitle: entry.bookTitle))
+            Text(activityTitle(kind: entry.kind, downloadFormat: entry.downloadFormat, legacyType: entry.legacyType))
+            Text(entry.state.displayText)
+                .fontWeight(.semibold)
+            Text(entry.startDatetime.formatted(date: .numeric, time: .standard))
+                .foregroundColor(.secondary)
+            if let duration = entry.duration {
+                Text(formattedActivityDuration(duration))
+                    .foregroundColor(.secondary)
             }
-            HStack {
-                Text(entry.kindText)
-                Spacer()
-                Text(entry.statusText)
-            }.font(.caption)
-            HStack {
-                Text(entry.startDatetime.formatted(date: .numeric, time: .standard))
-                Spacer()
-                if let finished = entry.finishDatetime {
-                    Text("->")
-                    Spacer()
-                    Text(finished.formatted(date: .numeric, time: .standard))
-                }
-            }.font(.caption)
+            if let result = entry.resultPreview {
+                Text(result)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
         }
+        .font(.subheadline)
+        .padding(.vertical, 2)
     }
 }
 
 struct ActivityDetailView: View {
-    let entry: ActivityLogSnapshot
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var viewModel: ActivityDetailViewModel
+
+    init(viewModel: @autoclosure @escaping () -> ActivityDetailViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
+    }
 
     var body: some View {
         List {
-            Section("Activity") {
-                LabeledActivityValue(title: entry.entityTitle, value: entry.entityText)
-                LabeledActivityValue(title: "Task", value: entry.kindText)
-                LabeledActivityValue(title: "Status", value: entry.statusText)
-                LabeledActivityValue(title: "Started", value: entry.startDatetime.formatted(date: .long, time: .complete))
-                if let finished = entry.finishDatetime {
-                    LabeledActivityValue(title: "Finished", value: finished.formatted(date: .long, time: .complete))
-                }
-                if let code = entry.result.httpStatusCode {
-                    LabeledActivityValue(title: "HTTP Status", value: String(code))
-                }
-                if let category = entry.result.errorCategory {
-                    LabeledActivityValue(title: "Error Category", value: category.displayText)
-                }
-                if let detail = entry.legacyResult ?? entry.result.detail {
-                    LabeledActivityValue(title: "Result", value: detail)
-                }
-            }
-            if !entry.progressChanges.isEmpty {
-                Section("Progress") {
-                    ForEach(entry.progressChanges, id: \.revision) { change in
-                        LabeledActivityValue(title: change.progress == .paused ? "Paused" : "Resumed",
-                                             value: change.date.formatted(date: .long, time: .complete))
-                    }
-                }
-            }
-            if entry.result.requests.isEmpty {
-                Section("Request") {
-                    requestValues(entry.request)
-                }
+            if let entry = viewModel.entry {
+                sections(entry)
             } else {
-                ForEach(entry.result.requests.indices, id: \.self) { index in
-                    let diagnostic = entry.result.requests[index]
-                    Section("Request \(index + 1)") {
-                        requestValues(diagnostic.request)
-                        if let responseURL = diagnostic.responseURL {
-                            LabeledActivityValue(title: "Response URL", value: responseURL)
-                        }
-                        if let code = diagnostic.httpStatusCode {
-                            LabeledActivityValue(title: "HTTP Status", value: String(code))
-                        }
-                        LabeledActivityValue(title: "Duration", value: diagnostic.duration.formatted(.number.precision(.fractionLength(3))) + " s")
-                    }
-                }
+                Text("This activity is no longer available.").foregroundColor(.secondary)
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Activity Details")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.stop() }
+        .onChange(of: scenePhase) { if $0 == .active { viewModel.refreshIfVisible() } }
+    }
+
+    @ViewBuilder
+    private func sections(_ entry: ActivityLogSnapshot) -> some View {
+        Section("Activity") {
+            LabeledActivityValue(title: entry.bookTitle?.isEmpty == false ? "Book" : "Library",
+                                 value: activityEntity(libraryName: entry.libraryName, bookTitle: entry.bookTitle))
+            LabeledActivityValue(title: "Task", value: activityTitle(kind: entry.kind,
+                                 downloadFormat: entry.downloadFormat, legacyType: entry.legacyType))
+            LabeledActivityValue(title: "Status", value: entry.statusText)
+            LabeledActivityValue(title: "Started", value: entry.startDatetime.formatted(date: .long, time: .complete))
+            if let finished = entry.finishDatetime {
+                if entry.state == .legacy {
+                    LabeledActivityValue(title: "Last Recorded", value: finished.formatted(date: .long, time: .complete))
+                } else if entry.state == .finished(.interrupted) {
+                    LabeledActivityValue(title: "Marked Interrupted", value: finished.formatted(date: .long, time: .complete))
+                } else if case .finished = entry.state {
+                    LabeledActivityValue(title: "Finished", value: finished.formatted(date: .long, time: .complete))
+                }
+            }
+            if let duration = entry.state.elapsed(from: entry.startDatetime, to: entry.finishDatetime) {
+                LabeledActivityValue(title: "Duration", value: formattedActivityDuration(duration))
+            }
+            if let code = entry.result.httpStatusCode {
+                LabeledActivityValue(title: "HTTP Status", value: String(code))
+            }
+            if let category = entry.result.errorCategory {
+                LabeledActivityValue(title: "Error Category", value: category.displayText)
+            }
+            if let detail = entry.legacyResult ?? entry.result.detail {
+                LabeledActivityValue(title: "Result", value: detail)
+            }
+        }
+        if !entry.progressChanges.isEmpty {
+            Section("Progress") {
+                ForEach(entry.progressChanges, id: \.revision) { change in
+                    LabeledActivityValue(title: change.progress == .paused ? "Paused" : "Resumed",
+                                         value: change.date.formatted(date: .long, time: .complete))
+                }
+            }
+        }
+        if entry.result.requests.first?.request != entry.request {
+            Section(entry.result.requests.isEmpty ? "Request" : "Initial Request") {
+                requestValues(entry.request)
+            }
+        }
+        ForEach(entry.result.requests.indices, id: \.self) { index in
+            let diagnostic = entry.result.requests[index]
+            Section("Request \(index + 1)") {
+                requestValues(diagnostic.request)
+                if let responseURL = diagnostic.responseURL {
+                    LabeledActivityValue(title: "Response URL", value: responseURL)
+                }
+                if let code = diagnostic.httpStatusCode {
+                    LabeledActivityValue(title: "HTTP Status", value: String(code))
+                }
+                LabeledActivityValue(title: "Duration", value: formattedActivityDuration(diagnostic.duration))
+            }
+        }
     }
 
     @ViewBuilder
@@ -131,23 +186,33 @@ struct ActivityDetailView: View {
             title: "Body",
             value: request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? String(localized: "Empty")
         )
+        if !request.headers.isEmpty {
+            DisclosureGroup("Headers") {
+                ForEach(request.headers.indices, id: \.self) { index in
+                    let header = request.headers[index]
+                    LabeledActivityValue(title: LocalizedStringKey(header.key), value: header.value)
+                }
+            }
+        }
     }
 }
 
-extension ActivityLogSnapshot {
-    fileprivate var entityTitle: LocalizedStringKey {
-        bookTitle?.isEmpty == false ? "Book" : "Library"
-    }
+private func activityEntity(libraryName: String?, bookTitle: String?) -> String {
+    if let bookTitle, !bookTitle.isEmpty { return bookTitle }
+    return libraryName ?? String(localized: "No Library")
+}
 
-    fileprivate var entityText: String {
-        if let bookTitle, !bookTitle.isEmpty {
-            return bookTitle
-        }
-        return libraryName ?? String(localized: "No Entity")
-    }
+private func activityTitle(kind: ActivityLogKind?, downloadFormat: String?, legacyType: String?) -> String {
+    kind?.activityTitle(downloadFormat: downloadFormat) ?? legacyType ?? String(localized: "Unknown Task")
+}
 
-    fileprivate var kindText: String {
-        switch kind {
+private func formattedActivityDuration(_ duration: TimeInterval) -> String {
+    duration.formatted(.number.precision(.fractionLength(0...3))) + " s"
+}
+
+private extension ActivityLogKind {
+    func activityTitle(downloadFormat: String? = nil) -> String {
+        switch self {
         case .bookMetadata: return String(localized: "Get Book Metadata")
         case .batchMetadata: return String(localized: "Get Books Metadata")
         case .bookManifest: return String(localized: "Get Book Manifest")
@@ -155,19 +220,24 @@ extension ActivityLogSnapshot {
         case .librarySummary: return String(localized: "Library Summary")
         case .search: return String(localized: "Search")
         case .categories: return String(localized: "Categories")
-        case .probe: return String(localized: "Server Probe")
+        case .probe: return String(localized: "Server Check")
         case .readingPosition: return String(localized: "Reading Position")
         case .annotations: return String(localized: "Annotations")
         case .helper: return String(localized: "DSReader Helper")
         case .download:
-            if let format = downloadFormat { return String(localized: "Download \(format)") }
+            if let downloadFormat { return String(localized: "Download \(downloadFormat)") }
             return String(localized: "Download")
-        case nil: return legacyType ?? String(localized: "Unknown Type")
         }
     }
+}
 
-    var statusText: String {
-        switch state {
+extension ActivityLogSnapshot {
+    var statusText: String { state.displayText }
+}
+
+private extension ActivityLogState {
+    var displayText: String {
+        switch self {
         case .inProgress(.running): return String(localized: "Running")
         case .inProgress(.paused): return String(localized: "Paused")
         case .finished(.succeeded): return String(localized: "Succeeded")

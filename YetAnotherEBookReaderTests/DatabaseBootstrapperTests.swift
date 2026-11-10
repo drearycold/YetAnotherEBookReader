@@ -136,7 +136,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
                 let repository = RealmActivityLogRepository(
                     databaseService: databaseService, bookRepository: MockBookRepository(), container: nil
                 )
-                let bookEntries = repository.fetchEntries(libraryId: "library-A", bookId: 42, since: startDate)
+                let bookEntries = repository.fetchTestSnapshots(libraryId: "library-A", bookId: 42, since: startDate)
                 XCTAssertEqual(bookEntries.map(\.id), [historicalID])
                 let legacy = try XCTUnwrap(bookEntries.first)
                 XCTAssertEqual(legacy.startDatetime, startDate)
@@ -150,7 +150,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
                 XCTAssertEqual(legacy.state, .legacy)
                 XCTAssertEqual(legacy.statusText, String(localized: "Legacy Entry"))
 
-                let libraryEntries = repository.fetchEntries(libraryId: "library-A", bookId: nil, since: startDate)
+                let libraryEntries = repository.fetchTestSnapshots(libraryId: "library-A", bookId: nil, since: startDate)
                 XCTAssertEqual(Set(libraryEntries.map(\.id)), [historicalID, unfinishedID])
                 let unfinished = try XCTUnwrap(libraryEntries.first { $0.id == unfinishedID })
                 XCTAssertEqual(unfinished.state, .legacy)
@@ -215,14 +215,14 @@ final class DatabaseBootstrapperTests: XCTestCase {
         let repository = RealmActivityLogRepository(
             databaseService: databaseService, bookRepository: MockBookRepository(), container: nil
         )
-        let typed = try XCTUnwrap(repository.fetchEntries(libraryId: "library", bookId: 2, since: date).first)
+        let typed = try XCTUnwrap(repository.fetchTestSnapshots(libraryId: "library", bookId: 2, since: date).first)
         XCTAssertEqual(typed.id.rawValue, "typed")
         XCTAssertEqual(typed.kind, .batchMetadata)
         XCTAssertEqual(typed.state, .finished(.failed))
         XCTAssertEqual(typed.finishDatetime, date.addingTimeInterval(1))
         XCTAssertEqual(typed.request.endpointURL, "https://calibre.local/ajax/books")
         XCTAssertEqual(typed.result, ActivityLogResult(httpStatusCode: 403, errorCategory: .authentication, detail: "Refused"))
-        let legacy = try XCTUnwrap(repository.fetchEntries(libraryId: nil, bookId: nil, since: date).first { $0.id.rawValue == "legacy" })
+        let legacy = try XCTUnwrap(repository.fetchTestSnapshots(libraryId: nil, bookId: nil, since: date).first { $0.id.rawValue == "legacy" })
         XCTAssertEqual(legacy.state, .legacy)
         XCTAssertEqual(legacy.legacyResult, "Success")
         XCTAssertEqual(databaseService.realm?.object(ofType: FolioReaderPreferenceRealm.self,
@@ -284,7 +284,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
                                                      bookRepository: MockBookRepository(), container: nil)
         let recoveredAt = date.addingTimeInterval(30)
         try await repository.writeActivityLogEvents([.recoverAndPrune(at: recoveredAt)])
-        let entries = Dictionary(uniqueKeysWithValues: repository.fetchEntries(
+        let entries = Dictionary(uniqueKeysWithValues: repository.fetchTestSnapshots(
             libraryId: nil, bookId: nil, since: date
         ).map { ($0.id.rawValue, $0) })
         XCTAssertEqual(entries["al2"]?.result.requests, [diagnostic])

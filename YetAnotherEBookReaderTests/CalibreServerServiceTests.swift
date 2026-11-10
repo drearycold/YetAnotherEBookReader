@@ -325,7 +325,7 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(entries.count, 2)
         XCTAssertEqual(Set(entries.map(\.id)).count, 2)
         for library in [library!, other] {
-            let scoped = container.activityLogRepository.fetchEntries(libraryId: library.id, bookId: 7, since: activitySince)
+            let scoped = container.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: 7, since: activitySince)
             XCTAssertEqual(scoped.count, 1)
             XCTAssertEqual(scoped.first?.bookIds, [7, 9])
             XCTAssertEqual(scoped.first?.state, .finished(.succeeded))
@@ -377,7 +377,7 @@ final class CalibreServerServiceTests: XCTestCase {
 
     private func activityEntries() async -> [ActivityLogSnapshot] {
         await service.logger.flushPendingActivitiesForTesting()
-        return container.activityLogRepository.fetchEntries(libraryId: nil, bookId: nil, since: activitySince)
+        return container.activityLogRepository.fetchTestSnapshots(libraryId: nil, bookId: nil, since: activitySince)
             .filter { $0.kind != nil }
     }
 
