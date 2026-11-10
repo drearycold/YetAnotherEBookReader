@@ -63,11 +63,11 @@ struct ReadingPositionHistoryView: View {
                 }
                 #endif
             } else {
-                Text("No reading in the last \(ReadingPositionHistoryViewModel.limitDays) days")
+                Text("No reading today or in the previous \(ReadingPositionHistoryViewModel.limitDays) days")
                     .foregroundColor(.secondary)
             }
         } header: {
-            Text("Last \(ReadingPositionHistoryViewModel.limitDays) Days")
+            Text(ReadingPositionHistoryViewModel.statisticsTitle)
         } footer: {
             if viewModel.hasRecentReading {
                 Text(viewModel.summaryText)
@@ -137,7 +137,7 @@ struct ReadingPositionHistoryView: View {
     private var booksSection: some View {
         Section(header: Text("Books")) {
             if viewModel.booksHistoryItems.isEmpty {
-                Text("No books read in the last \(ReadingPositionHistoryViewModel.limitDays) days")
+                Text("No books read today or in the previous \(ReadingPositionHistoryViewModel.limitDays) days")
                     .foregroundColor(.secondary)
             }
             ForEach(viewModel.booksHistoryItems) { item in

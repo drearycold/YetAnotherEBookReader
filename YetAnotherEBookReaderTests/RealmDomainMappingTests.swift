@@ -393,6 +393,7 @@ final class RealmDomainMappingTests: XCTestCase {
         )
         
         let history = BookDeviceReadingPositionHistory(
+            id: ReadingHistorySessionID(serverUUID: nil, objectID: ObjectId.generate().stringValue),
             bookId: "book-xyz",
             startDatetime: Date(timeIntervalSince1970: 5000),
             startPosition: startPosition,
@@ -406,6 +407,8 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(realmObj.endPosition?.deviceId, "d1")
         
         let mappedHistory = realmObj.toDomain()
+        XCTAssertEqual(mappedHistory.id, history.id)
+        XCTAssertEqual(mappedHistory.id.objectID, realmObj._id.stringValue)
         XCTAssertEqual(mappedHistory.bookId, history.bookId)
         XCTAssertEqual(mappedHistory.startDatetime, history.startDatetime)
         XCTAssertEqual(mappedHistory.startPosition?.id, history.startPosition?.id)
@@ -641,6 +644,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(mappedPosition.readerName, position.readerName)
         
         let history = BookDeviceReadingPositionHistory(
+            id: ReadingHistorySessionID(serverUUID: nil, objectID: ObjectId.generate().stringValue),
             bookId: "book-xyz",
             startDatetime: Date(timeIntervalSince1970: 5000),
             startPosition: position,

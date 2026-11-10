@@ -93,20 +93,13 @@ extension BookDeviceReadingPosition {
 }
 
 extension BookDeviceReadingPositionHistoryRealm {
-    func toDomain() -> BookDeviceReadingPositionHistory {
-        var startPos: BookDeviceReadingPosition? = nil
-        var endPos: BookDeviceReadingPosition? = nil
-        if let startPosition = self.startPosition {
-            startPos = startPosition.toDomain()
-        }
-        if let endPosition = self.endPosition {
-            endPos = endPosition.toDomain()
-        }
-        return BookDeviceReadingPositionHistory(
-            bookId: self.bookId,
-            startDatetime: self.startDatetime,
-            startPosition: startPos,
-            endPosition: endPos
+    func toDomain(serverUUID: UUID? = nil) -> BookDeviceReadingPositionHistory {
+        BookDeviceReadingPositionHistory(
+            id: ReadingHistorySessionID(serverUUID: serverUUID, objectID: _id.stringValue),
+            bookId: bookId,
+            startDatetime: startDatetime,
+            startPosition: startPosition?.toDomain(),
+            endPosition: endPosition?.toDomain()
         )
     }
 
@@ -145,6 +138,9 @@ extension BookDeviceReadingPositionHistoryRealm {
 extension BookDeviceReadingPositionHistory {
     func makeRealmObject() -> BookDeviceReadingPositionHistoryRealm {
         let object = BookDeviceReadingPositionHistoryRealm()
+        if let objectID = try? ObjectId(string: id.objectID) {
+            object._id = objectID
+        }
         object.applyDomain(self)
         return object
     }

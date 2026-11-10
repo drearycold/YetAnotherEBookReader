@@ -1666,7 +1666,7 @@ class ReadingPositionViewModelTests: XCTestCase {
 
         let readingPositionRepository = MockReadingPositionRepository()
         readingPositionRepository.getPositionsReturn = positions
-        readingPositionRepository.positionHistoryReturn = sessions
+        readingPositionRepository.sessionsReturn = sessions
         mockAppContainer.readingPositionRepository = readingPositionRepository
         // The history list keeps only sessions of books on the shelf.
         mockAppContainer.booksInShelf[mockBook.inShelfId] = mockBook
@@ -1771,28 +1771,49 @@ class ReadingPositionViewModelTests: XCTestCase {
     }
 
     func testHistoryViewModelBuildsLocalSessionRows() throws {
-        let now = Date()
-        let start = max(Calendar.current.startOfDay(for: now), now.addingTimeInterval(-1800))
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2024-04-08T12:00:00Z"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let start = now.addingTimeInterval(-1800)
         let endPosition = TestFixtures.makeReadingPosition(
             id: mockAppContainer.deviceName,
             lastReadChapter: "Chapter 4",
             epoch: now.timeIntervalSince1970
         )
         let session = BookDeviceReadingPositionHistory(
-            bookId: "\(mockBook.library.key) - \(mockBook.id)",
+            id: ReadingHistorySessionID(serverUUID: mockBook.library.server.uuid, objectID: "session"),
+            bookId: mockBook.bookPrefId,
             startDatetime: start,
             startPosition: nil,
             endPosition: endPosition
         )
         let historyVM = makeHistoryViewModel(positions: [endPosition], sessions: [session])
 
-        historyVM.loadData()
+        historyVM.loadData(now: now, calendar: calendar)
 
         XCTAssertEqual(historyVM.sessionRows.count, 1)
+        XCTAssertEqual(historyVM.sessionRows.first?.id, session.id)
         XCTAssertEqual(historyVM.sessionRows.first?.chapter, "Chapter 4")
         XCTAssertFalse(historyVM.sessionRows.first?.durationText.isEmpty ?? true)
         XCTAssertEqual(historyVM.readingStatistics.count, ReadingPositionHistoryViewModel.limitDays + 1)
-        XCTAssertEqual(historyVM.chartDayLabels().last, "Today")
+        XCTAssertEqual(historyVM.chartDayLabels.last, "Today")
+        XCTAssertEqual(historyVM.todayMinutes, 30)
+        XCTAssertEqual(historyVM.avgMinutes, 0)
+        XCTAssertEqual(historyVM.maxMinutes, 0)
+
+        let repository = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
+        let newer = BookDeviceReadingPositionHistory(
+            id: ReadingHistorySessionID(serverUUID: mockBook.library.server.uuid, objectID: "newer-session"),
+            bookId: mockBook.bookPrefId,
+            startDatetime: now.addingTimeInterval(-900),
+            startPosition: nil,
+            endPosition: endPosition
+        )
+        repository.sessionsReturn.append(newer)
+        historyVM.loadData(now: now, calendar: calendar)
+
+        XCTAssertEqual(historyVM.sessionRows.map(\.id), [newer.id, session.id])
+        XCTAssertEqual(historyVM.todayMinutes, 45)
     }
 
     func testHistoryViewModelContinueReadingRowOpensReader() throws {

@@ -679,7 +679,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         guard bookIdentity.accepts(bookId) else { return [] }
 
         if isReadOnly { return [] }
-        return readingPositionRepository.sessions(for: book, list: nil).map { $0.toFolioReaderReadPositionHistory() }
+        return readingPositionRepository.sessions(for: book, startingIn: nil).map { $0.toFolioReaderReadPositionHistory() }
     }
 
 }

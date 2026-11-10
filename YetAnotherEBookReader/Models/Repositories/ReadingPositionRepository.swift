@@ -18,8 +18,8 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
-    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
-    func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
+    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory]
+    func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory]
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, server: CalibreServer?) -> [CalibreBookLastReadPositionEntry]
@@ -50,8 +50,8 @@ extension ReadingPositionRepositoryProtocol {
         removePosition(position: position, forBookId: bookId, server: nil)
     }
 
-    func sessions(forBookId bookId: String, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
-        sessions(forBookId: bookId, server: nil, list: startDateAfter)
+    func sessions(forBookId bookId: String, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
+        sessions(forBookId: bookId, server: nil, startingIn: range)
     }
 
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle? {
@@ -86,8 +86,8 @@ extension ReadingPositionRepositoryProtocol {
         removePosition(position: position, forBookId: book.bookPrefId, server: book.library.server)
     }
 
-    func sessions(for book: CalibreBook, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
-        sessions(forBookId: book.bookPrefId, server: book.library.server, list: startDateAfter)
+    func sessions(for book: CalibreBook, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
+        sessions(forBookId: book.bookPrefId, server: book.library.server, startingIn: range)
     }
 
     func beginSession(at position: BookDeviceReadingPosition, for book: CalibreBook) -> ReadingSessionHandle? {
@@ -240,42 +240,33 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
     }
 
-    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
-        guard let realm = getRealm(server: nil) else { return [] }
-
-        var predicate: NSPredicate?
-        if let library, let bookId {
-            let historyEntryBookId = "\(library.key) - \(bookId)"
-            if let startDateAfter {
-                predicate = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", historyEntryBookId, startDateAfter as NSDate)
-            } else {
-                predicate = NSPredicate(format: "bookId = %@", historyEntryBookId)
-            }
-        } else if let startDateAfter {
-            predicate = NSPredicate(format: "startDatetime >= %@", startDateAfter as NSDate)
-        }
-
-        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-        if let predicate {
-            results = results.filter(predicate)
-        }
-
-        return results
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-            .filter { $0.endPosition != nil }
-            .map { $0.toDomain() }
+    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
+        guard !bookIds.isEmpty, let realm = getRealm(server: nil) else { return [] }
+        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter("bookId IN %@", Array(bookIds))
+        return readSessions(results, startingIn: range, serverUUID: nil)
     }
 
-    func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+    func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
         guard let realm = getRealm(server: server) else { return [] }
         let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(
-                startDateAfter == nil
-                ? NSPredicate(format: "bookId == %@", bookId)
-                : NSPredicate(format: "bookId == %@ AND startDatetime >= %@", bookId, startDateAfter! as NSDate)
+            .filter("bookId == %@", bookId)
+        return readSessions(results, startingIn: range, serverUUID: server?.uuid)
+    }
+
+    private func readSessions(
+        _ results: Results<BookDeviceReadingPositionHistoryRealm>,
+        startingIn range: ClosedRange<Date>?,
+        serverUUID: UUID?
+    ) -> [BookDeviceReadingPositionHistory] {
+        var completed = results.filter("endPosition != nil")
+        if let range {
+            completed = completed.filter(
+                "startDatetime >= %@ AND startDatetime <= %@",
+                range.lowerBound as NSDate, range.upperBound as NSDate
             )
-            .filter { $0.endPosition != nil }
-        return results.map { $0.toDomain() }
+        }
+        return completed.map { $0.toDomain(serverUUID: serverUUID) }
     }
 
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle? {

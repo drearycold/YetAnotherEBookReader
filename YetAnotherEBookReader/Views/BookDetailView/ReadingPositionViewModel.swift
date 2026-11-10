@@ -177,7 +177,7 @@ struct ReadingHistoryDeviceSection: Identifiable {
 
 /// One reading session on this device, from its start to its last saved position.
 struct ReadingHistorySessionRow: Identifiable {
-    let id: String
+    let id: ReadingHistorySessionID
     let chapter: String
     let durationText: String
     let dateText: String
@@ -192,9 +192,11 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     let bookId: Int32?
 
     static let limitDays = 7
+    static let statisticsTitle = "Today and Previous \(limitDays) Days"
 
     /// Minutes read per day, oldest first; the last entry is today.
     @Published var readingStatistics = [Double]()
+    private(set) var chartDayLabels = [String]()
     @Published var maxMinutes = 0
     @Published var avgMinutes = 0
     private(set) var listViewModel: ReadingPositionListViewModel?
@@ -301,17 +303,16 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         "Today \(todayMinutes) min · Previous \(Self.limitDays) days: avg \(avgMinutes), max \(maxMinutes) min/day"
     }
 
-    func loadData() {
-        let limitDays = Self.limitDays
-        let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
-
-        let readingHistoryList = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDate)
-
-        readingStatistics = container.sessionManager.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
-        maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
-        avgMinutes = readingStatistics.count > 1
-            ? Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
-            : 0
+    func loadData(now: Date = Date(), calendar: Calendar = .current) {
+        let window = ReadingStatisticsWindow(now: now, calendar: calendar, previousDays: Self.limitDays)
+        let history = container.sessionManager.listBookDeviceReadingPositionHistory(
+            library: library, bookId: bookId, startingIn: window.sessionStartRange
+        )
+        let statistics = ReadingStatistics(window: window, historyByBook: history)
+        readingStatistics = statistics.minutesByDay
+        chartDayLabels = window.dayLabels
+        maxMinutes = Int(statistics.previousDayMaximum)
+        avgMinutes = Int(statistics.previousDayAverage)
 
         #if canImport(SwiftUICharts)
         barChartData = makeBarChartData()
@@ -337,7 +338,8 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
             }
 
             deviceSections = makeDeviceSections()
-            sessionRows = makeSessionRows(sessions[identity] ?? [])
+            sessionDateFormatter.timeZone = calendar.timeZone
+            sessionRows = makeSessionRows(sessions[identity] ?? [], now: now)
 
             #if DEBUG
             let prefix = BookAnnotation.PrefId(library: library, id: bookId)
@@ -347,18 +349,10 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
             )
             #endif
         } else {
-            let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in
-                let inShelfId = entry.key
-                entry.value.forEach {
-                    guard let endPosition = $0.endPosition else { return }
-                    let duration = endPosition.epoch - $0.startDatetime.timeIntervalSince1970
-                    if duration > 0 {
-                        partialResult[inShelfId] = (partialResult[inShelfId] ?? 0.0) + (duration / 60.0)
-                    }
-                }
-            })
-
-            self.booksHistoryItems = computedHistory.sorted(by: { $0.value > $1.value }).compactMap { entry -> BookHistoryItem? in
+            let rankedBooks = statistics.minutesByBook.sorted { first, second in
+                first.value == second.value ? first.key < second.key : first.value > second.value
+            }
+            booksHistoryItems = rankedBooks.compactMap { entry -> BookHistoryItem? in
                 guard let book = container.bookManager.booksInShelf[entry.key],
                       let minutesText = minutesFormatter.string(from: NSNumber(value: entry.value)) else {
                     return nil
@@ -437,16 +431,20 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         )
     }
 
-    private func makeSessionRows(_ sessions: [BookDeviceReadingPositionHistory]) -> [ReadingHistorySessionRow] {
-        sessions.enumerated().compactMap { index, session in
-            guard let endPosition = session.endPosition else { return nil }
+    private func makeSessionRows(_ sessions: [BookDeviceReadingPositionHistory], now: Date) -> [ReadingHistorySessionRow] {
+        sessions.compactMap { session in
+            guard let endPosition = session.endPosition,
+                  endPosition.epoch.isFinite,
+                  session.startDatetime.timeIntervalSince1970.isFinite else { return nil }
             let chapter = endPosition.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)
-            let duration = endPosition.epoch - session.startDatetime.timeIntervalSince1970
-            let durationText = duration >= 60
-                ? durationFormatter.string(from: duration) ?? "<1 min"
-                : "<1 min"
+            let durationText: String
+            if let duration = session.elapsedSeconds(through: now) {
+                durationText = duration >= 60 ? durationFormatter.string(from: duration) ?? "<1 min" : "<1 min"
+            } else {
+                durationText = "Duration unavailable"
+            }
             return ReadingHistorySessionRow(
-                id: "\(index)|\(session.startDatetime.timeIntervalSince1970)|\(endPosition.epoch)",
+                id: session.id,
                 chapter: chapter.isEmpty ? "Page \(endPosition.lastReadPage)" : chapter,
                 durationText: durationText,
                 dateText: sessionDateFormatter.string(from: session.startDatetime),
@@ -455,38 +453,22 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         }
     }
 
-    /// Day names ("Tue", "Thu") for the statistics buckets, oldest first; the last is "Today".
-    func chartDayLabels() -> [String] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let symbols = calendar.shortWeekdaySymbols
-        return readingStatistics.indices.map { index in
-            let daysAgo = readingStatistics.count - 1 - index
-            guard daysAgo > 0,
-                  let day = calendar.date(byAdding: .day, value: -daysAgo, to: today) else {
-                return "Today"
-            }
-            return symbols[calendar.component(.weekday, from: day) - 1]
-        }
-    }
-
     #if canImport(SwiftUICharts)
     private func makeBarChartData() -> BarChartData {
-        let labels = chartDayLabels()
         let colour = ColourStyle(colour: .accentColor)
         return BarChartData(
             dataSets: BarDataSet(
                 dataPoints: readingStatistics.enumerated().map { index, minutes in
                     BarChartDataPoint(
                         value: minutes,
-                        xAxisLabel: labels[index],
+                        xAxisLabel: chartDayLabels[index],
                         description: "\(Int(minutes)) min",
                         colour: colour
                     )
                 },
                 legendTitle: "Minutes"
             ),
-            metadata: ChartMetadata(title: "Last \(Self.limitDays) Days", subtitle: "Minutes"),
+            metadata: ChartMetadata(title: Self.statisticsTitle, subtitle: "Minutes"),
             barStyle: BarStyle(barWidth: 0.6, colour: colour),
             chartStyle: BarChartStyle(
                 xAxisLabelFont: .caption2,
