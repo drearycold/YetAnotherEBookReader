@@ -24,24 +24,6 @@ struct DSReaderHelperConnector {
         calibreServerService.urlSession(server: server)
     }
 
-    func endpointConfiguration() -> URLComponents? {
-        guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
-              var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
-        urlComponents.port = dsreaderHelperServer.port
-        urlComponents.path.append("/dshelper/configuration")
-
-        return urlComponents
-    }
-
-    func endpointConfigurationV1(libraryKey: String) -> URLComponents? {
-        guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
-              var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
-        urlComponents.port = dsreaderHelperServer.port
-        urlComponents.path.append("/dshelper/1/configuration/\(libraryKey)")
-
-        return urlComponents
-    }
-
     func endpointBaseUrlAddRemove(goodreads_id: String, shelfName: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
         guard let profileName = goodreadsSync?.profileName else { return nil }
@@ -78,45 +60,60 @@ struct DSReaderHelperConnector {
         return urlComponents
     }
 
-    func refreshConfiguration() async throws -> (id: String, port: Int, data: Data) {
-        guard let url = endpointConfiguration()?.url else {
-            throw URLError(.badURL)
+    func fetchConfiguration(baseURL: URL, legacy: Bool = false) async throws -> DSReaderHelperConfigurationPayload {
+        let path = legacy ? "/dshelper/configuration" : "/dshelper/1/configuration/_"
+        return try await fetchConfiguration(baseURL: baseURL, path: path) { payload in
+            guard payload.configuration.dsreader_helper_prefs != nil else { throw CalibreAPIError.unsupportedPayload }
+            return payload
         }
+    }
 
-        let result: (Data, Error?) = try await calibreServerService.withRequestActivity(
-            .helper, request: URLRequest(url: url), server: server, resultError: { $0.1 }
-        ) { data, response in
+    func fetchLibraryConfiguration(
+        baseURL: URL, library: DSReaderHelperConfigurationRequest.Library
+    ) async throws -> CalibreCountPagesPrefs.LibraryConfig {
+        let segment = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/%"))
+        guard !library.key.isEmpty, library.key != "_",
+              let key = library.key.addingPercentEncoding(withAllowedCharacters: segment) else { throw URLError(.badURL) }
+        return try await fetchConfiguration(baseURL: baseURL, path: "/dshelper/1/configuration/\(key)", libraryID: library.id) { payload in
+            // Helper can catch a library read error and return HTTP 200 with an empty object.
+            guard let columns = payload.configuration.count_pages_prefs?.library_config?[library.key] else {
+                throw CalibreAPIError.unsupportedPayload
+            }
+            return columns
+        }
+    }
+
+    private func fetchConfiguration<Result>(
+        baseURL: URL, path: String, libraryID: String? = nil,
+        parse: (DSReaderHelperConfigurationPayload) throws -> Result
+    ) async throws -> Result {
+        try Task.checkCancellation()
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              components.host?.isEmpty == false else { throw URLError(.badURL) }
+        components.port = dsreaderHelperServer.port
+        if components.percentEncodedPath.hasSuffix("/") { components.percentEncodedPath.removeLast() }
+        components.percentEncodedPath += path
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        return try await calibreServerService.withActivity(.helper, request: request, libraryId: libraryID) { activity in
             do {
+                try Task.checkCancellation()
+                let (data, response) = try await calibreServerService.validatedData(for: request, server: server, activity: activity)
+                try Task.checkCancellation()
                 try calibreServerService.requireJSON(response)
-                _ = try decodeConfiguration(data, requiresPluginPreferences: true)
-                return (data, nil)
+                let result = try parse(DSReaderHelperConfigurationPayload(data: data, service: calibreServerService))
+                try Task.checkCancellation()
+                return result
             } catch {
-                // The legacy settings UI separately reports an unreadable configuration.
-                return (data, error)
+                try Task.checkCancellation()
+                if let code = activity.httpStatusCode, code == 401 || code == 403 {
+                    throw CalibreAPIError.authFailed
+                }
+                throw error
             }
         }
-        return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: result.0)
-    }
-
-    func refreshConfiguration(_ libraryKey: String, libraryId: String? = nil) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
-        guard let url = endpointConfigurationV1(libraryKey: libraryKey)?.url else {
-            throw URLError(.badURL)
-        }
-
-        return try await calibreServerService.withRequestActivity(
-            .helper, request: URLRequest(url: url), server: server, libraryId: libraryId
-        ) { data, response in
-            try calibreServerService.requireJSON(response)
-            return (try decodeConfiguration(data, requiresPluginPreferences: libraryKey == "_"), data)
-        }
-    }
-
-    private func decodeConfiguration(_ data: Data, requiresPluginPreferences: Bool) throws -> CalibreDSReaderHelperConfiguration {
-        let config = try calibreServerService.decodePayload(CalibreDSReaderHelperConfiguration.self, from: data)
-        if requiresPluginPreferences && config.dsreader_helper_prefs == nil {
-            throw CalibreAPIError.serverRejected(nil)
-        }
-        return config
     }
 
     func addToShelf(goodreads_id: String, shelfName: String, book: CalibreBook? = nil) async throws {

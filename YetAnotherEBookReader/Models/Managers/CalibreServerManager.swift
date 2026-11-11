@@ -18,8 +18,18 @@ class CalibreServerManager {
     private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
     private let serverBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServer]>()
     private let serverInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServerInfo]>()
-    private let helperConfigRequestBroadcaster = ManagerAsyncBroadcaster<String>()
-    private var syncServerHelperConfigTask: Task<Void, Never>?
+    typealias HelperConfigurationLoader = (CalibreServerService, DSReaderHelperConfigurationRequest) async throws
+        -> DSReaderHelperConfigurationPayload
+    private let loadHelperConfiguration: HelperConfigurationLoader
+
+    private struct HelperOperation {
+        let ticket: DSReaderHelperConfigurationTicket
+        let request: DSReaderHelperConfigurationRequest
+        let manual: Bool
+        var task: Task<DSReaderHelperConfigurationCandidate, Error>?
+    }
+
+    @MainActor private var helperOperations: [String: HelperOperation] = [:]
 
     var calibreServers = [String: CalibreServer]() {
         didSet {
@@ -36,15 +46,22 @@ class CalibreServerManager {
     }
     var documentServer: CalibreServer?
 
-    init(container: AppContainerProtocol, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
+    init(
+        container: AppContainerProtocol,
+        databaseService: DatabaseService,
+        serverRepository: ServerRepositoryProtocol,
+        loadHelperConfiguration: @escaping HelperConfigurationLoader = DSReaderHelperConfigurationLoader.load
+    ) {
         self.container = container
         self.databaseService = databaseService
         self.serverRepository = serverRepository
-        registerSyncServerHelperConfigTask()
+        self.loadHelperConfiguration = loadHelperConfiguration
     }
 
     deinit {
-        syncServerHelperConfigTask?.cancel()
+        for operation in helperOperations.values {
+            operation.task?.cancel()
+        }
     }
 
     func stateChanges() -> AsyncStream<Void> {
@@ -57,10 +74,6 @@ class CalibreServerManager {
 
     func serverInfoStagingSnapshots() -> AsyncStream<[String: CalibreServerInfo]> {
         serverInfoStagingBroadcaster.stream(initialValue: calibreServerInfoStaging)
-    }
-
-    func requestServerHelperConfigSync(serverId: String) {
-        helperConfigRequestBroadcaster.send(serverId)
     }
 
     private func publishStateChange() {
@@ -136,6 +149,7 @@ class CalibreServerManager {
     
     @MainActor
     func removeServer(server: CalibreServer) async {
+        cancelHelperConfiguration(serverID: server.id)
         guard let container = self.container else { return }
         let librariesToRemove = container.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }
         for (_, library) in librariesToRemove {
@@ -151,7 +165,9 @@ class CalibreServerManager {
         return serverRepository.getDSReaderHelper(for: server.id)
     }
     
+    @MainActor
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper) {
+        cancelHelperConfiguration(serverID: serverId)
         do {
             try serverRepository.saveDSReaderHelper(dsreaderHelper, for: serverId)
         } catch {
@@ -284,51 +300,152 @@ class CalibreServerManager {
         return serverInfos.first?.value
     }
 
-    // MARK: - DSReader Helper Config Sync
+    // MARK: - DSReader Helper Configuration
 
-    /// For every requested server id, fetch the latest DSReader Helper
-    /// configuration from the helper endpoint and persist it through the repository.
-    private func registerSyncServerHelperConfigTask() {
-        let serverIds = helperConfigRequestBroadcaster.stream()
-        syncServerHelperConfigTask = Task { [weak self] in
-            await withTaskGroup(of: Void.self) { group in
-                for await serverId in serverIds {
-                    guard !Task.isCancelled else { return }
-                    group.addTask { [weak self] in
-                        await self?.syncServerHelperConfiguration(serverId: serverId)
-                    }
-                }
-            }
-        }
+    @MainActor
+    @discardableResult
+    func requestServerHelperConfigSync(serverId: String) -> DSReaderHelperConfigurationLoad? {
+        // A manual request owns this server until its candidate is applied or dismissed.
+        guard helperOperations[serverId]?.manual != true,
+              let port = serverRepository.getDSReaderHelperStoredConfiguration(for: serverId)?.helper?.port else { return nil }
+        return try? startHelperConfiguration(serverID: serverId, port: port, manual: false)
     }
 
     @MainActor
-    private func syncServerHelperConfiguration(serverId: String) async {
-        guard let container,
-              let server = calibreServers[serverId],
-              let dsreaderHelperServer = queryServerDSReaderHelper(server: server) else {
-            logger.error("Failed to sync server helper configuration: missing server or helper configuration")
-            return
-        }
-
-        let connector = DSReaderHelperConnector(
-            calibreServerService: container.calibreServerService,
-            server: server,
-            dsreaderHelperServer: dsreaderHelperServer,
-            goodreadsSync: nil
-        )
-
-        do {
-            let task = try await connector.refreshConfiguration()
-            guard let config = try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data),
-                  config.dsreader_helper_prefs != nil else {
-                return
-            }
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
-            dsreaderHelper.configurationData = task.data
-            updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
-        } catch {
-            logger.error("Failed to sync server helper configuration: \(error.localizedDescription)")
-        }
+    func requestManualHelperConfiguration(serverID: String, port: Int) throws -> DSReaderHelperConfigurationLoad {
+        try startHelperConfiguration(serverID: serverID, port: port, manual: true)
     }
+
+    @MainActor
+    func cancelHelperConfiguration(serverID: String) {
+        helperOperations.removeValue(forKey: serverID)?.task?.cancel()
+    }
+
+    @MainActor
+    func cancelHelperConfiguration(_ ticket: DSReaderHelperConfigurationTicket) {
+        guard helperOperations[ticket.serverID]?.ticket == ticket else { return }
+        cancelHelperConfiguration(serverID: ticket.serverID)
+    }
+
+    @MainActor
+    func validateHelperConfigurationCandidate(_ ticket: DSReaderHelperConfigurationTicket) throws {
+        _ = try pendingManualHelperOperation(for: ticket)
+    }
+
+    @MainActor
+    func applyHelperConfiguration(_ candidate: DSReaderHelperConfigurationCandidate) throws -> CalibreServerDSReaderHelper {
+        let ticket = candidate.ticket
+        defer { cancelHelperConfiguration(ticket) }
+        let operation = try pendingManualHelperOperation(for: ticket)
+        return try persistHelperConfiguration(candidate, for: operation.request)
+    }
+
+    @MainActor
+    private func pendingManualHelperOperation(for ticket: DSReaderHelperConfigurationTicket) throws -> HelperOperation {
+        let operation = try currentHelperOperation(for: ticket)
+        guard operation.manual, operation.task == nil else { throw DSReaderHelperConfigurationError.stale }
+        return operation
+    }
+
+    @MainActor
+    private func startHelperConfiguration(serverID: String, port: Int, manual: Bool) throws -> DSReaderHelperConfigurationLoad {
+        cancelHelperConfiguration(serverID: serverID)
+        guard CalibreServerDSReaderHelper.validPorts.contains(port) else {
+            throw DSReaderHelperConfigurationError.invalidPort
+        }
+        guard let container, let server = calibreServers[serverID], !server.removed, !server.isLocal,
+              let stored = serverRepository.getDSReaderHelperStoredConfiguration(for: serverID),
+              stored.connection == DSReaderHelperConnection(server) else { throw DSReaderHelperConfigurationError.stale }
+        let service = container.calibreServerService
+        guard let baseURL = service.getServerUrlByReachability(server: server) else {
+            throw CalibreAPIError.serverUnreachable
+        }
+
+        let request = DSReaderHelperConfigurationRequest(
+            server: server, baseURL: baseURL, port: port, libraries: helperLibraries(for: serverID), stored: stored
+        )
+        let ticket = DSReaderHelperConfigurationTicket(serverID: serverID)
+        let task = Task { @MainActor [weak self, loadHelperConfiguration] in
+            do {
+                try Task.checkCancellation()
+                let payload = try await loadHelperConfiguration(service, request)
+                try Task.checkCancellation()
+                guard let self else { throw CancellationError() }
+                _ = try self.currentHelperOperation(for: ticket)
+                let candidate = DSReaderHelperConfigurationCandidate(ticket: ticket, payload: payload)
+                if manual {
+                    // Keep the ticket while the user reviews the result, and release the finished task.
+                    self.helperOperations[serverID]?.task = nil
+                } else {
+                    _ = try self.persistHelperConfiguration(candidate, for: request)
+                    self.helperOperations.removeValue(forKey: serverID)
+                }
+                return candidate
+            } catch {
+                self?.cancelHelperConfiguration(ticket)
+                throw error
+            }
+        }
+        helperOperations[serverID] = HelperOperation(ticket: ticket, request: request, manual: manual, task: task)
+        return DSReaderHelperConfigurationLoad(ticket: ticket, task: task)
+    }
+
+    @MainActor
+    private func currentHelperOperation(for ticket: DSReaderHelperConfigurationTicket) throws -> HelperOperation {
+        let serverID = ticket.serverID
+        guard let operation = helperOperations[serverID], operation.ticket == ticket,
+              let server = calibreServers[serverID],
+              DSReaderHelperConnection(server) == operation.request.stored.connection,
+              serverRepository.getDSReaderHelperStoredConfiguration(for: serverID) == operation.request.stored,
+              helperLibraries(for: serverID) == operation.request.libraries else {
+            throw DSReaderHelperConfigurationError.stale
+        }
+        return operation
+    }
+
+    @MainActor
+    private func helperLibraries(for serverID: String) -> [DSReaderHelperConfigurationRequest.Library] {
+        guard let container else { return [] }
+        return container.libraryManager.calibreLibraries.values
+            .filter { $0.server.id == serverID }
+            .map { .init(id: $0.id, key: $0.key, name: $0.name, hidden: $0.hidden) }
+            .sorted { $0.id < $1.id }
+    }
+
+    @MainActor
+    private func persistHelperConfiguration(
+        _ candidate: DSReaderHelperConfigurationCandidate,
+        for request: DSReaderHelperConfigurationRequest
+    ) throws -> CalibreServerDSReaderHelper {
+        let helper = CalibreServerDSReaderHelper(port: request.port, configurationData: candidate.payload.data)
+        let saved: Bool
+        do {
+            saved = try serverRepository.replaceDSReaderHelper(helper, ifCurrent: request.stored)
+        } catch {
+            throw DSReaderHelperConfigurationError.couldNotSave
+        }
+        guard saved else { throw DSReaderHelperConfigurationError.stale }
+        return helper
+    }
+}
+
+struct DSReaderHelperConfigurationTicket: Hashable, Identifiable {
+    let serverID: String
+    let id = UUID()
+}
+
+struct DSReaderHelperConfigurationCandidate {
+    let ticket: DSReaderHelperConfigurationTicket
+    let payload: DSReaderHelperConfigurationPayload
+}
+
+struct DSReaderHelperConfigurationLoad {
+    let ticket: DSReaderHelperConfigurationTicket
+    let task: Task<DSReaderHelperConfigurationCandidate, Error>
+}
+
+enum DSReaderHelperConfigurationError: Error {
+    case invalidPort
+    case stale
+    case couldNotSave
 }

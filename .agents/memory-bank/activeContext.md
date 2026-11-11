@@ -2,10 +2,76 @@
 
 ## Current Focus
 
-**Reading History and Reading Statistics (RH).** RH3 is implemented on
-`codex/reading-history-rh3`, based on main `3b3b8808` after RH2 merged
-through PR #146. The earlier PDF investigation remains documented under
-Current Branch Notes.
+**Server Settings and DSReader Helper Configuration (SC).** SC1 is implemented
+on `codex/server-configuration-sc1` from main `268f6923`. RH1–RH3 is complete
+through PR #147. The earlier PDF investigation remains under Current Branch
+Notes.
+
+## Server Configuration SC1 (2026-11-11)
+
+`CalibreServerManager` owns one Helper operation per server UUID on the main
+actor. Each request captures the saved connection and Helper record, a chosen
+base URL, the requested port and the known library IDs, keys, names and
+visibility. A newer request replaces the older request for its server.
+Manual loading and confirmation take priority over automatic refresh for
+that server. Background events during a manual operation are skipped.
+Connection edits, deletion, draft edits, cancellation and page exit retire
+the applicable operation. The manager validates the ticket and snapshot
+before confirmation and apply. Realm compares the saved connection and
+Helper record inside the write transaction. In-place server edits preserve
+the embedded Helper record. Schema 151 remains readable.
+
+`DSReaderHelperConfigurationLoader` serves both paths. The global v1 request
+tries legacy after an empty-body 404, the route-miss response in Calibre's
+router. The compatibility check follows the DSReaderHelper route added in
+`3d19dca` and the current plugin source at `53e354d`. Auth, connection,
+cancellation, parse and per-library errors terminate the request. When v1
+advertises Count Pages, each visible library must return its requested entry.
+The loader sends at most four library requests at a time, stores entries
+under the names used by app consumers, and carries forward known hidden
+entries at the same saved port. Helper can return HTTP 200 with an empty
+object after a library read fails. The connector logs that response as
+a failure for the affected library. The merged model is encoded for storage,
+and unmerged responses retain their validated bytes. The decoder accepts
+older settings as well as current settings that omit deprecated options.
+
+The Helper form keeps the port draft, saved plugin preferences and pending
+candidate separately. Ports must be decimal digits in 1024–65535, the Helper
+plugin's range. Errors appear inline and the form remains editable. Manual
+downloads still require Update in the confirmation alert. Rejecting a
+candidate or leaving the page releases its ticket. One hosted toolbar item
+keeps Download and Help available on iOS 15. Server Detail passes its actual
+app container to the shared view model.
+
+The held-response fixture reproduced an older manual download publishing
+after a newer one on main. The regression now uses a loader that completes
+even after cancellation. Network and in-memory Realm fixtures cover
+version fallback, AL2 request outcomes and scope, partial library failure,
+server and saved port changes, and manual/background ordering. An isolated
+router probe with installed Calibre 9.11.0 confirmed the empty 404 response.
+
+The iPhone 17 full run counted 1,109 tests with 22 skips, two known expected
+PDFKit failures and one unexpected test failure. The existing
+`testLocalLibrarySearchSeesABookAddedAfterAnEmptySearch` had two assertions
+reporting an empty result. That case passed by itself on SC1 and main.
+On the main archive at `268f6923`, a separate fixed-thread fixture retained
+the search Realm across the write and reproduced the empty result. The search
+diagnostic source and the run logs are under `/tmp/YabrSC1`.
+
+The 59 focused Helper, Settings and server repository tests passed on both
+iPhone 17 / iOS 26.5 and iPhone 7 / iOS 15.5. The final iOS Release and
+Catalyst builds passed. The isolated Release app passed the native retry,
+port validation, confirmation, cancellation and page-exit journey on both
+phones. It uses `YetAnotherEBookReaderUITests/Fixtures/helper_server.py`
+and an isolated app bundle ID. The real Calibre GUI plugin and Catalyst
+window interaction remain outside this matrix. Results, screenshots and
+reproduction logs are in `/tmp/YabrSC1`.
+
+SC2 should give the connection editor, server detail and Helper separate
+presentation models, stable routes and scoped observations. SC3 should
+make save outcomes and later refresh consistent across connection edits,
+library hide/restore and Helper apply/retry. Preserve the P2/P4 connection
+and browse handoff and the existing reader, persistence and network layers.
 
 ## Reading History RH3 (2026-11-11)
 

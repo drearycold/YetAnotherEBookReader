@@ -46,6 +46,7 @@
 		2ABB9157261F1A47004AA7C0 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9151261F1A47004AA7C0 /* MainView.swift */; };
 		2ABB9158261F1A47004AA7C0 /* EpubFolioReaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9152261F1A47004AA7C0 /* EpubFolioReaderContainer.swift */; };
 		2AC340D32647A23600A477ED /* DSReaderHelperConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */; };
+		A56E61013AB1000000000001 /* DSReaderHelperConfigurationLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56E61013AB1000000000000 /* DSReaderHelperConfigurationLoader.swift */; };
 		2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */; };
 		2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */; };
 		2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
@@ -111,6 +112,7 @@
 		2ADCD83226F4B96200FBAE11 /* CalibreServerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */; };
 		2ADCD83526F4B96200FBAE11 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9142261ED7E5004AA7C0 /* Constants.swift */; };
 		2ADCD83626F4B96200FBAE11 /* DSReaderHelperConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */; };
+		A56E61013AB1000000000002 /* DSReaderHelperConfigurationLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56E61013AB1000000000000 /* DSReaderHelperConfigurationLoader.swift */; };
 		2ADCD85A26F4B96200FBAE11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
 		2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */; };
 		A0E4C8F82F00100100000001 /* UI Test Fixture.epub in Resources */ = {isa = PBXBuildFile; fileRef = A0E4C8F72F00100100000001 /* UI Test Fixture.epub */; };
@@ -647,6 +649,7 @@
 		2ABB9151261F1A47004AA7C0 /* MainView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		2ABB9152261F1A47004AA7C0 /* EpubFolioReaderContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EpubFolioReaderContainer.swift; sourceTree = "<group>"; };
 		2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSReaderHelperConnector.swift; sourceTree = "<group>"; };
+		A56E61013AB1000000000000 /* DSReaderHelperConfigurationLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSReaderHelperConfigurationLoader.swift; sourceTree = "<group>"; };
 		2AC3EC1825BDBC10004A6633 /* YetAnotherEBookReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YetAnotherEBookReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderApp.swift; sourceTree = "<group>"; };
 		2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1053,6 +1056,7 @@
 				A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */,
 				A04D100130C0000100000008 /* CalibreServerService+Search.swift */,
 				2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */,
+				A56E61013AB1000000000000 /* DSReaderHelperConfigurationLoader.swift */,
 				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
 			);
 			path = Network;
@@ -2021,6 +2025,7 @@
 				E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */,
 				E71F35912FE8E87D007AB0B1 /* ShelfDisplayModels.swift in Sources */,
 				2AC340D32647A23600A477ED /* DSReaderHelperConnector.swift in Sources */,
+				A56E61013AB1000000000001 /* DSReaderHelperConfigurationLoader.swift in Sources */,
 				E71F35052FDF99C3007AB0B1 /* ReaderEngineProtocol.swift in Sources */,
 				E71F356B2FE77F09007AB0B1 /* BookFormatList.swift in Sources */,
 				E71F35572FE4F353007AB0B1 /* FolioReaderPreferenceRealm.swift in Sources */,
@@ -2354,6 +2359,7 @@
 				E71F34DF2FDCF7DC007AB0B1 /* ReaderOptionsViewModel.swift in Sources */,
 				2ADCD83526F4B96200FBAE11 /* Constants.swift in Sources */,
 				2ADCD83626F4B96200FBAE11 /* DSReaderHelperConnector.swift in Sources */,
+				A56E61013AB1000000000002 /* DSReaderHelperConfigurationLoader.swift in Sources */,
 				E71F354D2FE4F33E007AB0B1 /* BookAnnotationRealm.swift in Sources */,
 				E71F354A2FE4F327007AB0B1 /* CalibreServerDSReaderHelperRealm.swift in Sources */,
 			);
