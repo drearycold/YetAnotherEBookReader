@@ -102,4 +102,30 @@ final class RealmServerRepositoryTests: XCTestCase {
         XCTAssertEqual(value.configurationData, helper.configurationData)
         XCTAssertNotNil(value.configuration?.dsreader_helper_prefs)
     }
+
+    func testConditionalHelperWritePreservesNewerConfigurationAndRejectsRemovedServer() throws {
+        var server = TestFixtures.makeServer()
+        let first = CalibreServerDSReaderHelper(port: 8080)
+        let second = CalibreServerDSReaderHelper(port: 8081)
+        let stale = CalibreServerDSReaderHelper(port: 8082)
+        try repository.saveServer(server)
+        let unconfigured = try XCTUnwrap(repository.getDSReaderHelperStoredConfiguration(for: server.id))
+        XCTAssertTrue(try repository.replaceDSReaderHelper(first, ifCurrent: unconfigured))
+        XCTAssertFalse(try repository.replaceDSReaderHelper(stale, ifCurrent: unconfigured))
+
+        let configured = try XCTUnwrap(repository.getDSReaderHelperStoredConfiguration(for: server.id))
+        XCTAssertTrue(try repository.replaceDSReaderHelper(second, ifCurrent: configured))
+        let current = try XCTUnwrap(repository.getDSReaderHelperStoredConfiguration(for: server.id))
+        server.password = "replacement credentials"
+        try repository.saveServer(server)
+        XCTAssertFalse(try repository.replaceDSReaderHelper(stale, ifCurrent: current))
+        XCTAssertEqual(repository.getDSReaderHelper(for: server.id), second)
+
+        let updated = try XCTUnwrap(repository.getDSReaderHelperStoredConfiguration(for: server.id))
+        server.removed = true
+        try repository.saveServer(server)
+        XCTAssertNil(repository.getDSReaderHelperStoredConfiguration(for: server.id))
+        XCTAssertFalse(try repository.replaceDSReaderHelper(stale, ifCurrent: updated))
+        XCTAssertEqual(repository.getDSReaderHelper(for: server.id), second)
+    }
 }

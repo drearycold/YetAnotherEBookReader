@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ServerDetailView: View {
-    @Environment(\.appContainer) var container
+    private let container: AppContainer
 
     @Binding var server: CalibreServer
     @StateObject private var viewModel: ServerViewModel
@@ -17,9 +17,10 @@ struct ServerDetailView: View {
     @State private var dshelperActive = false
     @State private var updater = 0
     
-    init(server: Binding<CalibreServer>) {
+    init(container: AppContainer, server: Binding<CalibreServer>) {
+        self.container = container
         self._server = server
-        self._viewModel = StateObject(wrappedValue: ServerViewModel(container: AppContainer.shared ?? AppContainer(), server: server.wrappedValue))
+        self._viewModel = StateObject(wrappedValue: ServerViewModel(container: container, server: server.wrappedValue))
     }
     
     var body: some View {
@@ -223,7 +224,7 @@ struct ServerDetailView_Previews: PreviewProvider {
     
     static var previews: some View {
         NavigationView {
-            ServerDetailView(server: $server)
+            ServerDetailView(container: container, server: $server)
                 .environment(\.appContainer, container)
         }
         .navigationViewStyle(StackNavigationViewStyle())

@@ -41,18 +41,23 @@ class ServerViewModel: ObservableObject {
     @Published var libraryRestoreListSelection: Set<String> = []
     
     // DSReader Helper properties (ServerOptionsDSReaderHelper)
-    @Published var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
-    @Published var portStr: String = "" {
+    @Published private(set) var savedHelper: CalibreServerDSReaderHelper?
+    @Published var portStr = "" {
         didSet {
-            updateDSReaderHelperPort(from: portStr)
+            guard portStr != oldValue else { return }
+            clearHelperRequest()
+            helperState = .idle
         }
     }
-    @Published var configurationData: Data? = nil
-    @Published var configuration: CalibreDSReaderHelperConfiguration? = nil
-    @Published var helperStatus: String? = nil
-    @Published var configAlertItem: AlertItem? = nil
-    @Published var dsreaderHelperInstructionPresenting: Bool = false
-    
+    @Published private(set) var helperState: HelperConfigurationState = .idle
+    @Published var helperConfirmation: DSReaderHelperConfigurationTicket?
+    @Published var dsreaderHelperInstructionPresenting = false
+
+    var helperPort: Int? { CalibreServerDSReaderHelper.parsePort(portStr) }
+    private var helperServerID: String?
+    private var helperTicket: DSReaderHelperConfigurationTicket?
+    private var helperTask: Task<Void, Never>?
+
     private var libraryObservationTask: Task<Void, Never>?
     private var librarySyncStatusObservationTask: Task<Void, Never>?
     private var probeTask: Task<Void, Never>?
@@ -85,6 +90,12 @@ class ServerViewModel: ObservableObject {
         libraryObservationTask?.cancel()
         librarySyncStatusObservationTask?.cancel()
         probeTask?.cancel()
+        helperTask?.cancel()
+        if let ticket = helperTicket {
+            Task { @MainActor [container] in
+                container.serverManager.cancelHelperConfiguration(ticket)
+            }
+        }
     }
     
     func setupBindings() {
@@ -104,19 +115,6 @@ class ServerViewModel: ObservableObject {
         }
     }
 
-    private func updateDSReaderHelperPort(from newValue: String) {
-        let filtered = newValue.filter { "0123456789".contains($0) }
-        if let num = Int(filtered), num != dsreaderHelperServer.port {
-            if num > 65535 {
-                dsreaderHelperServer.port = 65535
-            } else if num < 1024 {
-                dsreaderHelperServer.port = 1024
-            } else {
-                dsreaderHelperServer.port = num
-            }
-        }
-    }
-    
     // MARK: - Add / Modify Server Actions (AddModServerView)
     
     func resetStates(server: CalibreServer?) {
@@ -393,96 +391,158 @@ class ServerViewModel: ObservableObject {
 
     // MARK: - DSReader Helper actions (ServerOptionsDSReaderHelper)
 
-    func setDSReaderStates(server: CalibreServer) {
-        let dsHelper = container.serverManager.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
-            if let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
-                dsreaderHelper.port = (url.port ?? -1) + 1
-            }
-            return dsreaderHelper
-        }()
-
-        configurationData = dsHelper.configurationData
-        configuration = dsHelper.configuration
-        self.dsreaderHelperServer = dsHelper
-        portStr = dsHelper.port.description
+    func openHelperConfiguration(serverID: String) {
+        closeHelperConfiguration()
+        helperServerID = serverID
+        guard let server = container.serverManager.calibreServers[serverID], !server.removed else {
+            savedHelper = nil
+            portStr = ""
+            helperState = .failure(.stale)
+            return
+        }
+        savedHelper = container.serverManager.queryServerDSReaderHelper(server: server)
+        let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.serverUrl)
+        let validPorts = CalibreServerDSReaderHelper.validPorts
+        let suggestedPort = url?.port.flatMap { $0 < validPorts.upperBound ? $0 + 1 : nil }
+        let port = savedHelper?.port ?? suggestedPort
+        portStr = port.flatMap { validPorts.contains($0) ? String($0) : nil } ?? ""
     }
 
-    func connectDSReader(server: CalibreServer) {
-        configurationData = nil
-        configuration = nil
-        helperStatus = "Connecting..."
+    func closeHelperConfiguration() {
+        clearHelperRequest()
+        helperServerID = nil
+        helperState = .idle
+    }
 
-        let connector = DSReaderHelperConnector(calibreServerService: container.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+    func stopHelperConfiguration() {
+        clearHelperRequest()
+        helperState = .cancelled
+    }
 
-        Task {
-            do {
-                let (config, data) = try await connector.refreshConfiguration("_")
-                guard config.dsreader_helper_prefs != nil else {
-                    throw URLError(.badServerResponse)
-                }
-                var updatedConfig = config
-                var updatedData = data
-
-                if config.count_pages_prefs != nil {
-                    self.helperStatus = "Pulling Library-Specific Configurations..."
-                    var libraryConfigs: [String: CalibreCountPagesPrefs.LibraryConfig] = [:]
-
-                    try await withThrowingTaskGroup(of: (String, CalibreDSReaderHelperConfiguration).self) { group in
-                        let activeLibraries = container.libraryManager.calibreLibraries.values.filter {
-                            $0.server.uuid == server.uuid && !$0.hidden
-                        }
-
-                        for library in activeLibraries {
-                            group.addTask {
-                                let config = try await connector.refreshConfiguration(library.key, libraryId: library.id).0
-                                return (library.key, config)
-                            }
-                        }
-
-                        for try await (libraryKey, libConfig) in group {
-                            if let libraryConfig = libConfig.count_pages_prefs?.library_config?[libraryKey] {
-                                libraryConfigs[libraryKey] = libraryConfig
-                            }
-                        }
-                    }
-                    updatedConfig.count_pages_prefs?.library_config = libraryConfigs
-                    updatedData = try JSONEncoder().encode(updatedConfig)
-                }
-
-                self.configuration = updatedConfig
-                self.configurationData = updatedData
-                self.helperStatus = "Connected"
-                self.configAlertItem = AlertItem(id: "updateConfigAlert")
-            } catch {
+    @discardableResult
+    func connectDSReader(serverID: String) -> Task<Void, Never>? {
+        clearHelperRequest()
+        guard helperServerID == serverID else {
+            helperState = .failure(.stale)
+            return nil
+        }
+        guard let helperPort else {
+            helperState = .failure(.invalidPort)
+            return nil
+        }
+        do {
+            let load = try container.serverManager.requestManualHelperConfiguration(serverID: serverID, port: helperPort)
+            helperTicket = load.ticket
+            helperState = .loading
+            let task = Task { @MainActor [weak self] in
                 do {
-                    let data = try await connector.refreshConfiguration()
-                    let decoder = JSONDecoder()
-                    if let config = try? decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data.data),
-                       config.dsreader_helper_prefs != nil {
-                        self.configuration = config
-                        self.configurationData = data.data
-                        self.helperStatus = "Connected"
-                        self.configAlertItem = AlertItem(id: "updateConfigAlert")
-                    } else {
-                        self.helperStatus = "Failed"
-                        self.configAlertItem = AlertItem(id: "failedParseConfigAlert")
-                    }
+                    let candidate = try await load.task.value
+                    guard let self, !Task.isCancelled, self.helperTicket == load.ticket else { return }
+                    try self.container.serverManager.validateHelperConfigurationCandidate(load.ticket)
+                    self.helperState = .awaitingConfirmation(candidate)
+                    self.helperConfirmation = candidate.ticket
                 } catch {
-                    self.helperStatus = "Failed to Connect"
-                    self.configAlertItem = AlertItem(id: "failedConnectConfigAlert")
+                    guard let self, !Task.isCancelled, self.helperTicket == load.ticket else { return }
+                    self.clearHelperRequest()
+                    self.helperState = HelperConfigurationFailure.isCancellation(error)
+                        ? .cancelled : .failure(.init(error))
                 }
+                self?.helperTask = nil
             }
+            helperTask = task
+            return task
+        } catch {
+            helperState = .failure(.init(error))
+            return nil
         }
     }
 
-    func updateDSReaderHelperConfig(server: CalibreServer) {
-        guard let configuration = configuration else { return }
-        dsreaderHelperServer.configuration = configuration
-        dsreaderHelperServer.configurationData = configurationData
+    func applyHelperConfiguration(_ ticket: DSReaderHelperConfigurationTicket, serverID: String) {
+        guard helperServerID == serverID, ticket.serverID == serverID, helperTicket == ticket,
+              case .awaitingConfirmation(let candidate) = helperState else { return }
+        defer { clearHelperRequest() }
+        do {
+            savedHelper = try container.serverManager.applyHelperConfiguration(candidate)
+            helperState = .idle
+        } catch {
+            helperState = .failure(.init(error))
+        }
+    }
 
-        container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
-        helperStatus = nil
+    func discardHelperConfiguration(_ ticket: DSReaderHelperConfigurationTicket) {
+        guard helperTicket == ticket else { return }
+        clearHelperRequest()
+        helperState = .idle
+    }
+
+    private func clearHelperRequest() {
+        if let helperTicket {
+            container.serverManager.cancelHelperConfiguration(helperTicket)
+        }
+        helperTicket = nil
+        helperTask?.cancel()
+        helperTask = nil
+        helperConfirmation = nil
+    }
+}
+
+enum HelperConfigurationState {
+    case idle
+    case loading
+    case awaitingConfirmation(DSReaderHelperConfigurationCandidate)
+    case failure(HelperConfigurationFailure)
+    case cancelled
+}
+
+enum HelperConfigurationFailure {
+    case invalidPort
+    case stale
+    case couldNotSave
+    case authentication
+    case invalidResponse
+    case timeout
+    case unavailable
+
+    init(_ error: Error) {
+        if let failure = error as? DSReaderHelperConfigurationError {
+            switch failure {
+            case .invalidPort: self = .invalidPort
+            case .stale: self = .stale
+            case .couldNotSave: self = .couldNotSave
+            }
+            return
+        }
+
+        switch CalibreAPIError(error: error) {
+        case .authFailed:
+            self = .authentication
+        case .transport(let urlError) where urlError.code == .userAuthenticationRequired:
+            self = .authentication
+        case .decoding, .unsupportedPayload, .emptyResponse:
+            self = .invalidResponse
+        case .transport(let urlError) where urlError.code == .timedOut:
+            self = .timeout
+        default:
+            self = .unavailable
+        }
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if case .transport(let error) = CalibreAPIError(error: error) { return error.code == .cancelled }
+        return false
+    }
+
+    var message: LocalizedStringKey {
+        switch self {
+        case .invalidPort: return "Enter a plugin service port between 1024 and 65535."
+        case .stale: return "The server or saved configuration changed. Download the configuration again."
+        case .couldNotSave: return "Could not save the configuration. Download it again and retry."
+        case .authentication: return "DSReader Helper denied access. Check the server credentials and permissions."
+        case .invalidResponse: return "DSReader Helper returned an incomplete or unreadable configuration."
+        case .timeout: return "DSReader Helper did not respond in time. Check the service and retry."
+        case .unavailable: return "Could not connect to DSReader Helper. Check the service port and that the plugin is running."
+        }
     }
 }
 

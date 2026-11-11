@@ -51,6 +51,7 @@ struct SettingsView: View {
                     let state = viewModel.rowState(for: server)
                     NavigationLink (
                         destination: ServerDetailView(
+                            container: container,
                             server: Binding<CalibreServer>(
                                 get: {
                                     server

@@ -10,6 +10,14 @@
 import Foundation
 
 struct CalibreServerDSReaderHelper: Hashable {
+    static let validPorts = 1024...65535
+
+    static func parsePort(_ text: String) -> Int? {
+        guard !text.isEmpty, text.utf8.allSatisfy({ (48...57).contains($0) }),
+              let port = Int(text), validPorts.contains(port) else { return nil }
+        return port
+    }
+
     var port: Int
     var configurationData: Data?
 
@@ -33,6 +41,35 @@ struct CalibreServerDSReaderHelper: Hashable {
     }
 }
 
+/// CalibreServer equality is for address/username lookup. Configuration requests
+/// also need the actual server identity, both addresses, and authentication settings.
+struct DSReaderHelperConnection: Equatable {
+    let serverID: String
+    private let baseURL: String
+    private let publicURL: String
+    private let hasPublicURL: Bool
+    private let hasAuth: Bool
+    private let username: String
+    private let password: String
+    private let removed: Bool
+
+    init(_ server: CalibreServer) {
+        serverID = server.id
+        baseURL = server.baseUrl
+        publicURL = server.publicUrl
+        hasPublicURL = server.hasPublicUrl
+        hasAuth = server.hasAuth
+        username = server.username
+        password = server.password
+        removed = server.removed
+    }
+}
+
+struct DSReaderHelperStoredConfiguration: Equatable {
+    let connection: DSReaderHelperConnection
+    let helper: CalibreServerDSReaderHelper?
+}
+
 struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     struct Options: Codable, Hashable {
         var servicePort = 0
@@ -54,6 +91,21 @@ struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     }
     
     var plugin_prefs: PluginPrefs
+}
+
+extension CalibreDSReaderHelperPrefs.Options {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        servicePort = try values.decode(Int.self, forKey: .servicePort)
+        goodreadsSyncEnabled = try values.decodeIfPresent(Bool.self, forKey: .goodreadsSyncEnabled) ?? false
+        dictViewerEnabled = try values.decodeIfPresent(Bool.self, forKey: .dictViewerEnabled) ?? false
+        dictViewerLibraryName = try values.decodeIfPresent(String.self, forKey: .dictViewerLibraryName) ?? ""
+        // Newer Helper versions omit the retired reading-position settings.
+        readingPositionColumnAllLibrary = try values.decodeIfPresent(Bool.self, forKey: .readingPositionColumnAllLibrary) ?? false
+        readingPositionColumnName = try values.decodeIfPresent(String.self, forKey: .readingPositionColumnName) ?? ""
+        readingPositionColumnPrefix = try values.decodeIfPresent(String.self, forKey: .readingPositionColumnPrefix) ?? ""
+        readingPositionColumnUserSeparated = try values.decodeIfPresent(Bool.self, forKey: .readingPositionColumnUserSeparated) ?? false
+    }
 }
 
 struct CalibreCountPagesPrefs: Codable, Hashable {

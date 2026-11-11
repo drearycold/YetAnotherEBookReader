@@ -374,7 +374,261 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertNotNil(serverManager.calibreServerInfoStaging[req2Pub.id])
     }
 
-    func testSyncServerHelperConfigSubjectUpdatesConfiguration() async throws {
+    func testManualHelperDownloadsFinishingOutOfOrderKeepNewestCandidate() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-order")
+        try installServerForHelperSync(server)
+        let saved = try makeDSReaderHelperConfigurationData(servicePort: 7777)
+        try serverRepository.saveDSReaderHelper(.init(port: 8080, configurationData: saved), for: server.id)
+
+        let model = ServerViewModel(container: container, server: server)
+        model.openHelperConfiguration(serverID: server.id)
+        let first = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let firstRequest = try await loader.nextRequest()
+        model.portStr = "8081"
+        let second = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let secondRequest = try await loader.nextRequest()
+        XCTAssertEqual(firstRequest.port, 8080)
+        XCTAssertEqual(secondRequest.port, 8081)
+
+        try secondRequest.succeed(servicePort: 8082)
+        await second.value
+        let ticket = try XCTUnwrap(model.helperConfirmation)
+        guard case .awaitingConfirmation(let candidate) = model.helperState else { return XCTFail("Missing candidate") }
+        XCTAssertEqual(candidate.payload.configuration.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 8082)
+        XCTAssertEqual(try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: candidate.payload.data),
+                       candidate.payload.configuration)
+        XCTAssertEqual(model.savedHelper?.configurationData, saved)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configurationData, saved)
+
+        // This fixture deliberately completes even after Task.cancel().
+        try firstRequest.succeed(servicePort: 8080)
+        await first.value
+        XCTAssertEqual(model.helperConfirmation, ticket)
+        model.applyHelperConfiguration(ticket, serverID: server.id)
+        XCTAssertEqual(model.savedHelper?.port, 8081)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configurationData, candidate.payload.data)
+        XCTAssertNil(model.helperConfirmation)
+    }
+
+    func testManualHelperPortValidationAndFailureKeepSavedConfigurationAndAllowRetry() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-retry")
+        try installServerForHelperSync(server)
+        let saved = try makeDSReaderHelperConfigurationData(servicePort: 8080)
+        try serverRepository.saveDSReaderHelper(.init(port: 8080, configurationData: saved), for: server.id)
+        let model = ServerViewModel(container: container, server: server)
+        model.openHelperConfiguration(serverID: server.id)
+
+        for invalid in ["", "8x080", " 8080", "１０２４", "1023", "65536", "99999999999999999999999"] {
+            model.portStr = invalid
+            XCTAssertNil(model.helperPort)
+            XCTAssertNil(model.connectDSReader(serverID: server.id))
+        }
+        XCTAssertEqual(loader.requestCount, 0)
+        XCTAssertEqual(CalibreServerDSReaderHelper.parsePort("1024"), 1024)
+        XCTAssertEqual(CalibreServerDSReaderHelper.parsePort("65535"), 65535)
+
+        model.portStr = "8081"
+        let failed = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let failedRequest = try await loader.nextRequest()
+        failedRequest.fail(URLError(.timedOut))
+        await failed.value
+        guard case .failure(.timeout) = model.helperState else { return XCTFail("Expected timeout") }
+        XCTAssertNil(model.helperConfirmation)
+        XCTAssertEqual(model.savedHelper?.configurationData, saved)
+
+        model.portStr = "8082"
+        let retry = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let retryRequest = try await loader.nextRequest()
+        try retryRequest.succeed(servicePort: 8182)
+        await retry.value
+        let ticket = try XCTUnwrap(model.helperConfirmation)
+        model.discardHelperConfiguration(ticket)
+        model.applyHelperConfiguration(ticket, serverID: server.id)
+        XCTAssertNil(model.helperConfirmation)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configurationData, saved)
+    }
+
+    func testManualHelperCancelAndReopenRejectLateResultsAndOldConfirmations() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-reopen")
+        let otherServer = TestFixtures.makeServer(baseUrl: "http://helper-other")
+        try installServerForHelperSync(server)
+        try installServerForHelperSync(otherServer)
+        let model = ServerViewModel(container: container, server: server)
+        model.openHelperConfiguration(serverID: server.id)
+
+        let cancelled = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let cancelledRequest = try await loader.nextRequest()
+        model.stopHelperConfiguration()
+        try cancelledRequest.succeed(servicePort: 8001)
+        await cancelled.value
+        guard case .cancelled = model.helperState else { return XCTFail("Expected cancelled state") }
+        XCTAssertNil(model.helperConfirmation)
+
+        let leaving = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let leavingRequest = try await loader.nextRequest()
+        model.closeHelperConfiguration()
+        model.openHelperConfiguration(serverID: server.id)
+        try leavingRequest.succeed(servicePort: 8002)
+        await leaving.value
+        XCTAssertNil(model.helperConfirmation)
+
+        let load = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let request = try await loader.nextRequest()
+        try request.succeed(servicePort: 8003)
+        await load.value
+        let oldTicket = try XCTUnwrap(model.helperConfirmation)
+        model.openHelperConfiguration(serverID: otherServer.id)
+        let otherLoad = try XCTUnwrap(model.connectDSReader(serverID: otherServer.id))
+        let otherRequest = try await loader.nextRequest()
+        try otherRequest.succeed(servicePort: 8004)
+        await otherLoad.value
+        let otherTicket = try XCTUnwrap(model.helperConfirmation)
+        model.applyHelperConfiguration(oldTicket, serverID: server.id)
+        model.discardHelperConfiguration(oldTicket)
+        XCTAssertEqual(model.helperConfirmation, otherTicket)
+        model.applyHelperConfiguration(otherTicket, serverID: otherServer.id)
+        XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: otherServer.id)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 8004)
+    }
+
+    func testHelperCredentialsPortAndDeletionInvalidateTheRequestOrCandidate() async throws {
+        let loader = installControlledHelperLoader()
+        var server = TestFixtures.makeServer(baseUrl: "http://helper-changes")
+        server.hasAuth = true
+        server.username = "account"
+        server.password = "old"
+        try installServerForHelperSync(server)
+
+        let staleCredentials = try serverManager.requestManualHelperConfiguration(serverID: server.id, port: 8080)
+        let first = try await loader.nextRequest()
+        server.password = "new"
+        try serverRepository.saveServer(server)
+        serverManager.calibreServers[server.id] = server
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.port, 8080)
+        try first.succeed(servicePort: 8180)
+        await assertHelperLoadFailed(staleCredentials)
+
+        let stalePort = try serverManager.requestManualHelperConfiguration(serverID: server.id, port: 8080)
+        let second = try await loader.nextRequest()
+        XCTAssertEqual(second.server.password, "new")
+        try second.succeed(servicePort: 8181)
+        let portCandidate = try await stalePort.task.value
+        let current = CalibreServerDSReaderHelper(port: 9090, configurationData: try makeDSReaderHelperConfigurationData(servicePort: 9191))
+        try serverRepository.saveDSReaderHelper(current, for: server.id)
+        XCTAssertThrowsError(try serverManager.applyHelperConfiguration(portCandidate))
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id), current)
+
+        let removed = try serverManager.requestManualHelperConfiguration(serverID: server.id, port: 9090)
+        let third = try await loader.nextRequest()
+        try third.succeed(servicePort: 9192)
+        let deletedCandidate = try await removed.task.value
+        // Remove the Realm row while the manager still holds its in-memory server snapshot.
+        try serverRepository.deleteServer(id: server.id)
+        XCTAssertThrowsError(try serverManager.applyHelperConfiguration(deletedCandidate))
+        XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id))
+    }
+
+    func testManualHelperConfirmationRejectsChangedLibraryScope() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-library-change")
+        try installServerForHelperSync(server)
+        let library = CalibreLibrary(server: server, key: "visible", name: "Visible")
+        container.libraryManager.calibreLibraries[library.id] = library
+
+        let load = try serverManager.requestManualHelperConfiguration(serverID: server.id, port: 8080)
+        let request = try await loader.nextRequest()
+        XCTAssertEqual(request.libraries.map(\.id), [library.id])
+        try request.succeed(servicePort: 8080)
+        let candidate = try await load.task.value
+        container.libraryManager.calibreLibraries[library.id]?.hidden = true
+        XCTAssertThrowsError(try serverManager.applyHelperConfiguration(candidate))
+        XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
+    }
+
+    func testBackgroundHelperLatestRequestWinsIndependentlyPerServer() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-bg-a")
+        let other = TestFixtures.makeServer(baseUrl: "http://helper-bg-b")
+        try installServerForHelperSync(server)
+        try installServerForHelperSync(other)
+        let first = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        let firstRequest = try await loader.nextRequest()
+        let independent = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: other.id))
+        let independentRequest = try await loader.nextRequest()
+        let latest = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        let latestRequest = try await loader.nextRequest()
+
+        try latestRequest.succeed(servicePort: 8002)
+        _ = try await latest.task.value
+        try firstRequest.succeed(servicePort: 8001)
+        await assertHelperLoadFailed(first)
+        try independentRequest.succeed(servicePort: 8101)
+        _ = try await independent.task.value
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 8002)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: other.id)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 8101)
+    }
+
+    func testBackgroundHelperCannotOverwriteManualConfirmationOrApply() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-manual-wins")
+        try installServerForHelperSync(server)
+        let background = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        let backgroundRequest = try await loader.nextRequest()
+        let manual = try serverManager.requestManualHelperConfiguration(serverID: server.id, port: 9090)
+        let manualRequest = try await loader.nextRequest()
+        XCTAssertNil(serverManager.requestServerHelperConfigSync(serverId: server.id))
+
+        try manualRequest.succeed(servicePort: 9191)
+        let candidate = try await manual.task.value
+        XCTAssertNil(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.port, 8080)
+        let saved = try serverManager.applyHelperConfiguration(candidate)
+        try backgroundRequest.succeed(servicePort: 8888)
+        await assertHelperLoadFailed(background)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id), saved)
+        XCTAssertEqual(saved.port, 9090)
+    }
+
+    func testBackgroundHelperDiscardsAResponseAfterSavedPortChangesOrServerDeletion() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-bg-edit")
+        try installServerForHelperSync(server)
+        let first = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        let firstRequest = try await loader.nextRequest()
+        let current = CalibreServerDSReaderHelper(port: 9090, configurationData: try makeDSReaderHelperConfigurationData(servicePort: 9090))
+        try serverRepository.saveDSReaderHelper(current, for: server.id)
+        try firstRequest.succeed(servicePort: 8080)
+        await assertHelperLoadFailed(first)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id), current)
+
+        let second = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        let secondRequest = try await loader.nextRequest()
+        XCTAssertEqual(secondRequest.port, 9090)
+        try serverRepository.deleteServer(id: server.id)
+        try secondRequest.succeed(servicePort: 9191)
+        await assertHelperLoadFailed(second)
+        XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id))
+    }
+
+    private func assertHelperLoadFailed(_ load: DSReaderHelperConfigurationLoad, file: StaticString = #filePath, line: UInt = #line) async {
+        do {
+            _ = try await load.task.value
+            XCTFail("A superseded configuration request returned a candidate", file: file, line: line)
+        } catch {}
+    }
+
+    private func installControlledHelperLoader() -> ControlledHelperLoader {
+        let loader = ControlledHelperLoader()
+        serverManager = CalibreServerManager(container: container, databaseService: databaseService,
+                                             serverRepository: serverRepository, loadHelperConfiguration: loader.load)
+        container.serverManager = serverManager
+        return loader
+    }
+
+    func testSyncServerHelperConfigUpdatesConfiguration() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Helper Server", baseUrl: "http://helper-one", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         try installServerForHelperSync(server)
 
@@ -389,16 +643,15 @@ final class CalibreServerManagerTests: XCTestCase {
             return (response, payload)
         }
 
-        await Task.yield()
-        serverManager.requestServerHelperConfigSync(serverId: server.id)
-
-        let helper = try await waitForHelperConfiguration(serverId: server.id)
+        let load = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        _ = try await load.task.value
+        let helper = serverManager.queryServerDSReaderHelper(server: server)
         XCTAssertEqual(helper?.port, 8080)
         XCTAssertEqual(helper?.configurationData, payload)
         XCTAssertEqual(helper?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7777)
     }
 
-    func testSyncServerHelperConfigSubjectIgnoresRequestFailure() async throws {
+    func testSyncServerHelperConfigIgnoresRequestFailure() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Failing Helper Server", baseUrl: "http://helper-fail", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         try installServerForHelperSync(server)
 
@@ -412,16 +665,15 @@ final class CalibreServerManagerTests: XCTestCase {
             return (response, Data("failure".utf8))
         }
 
-        await Task.yield()
-        serverManager.requestServerHelperConfigSync(serverId: server.id)
-        try await Task.sleep(nanoseconds: 150_000_000)
+        let load = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        await assertHelperLoadFailed(load)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
         XCTAssertNotNil(helper)
         XCTAssertNil(helper?.configurationData)
     }
 
-    func testSyncServerHelperConfigSubjectIgnoresConfigurationWithoutDSReaderPrefs() async throws {
+    func testSyncServerHelperConfigIgnoresConfigurationWithoutDSReaderPrefs() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Invalid Helper Server", baseUrl: "http://helper-invalid", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         try installServerForHelperSync(server)
 
@@ -441,16 +693,15 @@ final class CalibreServerManagerTests: XCTestCase {
             return (response, payload)
         }
 
-        await Task.yield()
-        serverManager.requestServerHelperConfigSync(serverId: server.id)
-        try await Task.sleep(nanoseconds: 150_000_000)
+        let load = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: server.id))
+        await assertHelperLoadFailed(load)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
         XCTAssertNotNil(helper)
         XCTAssertNil(helper?.configurationData)
     }
 
-    func testSyncServerHelperConfigSubjectTracksMultipleServersIndependently() async throws {
+    func testSyncServerHelperConfigTracksMultipleServersIndependently() async throws {
         let serverOne = CalibreServer(uuid: UUID(), name: "Helper One", baseUrl: "http://helper-one", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let serverTwo = CalibreServer(uuid: UUID(), name: "Helper Two", baseUrl: "http://helper-two", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         try installServerForHelperSync(serverOne)
@@ -469,12 +720,12 @@ final class CalibreServerManagerTests: XCTestCase {
             return (response, data)
         }
 
-        await Task.yield()
-        serverManager.requestServerHelperConfigSync(serverId: serverOne.id)
-        serverManager.requestServerHelperConfigSync(serverId: serverTwo.id)
-
-        let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id)
-        let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id)
+        let one = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: serverOne.id))
+        let two = try XCTUnwrap(serverManager.requestServerHelperConfigSync(serverId: serverTwo.id))
+        _ = try await one.task.value
+        _ = try await two.task.value
+        let helperOne = serverManager.queryServerDSReaderHelper(server: serverOne)
+        let helperTwo = serverManager.queryServerDSReaderHelper(server: serverTwo)
         XCTAssertEqual(helperOne?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7101)
         XCTAssertEqual(helperTwo?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7202)
     }
@@ -519,14 +770,50 @@ final class CalibreServerManagerTests: XCTestCase {
         return try JSONEncoder().encode(config)
     }
 
-    private func waitForHelperConfiguration(serverId: String) async throws -> CalibreServerDSReaderHelper? {
-        for _ in 0..<20 {
-            if let helper = serverRepository.getDSReaderHelper(for: serverId),
-               helper.configurationData != nil {
-                return helper
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
+}
+
+@MainActor
+private final class ControlledHelperLoader {
+    struct Pending {
+        let request: DSReaderHelperConfigurationRequest
+        let result: CheckedContinuation<DSReaderHelperConfigurationPayload, Error>
+
+        var port: Int { request.port }
+        var server: CalibreServer { request.server }
+        var libraries: [DSReaderHelperConfigurationRequest.Library] { request.libraries }
+
+        func succeed(servicePort: Int) throws {
+            let configuration = CalibreDSReaderHelperConfiguration(
+                dsreader_helper_prefs: .init(plugin_prefs: .init(Options: .init(servicePort: servicePort)))
+            )
+            result.resume(returning: try .init(configuration: configuration))
         }
-        return serverRepository.getDSReaderHelper(for: serverId)
+
+        func fail(_ error: Error) {
+            result.resume(throwing: error)
+        }
+    }
+
+    private(set) var requestCount = 0
+    private var requests: [Pending] = []
+    private var receivedRequest: XCTestExpectation?
+
+    func load(_ service: CalibreServerService, _ request: DSReaderHelperConfigurationRequest) async throws -> DSReaderHelperConfigurationPayload {
+        try await withCheckedThrowingContinuation { result in
+            requestCount += 1
+            requests.append(Pending(request: request, result: result))
+            receivedRequest?.fulfill()
+            receivedRequest = nil
+        }
+    }
+
+    func nextRequest() async throws -> Pending {
+        if requests.isEmpty {
+            let received = XCTestExpectation(description: "Helper load started")
+            receivedRequest = received
+            _ = await XCTWaiter.fulfillment(of: [received], timeout: 3)
+            receivedRequest = nil
+        }
+        return try XCTUnwrap(requests.isEmpty ? nil : requests.removeFirst())
     }
 }

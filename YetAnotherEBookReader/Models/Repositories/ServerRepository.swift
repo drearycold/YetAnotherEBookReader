@@ -16,9 +16,13 @@ protocol ServerRepositoryProtocol {
     // Server Plugin/Helper configurations
     func getDSReaderHelper(for serverId: String) -> CalibreServerDSReaderHelper?
     func saveDSReaderHelper(_ helper: CalibreServerDSReaderHelper, for serverId: String) throws
+    func getDSReaderHelperStoredConfiguration(for serverId: String) -> DSReaderHelperStoredConfiguration?
+    func replaceDSReaderHelper(_ helper: CalibreServerDSReaderHelper, ifCurrent expected: DSReaderHelperStoredConfiguration) throws -> Bool
 }
 
 class RealmServerRepository: ServerRepositoryProtocol {
+    private enum StoreError: Error { case realmUnavailable }
+
     private let databaseService: DatabaseService
     
     init(databaseService: DatabaseService = .shared) {
@@ -41,9 +45,12 @@ class RealmServerRepository: ServerRepositoryProtocol {
     
     func saveServer(_ server: CalibreServer) throws {
         guard let realm = getRealm() else { return }
-        let serverRealm = server.makeRealmObject()
         try realm.write {
-            realm.add(serverRealm, update: .modified)
+            if let existing = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id) {
+                existing.applyDomain(server)
+            } else {
+                realm.add(server.makeRealmObject())
+            }
         }
     }
     
@@ -69,15 +76,40 @@ class RealmServerRepository: ServerRepositoryProtocol {
     }
     
     func saveDSReaderHelper(_ helper: CalibreServerDSReaderHelper, for serverId: String) throws {
-        guard let realm = getRealm(),
-              let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId)
-        else { return }
-        try realm.write {
-            if let existing = serverRealm.dsreaderHelper {
+        _ = try writeDSReaderHelper(helper, for: serverId, ifCurrent: nil)
+    }
+
+    func getDSReaderHelperStoredConfiguration(for serverId: String) -> DSReaderHelperStoredConfiguration? {
+        guard let server = getRealm()?.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId),
+              !server.removed else { return nil }
+        return storedHelperConfiguration(server)
+    }
+
+    func replaceDSReaderHelper(
+        _ helper: CalibreServerDSReaderHelper,
+        ifCurrent expected: DSReaderHelperStoredConfiguration
+    ) throws -> Bool {
+        try writeDSReaderHelper(helper, for: expected.connection.serverID, ifCurrent: expected)
+    }
+
+    private func storedHelperConfiguration(_ server: CalibreServerRealm) -> DSReaderHelperStoredConfiguration {
+        .init(connection: .init(server.toDomain()), helper: server.dsreaderHelper?.toValue())
+    }
+
+    private func writeDSReaderHelper(
+        _ helper: CalibreServerDSReaderHelper, for serverId: String, ifCurrent expected: DSReaderHelperStoredConfiguration?
+    ) throws -> Bool {
+        guard let realm = getRealm() else { throw StoreError.realmUnavailable }
+        return try realm.write {
+            guard let server = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId),
+                  !server.removed else { return false }
+            if let expected, storedHelperConfiguration(server) != expected { return false }
+            if let existing = server.dsreaderHelper {
                 existing.apply(helper)
             } else {
-                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
+                server.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
+            return true
         }
     }
 }

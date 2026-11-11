@@ -109,6 +109,20 @@ class MockServerRepository: ServerRepositoryProtocol {
             throw error
         }
     }
+
+    func getDSReaderHelperStoredConfiguration(for serverId: String) -> DSReaderHelperStoredConfiguration? {
+        guard let server = getAllServersReturn.first(where: { $0.id == serverId && !$0.removed }) else { return nil }
+        return .init(connection: .init(server), helper: getDSReaderHelper(for: serverId))
+    }
+
+    func replaceDSReaderHelper(
+        _ helper: CalibreServerDSReaderHelper, ifCurrent expected: DSReaderHelperStoredConfiguration
+    ) throws -> Bool {
+        let serverId = expected.connection.serverID
+        guard getDSReaderHelperStoredConfiguration(for: serverId) == expected else { return false }
+        try saveDSReaderHelper(helper, for: serverId)
+        return true
+    }
 }
 
 class MockLibraryRepository: LibraryRepositoryProtocol {

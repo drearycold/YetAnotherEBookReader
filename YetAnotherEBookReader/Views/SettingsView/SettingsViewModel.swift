@@ -109,6 +109,7 @@ final class SettingsViewModel: ObservableObject {
     func confirmDeleteServer() {
         guard let server = serverListDelete else { return }
 
+        container.serverManager.cancelHelperConfiguration(serverID: server.id)
         container.serverManager.calibreServers[server.id]?.removed = true
         if let updatedServer = container.serverManager.calibreServers[server.id] {
             try? container.serverManager.saveServer(server: updatedServer)
@@ -121,6 +122,10 @@ final class SettingsViewModel: ObservableObject {
 
     func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
         if oldServer.id == newServer.id {
+            let currentServer = container.serverManager.calibreServers[oldServer.id] ?? oldServer
+            if DSReaderHelperConnection(currentServer) != DSReaderHelperConnection(newServer) {
+                container.serverManager.cancelHelperConfiguration(serverID: oldServer.id)
+            }
             container.serverManager.calibreServers[newServer.id] = newServer
             try? container.serverManager.saveServer(server: newServer)
             if let index = serverList.firstIndex(where: { $0.id == newServer.id }) {

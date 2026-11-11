@@ -8,196 +8,168 @@
 import SwiftUI
 
 struct ServerOptionsDSReaderHelper: View {
-    @Environment(\.appContainer) var container
     @Environment(\.openURL) var openURL
 
     @ObservedObject var viewModel: ServerViewModel
     @Binding var server: CalibreServer
     
-    @State private var dictionaryViewerDetails = false
-    @State private var countPagesDetails = false
-    @State private var goodreadsSyncDetails = false
-    
     @Binding var updater: Int
     
     var body: some View {
-        ZStack {
-            Form {
-                Section {
-                    HStack {
-                        Text("Plugin Service Port")
-                        
-                        Spacer()
-                        
-                        TextField("Plugin Service Port", text: $viewModel.portStr)
-                            .frame(idealWidth: 80, maxWidth: 80)
-                            .multilineTextAlignment(.center)
-                            .keyboardType(.numberPad)
-                        
-                        Button(action:{
-                            if viewModel.dsreaderHelperServer.port > 1024 {
-                                viewModel.portStr = (viewModel.dsreaderHelperServer.port - 1).description
-                            }
-                        }) {
-                            Image(systemName: "minus")
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        Button(action:{
-                            if viewModel.dsreaderHelperServer.port < 65535 {
-                                viewModel.portStr = (viewModel.dsreaderHelperServer.port + 1).description
-                            }
-                        }) {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.borderless)
+        let configuration = viewModel.savedHelper?.configuration
+        let validPorts = CalibreServerDSReaderHelper.validPorts
+        Form {
+            Section {
+                HStack {
+                    Text("Plugin Service Port")
+                    Spacer()
+                    TextField("Plugin Service Port", text: $viewModel.portStr)
+                        .frame(idealWidth: 80, maxWidth: 80)
+                        .multilineTextAlignment(.center)
+                        .keyboardType(.numberPad)
+                        .accessibilityIdentifier("server.helper.port")
+
+                    Button {
+                        if let port = viewModel.helperPort { viewModel.portStr = String(port - 1) }
+                    } label: {
+                        Image(systemName: "minus")
                     }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Decrease plugin service port")
+                    .disabled((viewModel.helperPort ?? validPorts.lowerBound) <= validPorts.lowerBound)
+
+                    Button {
+                        if let port = viewModel.helperPort { viewModel.portStr = String(port + 1) }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Increase plugin service port")
+                    .disabled((viewModel.helperPort ?? validPorts.upperBound) >= validPorts.upperBound)
                 }
-                
-                Section(header: Text("Supported server plugins")) {
-                    NavigationLink(
-                        destination: List {
-                            ForEach (
-                                viewModel.configuration?.count_pages_prefs?.library_config?.map {
-                                    (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                            ) { key, value in
-                                Section(header: Text("Library \(key)")) {
-                                    Group {
-                                        Text("Pages: \(value.customColumnPages.isEmpty ? "not set" : value.customColumnPages)")
-                                        Text("Words: \(value.customColumnWords.isEmpty ? "not set" : value.customColumnWords)")
-                                        Text("Flesch Reading: \(value.customColumnFleschReading.isEmpty ? "not set" : value.customColumnFleschReading)")
-                                        Text("Flesch Grade: \(value.customColumnFleschGrade.isEmpty ? "not set" : value.customColumnFleschGrade)")
-                                        Text("Gunning Fog: \(value.customColumnGunningFog.isEmpty ? "not set" : value.customColumnGunningFog)")
-                                    }
-                                    .font(.callout)
+                if viewModel.helperPort == nil {
+                    Text(HelperConfigurationFailure.invalidPort.message)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            switch viewModel.helperState {
+            case .loading:
+                Section {
+                    ProgressView("Downloading configuration…")
+                    Button("Cancel Download", action: viewModel.stopHelperConfiguration)
+                }
+            case .failure(let failure):
+                Section {
+                    Text(failure.message)
+                        .accessibilityIdentifier("server.helper.failure")
+                }
+            case .cancelled:
+                Text("Download cancelled.")
+            case .idle, .awaitingConfirmation:
+                EmptyView()
+            }
+
+            Section(header: Text("Supported server plugins")) {
+                NavigationLink(
+                    destination: List {
+                        ForEach (
+                            configuration?.count_pages_prefs?.library_config?.map {
+                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                        ) { key, value in
+                            Section(header: Text("Library \(key)")) {
+                                Group {
+                                    Text("Pages: \(value.customColumnPages.isEmpty ? "not set" : value.customColumnPages)")
+                                    Text("Words: \(value.customColumnWords.isEmpty ? "not set" : value.customColumnWords)")
+                                    Text("Flesch Reading: \(value.customColumnFleschReading.isEmpty ? "not set" : value.customColumnFleschReading)")
+                                    Text("Flesch Grade: \(value.customColumnFleschGrade.isEmpty ? "not set" : value.customColumnFleschGrade)")
+                                    Text("Gunning Fog: \(value.customColumnGunningFog.isEmpty ? "not set" : value.customColumnGunningFog)")
                                 }
-                            }
-                        }
-                            .navigationTitle("Count Pages Columns")
-                    ) {
-                        HStack {
-                            Text("Count Pages")
-                            Spacer()
-                            if viewModel.configuration?.count_pages_prefs?.library_config?.count ?? 0 > 0 {
-                                Text("detected")
-                            } else {
-                                Text("missing")
+                                .font(.callout)
                             }
                         }
                     }
-                    
-                    NavigationLink(
-                        destination: List{
-                            ForEach (
-                                viewModel.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
-                                    (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                            ) { user_entry in
-                                Section(header: Text("Profile \(user_entry.key)")) {
-                                    goodreadsSyncDetailsShelf(user_entry: user_entry)
-                                        .font(.callout)
-                                }
-                            }
-                        }
-                            .navigationTitle("Goodreads Sync Profiles")
-                    ) {
-                        HStack {
-                            Text("Goodreads Sync")
-                            Spacer()
-                            if viewModel.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
-                                Text("detected")
-                            } else {
-                                Text("missing")
-                            }
-                        }
-                        
-                    }
-                    
+                        .navigationTitle("Count Pages Columns")
+                ) {
                     HStack {
-                        Text("Dictionary Viewer")
+                        Text("Count Pages")
                         Spacer()
-                        if let options = viewModel.configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
-                           options.dictViewerEnabled,
-                           options.dictViewerLibraryName.count > 0 {
-                            Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
-                                .font(.caption2)
-                                .multilineTextAlignment(.trailing)
+                        if configuration?.count_pages_prefs?.library_config?.count ?? 0 > 0 {
+                            Text("detected")
                         } else {
                             Text("missing")
                         }
-                        
                     }
                 }
-            }
-            .disabled(viewModel.helperStatus != nil)
-            
-            if let helperStatus = viewModel.helperStatus {
-                VStack {
-                    Text(helperStatus)
-                        .padding()
+
+                NavigationLink(
+                    destination: List{
+                        ForEach (
+                            configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
+                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                        ) { user_entry in
+                            Section(header: Text("Profile \(user_entry.key)")) {
+                                goodreadsSyncDetailsShelf(user_entry: user_entry)
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                        .navigationTitle("Goodreads Sync Profiles")
+                ) {
+                    HStack {
+                        Text("Goodreads Sync")
+                        Spacer()
+                        if configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
+                            Text("detected")
+                        } else {
+                            Text("missing")
+                        }
+                    }
+
+                }
+
+                HStack {
+                    Text("Dictionary Viewer")
+                    Spacer()
+                    if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
+                       options.dictViewerEnabled,
+                       options.dictViewerLibraryName.count > 0 {
+                        Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
+                            .font(.caption2)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("server.helper.dictionary-library")
+                    } else {
+                        Text("missing")
+                    }
+
                 }
             }
         }
         .navigationTitle("DSReader Helper")
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(action:{
-                    viewModel.connectDSReader(server: server)
-                }) {
-                    Image(systemName: "square.and.arrow.down")
-                }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button(action:{
-                    viewModel.dsreaderHelperInstructionPresenting = true
-                }) {
-                    Image(systemName: "questionmark.circle")
-                }
+            // iOS 15 exposes only one item at this placement.
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HelperConfigurationToolbar(viewModel: viewModel, serverID: server.id)
             }
         }
-        .onAppear() {
-            viewModel.setDSReaderStates(server: server)
+        .onAppear { viewModel.openHelperConfiguration(serverID: server.id) }
+        .onDisappear(perform: viewModel.closeHelperConfiguration)
+        .onChange(of: DSReaderHelperConnection(server)) { _ in
+            viewModel.openHelperConfiguration(serverID: server.id)
         }
         .onChange(of: updater) { _ in
-            viewModel.setDSReaderStates(server: server)
+            viewModel.openHelperConfiguration(serverID: server.id)
         }
-        .alert(item: $viewModel.configAlertItem) { item in
-            if item.id == "updateConfigAlert" {
-                return Alert(
-                    title: Text("Use DSReader Helper Config?"),
-                    message: Text("Successfully downloaded helper plugin configurations from server, update local settings?"),
-                    primaryButton: .default(Text("Update"), action: {
-                        viewModel.updateDSReaderHelperConfig(server: server)
-                    }),
-                    secondaryButton: .cancel({
-                        viewModel.dsreaderHelperServer.configuration = nil
-                        viewModel.dsreaderHelperServer.configurationData = nil
-                        viewModel.helperStatus = nil
-                    }))
-            }
-            if item.id == "failedParseConfigAlert" {
-                return Alert(
-                    title: Text("Failed to Parse Result"),
-                    message: Text("Please double check service port number"),
-                    dismissButton: .cancel(Text("Dismiss"))
-                )
-            }
-            if item.id == "failedConnectConfigAlert" {
-                return Alert(
-                    title: Text("DSReader Helper Unavailable"),
-                    message: Text("Have you installed DSReader Helper plugin on calibre server?\nThe plugin will greatly enhance this App's ability to interact with services provided by your favorite calibre plugins. We highly recommend you look into it."),
-                    primaryButton: .default(Text("Great, show me")) {
-                        viewModel.dsreaderHelperInstructionPresenting = true
-                        viewModel.helperStatus = nil
-                    },
-                    secondaryButton: .cancel(Text("Maybe Later")) {
-                        viewModel.helperStatus = nil
-                    }
-                )
-            }
-            return Alert(
-                title: Text("Unexpected"),
-                dismissButton: .cancel(Text("Dismiss")) {
-                    viewModel.helperStatus = nil
+        .alert(item: $viewModel.helperConfirmation) { ticket in
+            Alert(
+                title: Text("Use DSReader Helper Config?"),
+                message: Text("Update the saved plugin settings with the downloaded configuration?"),
+                primaryButton: .default(Text("Update")) {
+                    viewModel.applyHelperConfiguration(ticket, serverID: server.id)
+                },
+                secondaryButton: .cancel {
+                    viewModel.discardHelperConfiguration(ticket)
                 }
             )
         }
@@ -266,6 +238,31 @@ struct ServerOptionsDSReaderHelper: View {
     }
 }
 
+private struct HelperConfigurationToolbar: View {
+    @ObservedObject var viewModel: ServerViewModel
+    let serverID: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button {
+                viewModel.connectDSReader(serverID: serverID)
+            } label: {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .accessibilityLabel("Download Helper Configuration")
+            .accessibilityIdentifier("server.helper.download")
+            .disabled(viewModel.helperPort == nil)
+
+            Button {
+                viewModel.dsreaderHelperInstructionPresenting = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+            }
+            .accessibilityLabel("DSReader Helper Instructions")
+        }
+    }
+}
+
 struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
     static private var container = AppContainer()
 
@@ -275,7 +272,6 @@ struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
         let viewModel = ServerViewModel(container: container, server: server)
         NavigationView {
             ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater)
-                .environment(\.appContainer, container)
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }

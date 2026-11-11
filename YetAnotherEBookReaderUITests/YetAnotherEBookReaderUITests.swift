@@ -903,6 +903,88 @@ final class CalibreOnboardingUITests: XCTestCase {
         element("welcome.calibre")
     }
 
+    func testHelperConfigurationRetryConfirmationAndPageExit() throws {
+        let control = "YABR_HELPER_UI_CONTROL_URL"
+        try XCTSkipIf(ProcessInfo.processInfo.environment[control] == nil,
+                      "Requires the isolated Helper loopback fixture")
+        let serverName = "SC1 Helper Fixture"
+        connect(name: serverName, url: singleURL)
+        let connectButton = element("server.connection.confirm")
+        waitForEnabled(connectButton)
+        connectButton.tap()
+        element("screen.browse.book-list")
+        back()
+        app.tabBars.buttons["Settings"].tap()
+        element(serverName).tap()
+        app.buttons["DSReader Helper"].firstMatch.tap()
+
+        let port = app.textFields["server.helper.port"]
+        let download = app.buttons["server.helper.download"]
+        let instructions = app.buttons["DSReader Helper Instructions"]
+        let dictionary = app.staticTexts["server.helper.dictionary-library"]
+        let confirmation = app.alerts["Use DSReader Helper Config?"]
+        XCTAssertTrue(download.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(instructions.isHittable, app.debugDescription)
+        let originalPort = try XCTUnwrap(Int(port.value as? String ?? ""))
+
+        download.tap()
+        let failure = element("server.helper.failure")
+        XCTAssertTrue(failure.label.contains("denied access"))
+        XCTAssertFalse(failure.label.contains("fixture-private-response"))
+        XCTAssertTrue(port.isEnabled)
+        capture("sc1-failure-allows-port-edit")
+
+        app.buttons["Increase plugin service port"].tap()
+        XCTAssertEqual(port.value as? String, String(originalPort + 1))
+        XCTAssertFalse(failure.exists)
+        download.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(dictionary.exists)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertFalse(dictionary.exists)
+
+        download.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), app.debugDescription)
+        confirmation.buttons["Update"].tap()
+        XCTAssertTrue(dictionary.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(dictionary.label.contains("Fixture Dictionary"))
+        capture("sc1-confirmed-configuration")
+
+        try configureFixture("hold", environmentKey: control)
+        download.tap()
+        try configureFixture("wait", environmentKey: control)
+        app.buttons["Cancel Download"].tap()
+        try configureFixture("release", environmentKey: control)
+        element("Download cancelled.")
+        XCTAssertFalse(confirmation.exists)
+        XCTAssertTrue(dictionary.exists)
+
+        try configureFixture("hold", environmentKey: control)
+        download.tap()
+        try configureFixture("wait", environmentKey: control)
+        back()
+        app.buttons["DSReader Helper"].firstMatch.tap()
+        try configureFixture("release", environmentKey: control)
+        XCTAssertTrue(dictionary.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertEqual(port.value as? String, String(originalPort + 1))
+        XCTAssertFalse(confirmation.exists)
+        XCTAssertFalse(app.buttons["Cancel Download"].exists)
+
+        download.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), app.debugDescription)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(dictionary.exists)
+        capture("sc1-returned-to-saved-configuration")
+
+        port.tap()
+        port.typeText("99999")
+        let invalidPort = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: download)
+        XCTAssertEqual(XCTWaiter.wait(for: [invalidPort], timeout: 5), .completed, app.debugDescription)
+        port.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
+        XCTAssertEqual(port.value as? String, String(originalPort + 1))
+        waitForEnabled(download)
+    }
+
     func testConnectionRecoveryKeepsActionsVisibleAndUsesEditedConfiguration() throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_CONNECTION_CONTROL_URL"] == nil,
                       "Requires the P4 loopback connection-control proxy")
