@@ -685,58 +685,6 @@ class ReadingSessionManager {
         return readerInfo
     }
     
-    /// Returns detached sessions keyed by the full shelf book identity.
-    @MainActor
-    func listBookDeviceReadingPositionHistory(
-        library: CalibreLibrary? = nil,
-        bookId: Int32? = nil,
-        startingIn range: ClosedRange<Date>? = nil
-    ) -> [String: [BookDeviceReadingPositionHistory]] {
-        guard let container else { return [:] }
-        let shelf = container.bookManager.booksInShelf
-        let books: [CalibreBook]
-        if let library, let bookId {
-            let id = CalibreBook.identity(library: library, bookId: bookId)
-            guard let book = shelf[id] else { return [:] }
-            books = [book]
-        } else {
-            books = Array(shelf.values)
-        }
-
-        let knownLibraries = Array(container.calibreLibraries.values) + shelf.values.map(\.library)
-        let librariesByKey = knownLibraries.reduce(into: [String: [String: UUID]]()) { scopes, library in
-            scopes[library.key, default: [:]][library.id] = library.server.uuid
-        }
-        // The main Realm key has no server provenance. Even an off-shelf library can own it.
-        let legacyKeys = Set(books.compactMap { book in
-            librariesByKey[book.library.key]?.count == 1 ? book.bookPrefId : nil
-        })
-        let repository = container.readingPositionRepository
-        let legacyByKey = Dictionary(
-            grouping: repository.legacySessions(forBookIds: legacyKeys, startingIn: range),
-            by: \.bookId
-        )
-
-        return books.reduce(into: [:]) { history, book in
-            let ambiguousScope = librariesByKey[book.library.key, default: [:]].contains { libraryID, serverUUID in
-                serverUUID == book.library.server.uuid && libraryID != book.library.id
-            }
-            let scoped = ambiguousScope ? [] : repository.sessions(for: book, startingIn: range)
-            let legacy = legacyKeys.contains(book.bookPrefId) ? legacyByKey[book.bookPrefId, default: []] : []
-            var seen = Set<ReadingHistorySessionID>()
-            let sessions = (scoped + legacy).sorted { first, second in
-                if first.startDatetime != second.startDatetime {
-                    return first.startDatetime > second.startDatetime
-                }
-                return (first.id.objectID, first.id.serverUUID?.uuidString ?? "")
-                    > (second.id.objectID, second.id.serverUUID?.uuidString ?? "")
-            }.filter { seen.insert($0.id).inserted }
-            if !sessions.isEmpty {
-                history[book.inShelfId] = sessions
-            }
-        }
-    }
-    
     func handleBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
         guard let container = container else { return }
         

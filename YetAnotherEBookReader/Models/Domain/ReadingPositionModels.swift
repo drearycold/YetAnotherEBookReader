@@ -227,6 +227,19 @@ struct ReadingHistorySessionID: Hashable, Sendable {
     let objectID: String
 }
 
+struct ReadingSessionTiming: Sendable {
+    let id: ReadingHistorySessionID
+    let startDatetime: Date
+    let endEpoch: TimeInterval
+
+    func elapsedSeconds(through now: Date) -> TimeInterval? {
+        let start = startDatetime.timeIntervalSince1970
+        guard start.isFinite, endEpoch.isFinite,
+              start >= 0, endEpoch >= start, endEpoch <= now.timeIntervalSince1970 else { return nil }
+        return endEpoch - start
+    }
+}
+
 struct BookDeviceReadingPositionHistory: Identifiable, Sendable {
     let id: ReadingHistorySessionID
     /// The persisted preference key, interpreted within the session's Realm scope.
@@ -235,16 +248,12 @@ struct BookDeviceReadingPositionHistory: Identifiable, Sendable {
     let startPosition: BookDeviceReadingPosition?
     let endPosition: BookDeviceReadingPosition?
 
-    func elapsedSeconds(through now: Date) -> TimeInterval? {
-        let start = startDatetime.timeIntervalSince1970
-        guard let end = endPosition?.epoch,
-              start.isFinite, end.isFinite,
-              start >= 0, end >= start, end <= now.timeIntervalSince1970 else { return nil }
-        return end - start
+    var timing: ReadingSessionTiming? {
+        endPosition.map { ReadingSessionTiming(id: id, startDatetime: startDatetime, endEpoch: $0.epoch) }
     }
 }
 
-struct ReadingStatisticsWindow {
+struct ReadingStatisticsWindow: Sendable {
     let now: Date
     let calendar: Calendar
     let dayStarts: [Date]
@@ -271,9 +280,18 @@ struct ReadingStatisticsWindow {
     }
 }
 
-struct ReadingStatistics {
+struct ReadingStatistics: Sendable {
     let minutesByDay: [Double]
     let minutesByBook: [String: Double]
+    let rankedBookIDs: [String]
+
+    private init(minutesByDay: [Double], minutesByBook: [String: Double]) {
+        self.minutesByDay = minutesByDay
+        self.minutesByBook = minutesByBook
+        rankedBookIDs = minutesByBook.sorted { first, second in
+            first.value == second.value ? first.key < second.key : first.value > second.value
+        }.map(\.key)
+    }
 
     var previousDayAverage: Double {
         let previous = minutesByDay.dropLast()
@@ -284,22 +302,39 @@ struct ReadingStatistics {
 
     /// Keys are the canonical shelf book IDs. A whole session counts toward the day it starts.
     init(window: ReadingStatisticsWindow, historyByBook: [String: [BookDeviceReadingPositionHistory]]) {
-        var days = Array(repeating: 0.0, count: window.dayStarts.count)
-        var books: [String: Double] = [:]
-        var counted = Set<ReadingHistorySessionID>()
+        var accumulator = Accumulator(window: window)
         for bookID in historyByBook.keys.sorted() {
             for session in historyByBook[bookID, default: []] {
-                guard let seconds = session.elapsedSeconds(through: window.now), seconds > 0,
-                      window.sessionStartRange.contains(session.startDatetime),
-                      let day = window.dayStarts.firstIndex(of: window.calendar.startOfDay(for: session.startDatetime)),
-                      counted.insert(session.id).inserted else { continue }
-                let minutes = seconds / 60
-                days[day] += minutes
-                books[bookID, default: 0] += minutes
+                if let timing = session.timing { accumulator.add(timing, bookID: bookID) }
             }
         }
-        minutesByDay = days
-        minutesByBook = books
+        self = accumulator.result
+    }
+
+    struct Accumulator {
+        private let window: ReadingStatisticsWindow
+        private var days: [Double]
+        private var books: [String: Double] = [:]
+        private var counted = Set<ReadingHistorySessionID>()
+
+        init(window: ReadingStatisticsWindow) {
+            self.window = window
+            days = Array(repeating: 0, count: window.dayStarts.count)
+        }
+
+        mutating func add(_ session: ReadingSessionTiming, bookID: String) {
+            guard let seconds = session.elapsedSeconds(through: window.now), seconds > 0,
+                  window.sessionStartRange.contains(session.startDatetime),
+                  let day = window.dayStarts.firstIndex(of: window.calendar.startOfDay(for: session.startDatetime)),
+                  counted.insert(session.id).inserted else { return }
+            let minutes = seconds / 60
+            days[day] += minutes
+            books[bookID, default: 0] += minutes
+        }
+
+        var result: ReadingStatistics {
+            ReadingStatistics(minutesByDay: days, minutesByBook: books)
+        }
     }
 }
 

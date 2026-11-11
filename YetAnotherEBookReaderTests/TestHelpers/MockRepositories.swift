@@ -350,8 +350,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var createInitialReaderParam: ReaderType?
     var createInitialReturn: BookDeviceReadingPosition?
 
-    var legacySessionsReturn: [BookDeviceReadingPositionHistory] = []
-
     var sessionsCalled = false
     var sessionsBookIdParam: String?
     var sessionsRangeParam: ClosedRange<Date>?
@@ -417,10 +415,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         createInitialDeviceNameParam = deviceName
         createInitialReaderParam = reader
         return createInitialReturn ?? TestFixtures.makeReadingPosition(id: deviceName, readerName: reader.rawValue)
-    }
-
-    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
-        legacySessionsReturn
     }
 
     func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
@@ -838,5 +832,50 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
 
     func sendCategoryCacheUpdate(categoryName: String) {
         observeCategoryCacheUpdatesBroadcasters[categoryName]?.send(())
+    }
+}
+
+@MainActor
+final class MockReadingHistoryRepository: ReadingHistoryRepository {
+    var history: [BookDeviceReadingPositionHistory] = []
+    var statisticsWindows: [ReadingStatisticsWindow] = []
+    var sessionLimits: [Int] = []
+    var detailIDs: [ReadingHistorySessionID] = []
+    var sessionRead: ((ReadingHistoryScope, Int) async throws -> ReadingHistoryPage)?
+    let statisticsChanges = TestAsyncStreamBroadcaster<Void>()
+    let sessionChanges = TestAsyncStreamBroadcaster<Void>()
+
+    func statistics(in scope: ReadingHistoryScope, window: ReadingStatisticsWindow) async throws -> ReadingStatistics {
+        statisticsWindows.append(window)
+        var accumulator = ReadingStatistics.Accumulator(window: window)
+        for session in history {
+            if let bookID = scope.booksBySource[session.id.serverUUID]?[session.bookId], let timing = session.timing {
+                accumulator.add(timing, bookID: bookID)
+            }
+        }
+        return accumulator.result
+    }
+
+    func sessions(in scope: ReadingHistoryScope, limit: Int) async throws -> ReadingHistoryPage {
+        sessionLimits.append(limit)
+        if let sessionRead { return try await sessionRead(scope, limit) }
+        let rows = history.compactMap { session -> ReadingHistorySessionSummary? in
+            guard scope.booksBySource[session.id.serverUUID]?[session.bookId] != nil,
+                  let timing = session.timing, let end = session.endPosition else { return nil }
+            return ReadingHistorySessionSummary(timing: timing, chapter: end.lastReadChapter, page: end.lastReadPage)
+        }.sorted(by: ReadingHistorySessionSummary.newestFirst)
+        return ReadingHistoryPage(rows: Array(rows.prefix(limit)), hasMore: rows.count > limit)
+    }
+
+    func endPosition(for id: ReadingHistorySessionID, in scope: ReadingHistoryScope) async throws -> BookDeviceReadingPosition? {
+        detailIDs.append(id)
+        return history.first { $0.id == id && scope.booksBySource[id.serverUUID]?[$0.bookId] != nil }?.endPosition
+    }
+
+    func changes(in scope: ReadingHistoryScope, for observation: ReadingHistoryObservation) -> AsyncStream<Void> {
+        switch observation {
+        case .statistics: return statisticsChanges.stream(initialValue: ())
+        case .sessions: return sessionChanges.stream(initialValue: ())
+        }
     }
 }

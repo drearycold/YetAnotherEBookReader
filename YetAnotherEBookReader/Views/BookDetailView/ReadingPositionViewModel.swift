@@ -181,7 +181,6 @@ struct ReadingHistorySessionRow: Identifiable {
     let chapter: String
     let durationText: String
     let dateText: String
-    let endPosition: BookDeviceReadingPosition
 }
 
 @MainActor
@@ -192,6 +191,7 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     let bookId: Int32?
 
     static let limitDays = 7
+    static let sessionPageSize = 30
     static let statisticsTitle = "Today and Previous \(limitDays) Days"
 
     /// Minutes read per day, oldest first; the last entry is today.
@@ -204,6 +204,8 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     @Published var debugReadingPositions = [BookDeviceReadingPosition]()
     @Published private(set) var deviceSections = [ReadingHistoryDeviceSection]()
     @Published private(set) var sessionRows = [ReadingHistorySessionRow]()
+    @Published private(set) var hasMoreSessions = false
+    @Published private(set) var isLoadingSessions = false
     @Published var alertItem: AlertItem?
     /// The position whose detail is pushed. Rows are buttons rather than NavigationLinks, so a row's
     /// Continue button is its own tap target instead of part of the link.
@@ -215,17 +217,40 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     @Published var barChartData: BarChartData?
     #endif
     
-    private var refreshTasks = [Task<Void, Never>]()
+    private let historyRepository: ReadingHistoryRepository
+    private let now: () -> Date
+    private let calendar: () -> Calendar
+    private var isVisible = false
+    private var scope: ReadingHistoryScope?
+    private var observedStatisticsWindow: ReadingStatisticsWindow?
+    private var shelfBookDisplay: BookDisplay?
+    private var latestStatistics: ReadingStatistics?
+    private var summaries = [ReadingHistorySessionSummary]()
+    private var sessionLimit = sessionPageSize
+
+    private var visibilityTasks = [Task<Void, Never>]()
+    private var positionObserver: Task<Void, Never>?
+    private var statisticsObserver: Task<Void, Never>?
+    private var sessionObserver: Task<Void, Never>?
+    private var statisticsLoad: Task<Void, Never>?
+    private var sessionLoad: Task<Void, Never>?
+    private var detailLoad: Task<Void, Never>?
 
     let minutesFormatter = NumberFormatter()
     private let percentFormatter = NumberFormatter()
     private let durationFormatter = DateComponentsFormatter()
     private let sessionDateFormatter = DateFormatter()
 
-    init(container: AppContainer, library: CalibreLibrary?, bookId: Int32?) {
+    init(
+        container: AppContainer, library: CalibreLibrary?, bookId: Int32?,
+        now: @escaping () -> Date = Date.init, calendar: @escaping () -> Calendar = { .current }
+    ) {
         self.container = container
         self.library = library
         self.bookId = bookId
+        self.historyRepository = container.readingHistoryRepository
+        self.now = now
+        self.calendar = calendar
 
         minutesFormatter.maximumFractionDigits = 1
         minutesFormatter.minimumFractionDigits = 1
@@ -242,43 +267,251 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     }
 
     deinit {
-        refreshTasks.forEach { $0.cancel() }
+        visibilityTasks.forEach { $0.cancel() }
+        positionObserver?.cancel()
+        statisticsObserver?.cancel()
+        sessionObserver?.cancel()
+        statisticsLoad?.cancel()
+        sessionLoad?.cancel()
+        detailLoad?.cancel()
     }
-    
-    /// Reloads when a reader above this page records a position (it is hidden or deactivated), a
-    /// reader closes, or books update (shelf refresh after a reader closes, a finished download).
-    /// None of these make the page appear again, so `onAppear` alone leaves it stale.
+
     func start() {
-        guard refreshTasks.isEmpty else { return }
-        loadData()
-        let readerInfos = container.sessionManager.readerInfoSnapshots()
-        let presentations = container.sessionManager.readerPresentationSnapshots()
-        let updates = container.calibreUpdates()
-        refreshTasks = [
-            Task { @MainActor [weak self] in
-                for await _ in readerInfos.dropFirst() {
-                    guard let self, !Task.isCancelled else { return }
-                    self.loadData()
+        guard !isVisible else { return }
+        isVisible = true
+
+        let shelf = container.bookManager.booksInShelfSnapshots(bufferingPolicy: .bufferingNewest(1))
+        let libraries = container.libraryManager.librarySnapshots(bufferingPolicy: .bufferingNewest(1))
+        visibilityTasks = [
+            Task { [weak self] in
+                for await _ in shelf {
+                    guard !Task.isCancelled else { return }
+                    self?.shelfChanged()
                 }
             },
-            Task { @MainActor [weak self] in
-                for await _ in presentations.dropFirst() {
-                    guard let self, !Task.isCancelled else { return }
-                    self.loadData()
+            Task { [weak self] in
+                for await _ in libraries {
+                    guard !Task.isCancelled else { return }
+                    self?.updateHistoryScope()
                 }
-            },
-            Task { @MainActor [weak self] in
-                for await _ in updates {
-                    guard let self, !Task.isCancelled else { return }
-                    self.loadData()
-                }
-            },
+            }
         ]
+
+        if let identity, let library, let bookId {
+            let shelfBook = container.bookManager.booksInShelf[identity]
+            shelfBookDisplay = shelfBook.map(BookDisplay.init)
+            let active = container.sessionManager.activeReaderPresentation?.book
+            updateBook(container.bookRepository.getBook(library: library, bookId: bookId)
+                       ?? shelfBook ?? (active?.inShelfId == identity ? active : nil))
+            let books = container.bookRepository.observeBook(id: identity)
+            visibilityTasks.append(Task { [weak self] in
+                for await book in books {
+                    guard !Task.isCancelled, let self else { return }
+                    let fallback = self.container.bookManager.booksInShelf[identity]
+                        ?? self.container.sessionManager.activeReaderPresentation?.book
+                    self.updateBook(book ?? fallback)
+                }
+            })
+        }
+        updateHistoryScope()
     }
-    
+
     func stop() {
-        refreshTasks.forEach { $0.cancel() }
-        refreshTasks.removeAll()
+        isVisible = false
+        visibilityTasks.forEach { $0.cancel() }
+        visibilityTasks.removeAll()
+        positionObserver?.cancel()
+        positionObserver = nil
+        statisticsObserver?.cancel()
+        statisticsObserver = nil
+        sessionObserver?.cancel()
+        sessionObserver = nil
+        statisticsLoad?.cancel()
+        sessionLoad?.cancel()
+        detailLoad?.cancel()
+        isLoadingSessions = false
+    }
+
+    func clockDidChange() {
+        guard isVisible else { return }
+        let window = makeWindow()
+        updateSessionRows(window: window)
+        refreshStatistics(window: window)
+    }
+
+    func loadMoreSessions() {
+        guard isVisible, hasMoreSessions, !isLoadingSessions else { return }
+        sessionLimit += Self.sessionPageSize
+        refreshSessionPage()
+    }
+
+    private var identity: String? {
+        guard let library, let bookId else { return nil }
+        return CalibreBook.identity(library: library, bookId: bookId)
+    }
+
+    private func currentScope() -> ReadingHistoryScope {
+        ReadingHistoryScope(shelf: container.bookManager.booksInShelf,
+                            libraries: container.calibreLibraries, bookID: identity)
+    }
+
+    private func shelfChanged() {
+        if let identity {
+            let book = container.bookManager.booksInShelf[identity]
+            let display = book.map(BookDisplay.init)
+            if display != shelfBookDisplay {
+                shelfBookDisplay = display
+                if let book { updateBook(book) }
+            }
+        } else if booksHistoryItems.contains(where: { item in
+            container.bookManager.booksInShelf[item.id]?.title != item.book.title
+        }) {
+            updateBookTotals()
+        }
+        updateHistoryScope()
+    }
+
+    private func updateHistoryScope() {
+        guard isVisible else { return }
+        let next = currentScope()
+        guard next != scope || statisticsObserver == nil else { return }
+        let changed = next != scope
+        scope = next
+        let window = makeWindow()
+        if changed {
+            detailLoad?.cancel()
+            applyStatistics(ReadingStatistics.Accumulator(window: window).result, window: window)
+            summaries = []
+            sessionRows = []
+            hasMoreSessions = false
+        }
+        observeStatistics(window: window)
+        if isBookMode { observeSessions() }
+    }
+
+    private func makeWindow() -> ReadingStatisticsWindow {
+        ReadingStatisticsWindow(now: now(), calendar: calendar(), previousDays: Self.limitDays)
+    }
+
+    private func observeStatistics(window: ReadingStatisticsWindow) {
+        guard let scope else { return }
+        statisticsObserver?.cancel()
+        statisticsLoad?.cancel()
+        observedStatisticsWindow = window
+        let changes = historyRepository.changes(in: scope, for: .statistics(since: window.sessionStartRange.lowerBound))
+        statisticsObserver = Task { [weak self] in
+            for await _ in changes {
+                guard !Task.isCancelled, let self else { return }
+                self.refreshStatistics(window: self.makeWindow())
+            }
+        }
+    }
+
+    private func refreshStatistics(window: ReadingStatisticsWindow) {
+        guard let scope else { return }
+        if observedStatisticsWindow?.calendar != window.calendar
+            || observedStatisticsWindow?.sessionStartRange.lowerBound != window.sessionStartRange.lowerBound {
+            observeStatistics(window: window)
+            return
+        }
+        statisticsLoad?.cancel()
+        let repository = historyRepository
+        statisticsLoad = Task { [weak self] in
+            do {
+                let statistics = try await repository.statistics(in: scope, window: window)
+                guard !Task.isCancelled, let self else { return }
+                self.applyStatistics(statistics, window: window)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.alertItem = AlertItem(id: "Reading Statistics Unavailable")
+            }
+        }
+    }
+
+    private func observeSessions() {
+        guard let scope else { return }
+        sessionObserver?.cancel()
+        sessionLoad?.cancel()
+        isLoadingSessions = true
+        let changes = historyRepository.changes(in: scope, for: .sessions)
+        sessionObserver = Task { [weak self] in
+            for await _ in changes {
+                guard !Task.isCancelled else { return }
+                self?.refreshSessionPage()
+            }
+        }
+    }
+
+    private func refreshSessionPage() {
+        guard let scope else { return }
+        sessionLoad?.cancel()
+        isLoadingSessions = true
+        let limit = sessionLimit
+        let repository = historyRepository
+        sessionLoad = Task { [weak self] in
+            do {
+                let page = try await repository.sessions(in: scope, limit: limit)
+                guard !Task.isCancelled, let self else { return }
+                self.summaries = page.rows
+                self.hasMoreSessions = page.hasMore
+                self.isLoadingSessions = false
+                self.updateSessionRows(window: self.makeWindow())
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.isLoadingSessions = false
+                self.alertItem = AlertItem(id: "Local Sessions Unavailable")
+            }
+        }
+    }
+
+    private func updateBook(_ value: CalibreBook?) {
+        guard let book = value, book.inShelfId == identity else {
+            positionObserver?.cancel()
+            positionObserver = nil
+            listViewModel = nil
+            deviceSections = []
+            debugReadingPositions = []
+            return
+        }
+
+        let previous = listViewModel?.book
+        if let listViewModel {
+            listViewModel.book = book
+        } else {
+            listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: [])
+        }
+
+        if positionObserver == nil || previous?.bookPrefId != book.bookPrefId {
+            positionObserver?.cancel()
+            let repository = container.readingPositionRepository
+            listViewModel?.positions = repository.getPositions(for: book)
+            deviceSections = makeDeviceSections()
+            #if DEBUG
+            debugReadingPositions = repository.debugPositions(forBookId: book.bookPrefId, server: book.library.server)
+            #endif
+            let positions = repository.observePositions(for: book)
+            positionObserver = Task { [weak self] in
+                for await values in positions {
+                    guard !Task.isCancelled, let self else { return }
+                    self.listViewModel?.positions = values
+                    self.deviceSections = self.makeDeviceSections()
+                }
+            }
+        } else if previous.map(BookDisplay.init) != BookDisplay(book) {
+            deviceSections = makeDeviceSections()
+        }
+    }
+
+    private struct BookDisplay: Equatable {
+        let title: String
+        let bookKey: String
+        let cached: [String: Bool]
+
+        init(_ book: CalibreBook) {
+            title = book.title
+            bookKey = book.bookPrefId
+            cached = book.formats.mapValues(\.cached)
+        }
     }
 
     /// A single book's history; otherwise statistics across every book on the shelf.
@@ -303,12 +536,7 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         "Today \(todayMinutes) min · Previous \(Self.limitDays) days: avg \(avgMinutes), max \(maxMinutes) min/day"
     }
 
-    func loadData(now: Date = Date(), calendar: Calendar = .current) {
-        let window = ReadingStatisticsWindow(now: now, calendar: calendar, previousDays: Self.limitDays)
-        let history = container.sessionManager.listBookDeviceReadingPositionHistory(
-            library: library, bookId: bookId, startingIn: window.sessionStartRange
-        )
-        let statistics = ReadingStatistics(window: window, historyByBook: history)
+    private func applyStatistics(_ statistics: ReadingStatistics, window: ReadingStatisticsWindow) {
         readingStatistics = statistics.minutesByDay
         chartDayLabels = window.dayLabels
         maxMinutes = Int(statistics.previousDayMaximum)
@@ -318,47 +546,19 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         barChartData = makeBarChartData()
         #endif
 
-        if let library = library, let bookId = bookId {
-            let identity = CalibreBook.identity(library: library, bookId: bookId)
-            let sessions = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId)
-            let activeBook = container.sessionManager.activeReaderPresentation?.book
-            let book = container.bookRepository.getBook(library: library, bookId: bookId)
-                ?? (activeBook?.inShelfId == identity ? activeBook : nil)
+        if !isBookMode {
+            latestStatistics = statistics
+            updateBookTotals()
+        }
+    }
 
-            if let book, book.inShelfId == identity {
-                let positions = container.readingPositionRepository.getPositions(for: book)
-                if let listViewModel {
-                    listViewModel.book = book
-                    listViewModel.positions = positions
-                } else {
-                    listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: positions)
-                }
-            } else {
-                listViewModel = nil
-            }
-
-            deviceSections = makeDeviceSections()
-            sessionDateFormatter.timeZone = calendar.timeZone
-            sessionRows = makeSessionRows(sessions[identity] ?? [], now: now)
-
-            #if DEBUG
-            let prefix = BookAnnotation.PrefId(library: library, id: bookId)
-            self.debugReadingPositions = container.readingPositionRepository.debugPositions(
-                forBookId: prefix,
-                server: library.server
-            )
-            #endif
-        } else {
-            let rankedBooks = statistics.minutesByBook.sorted { first, second in
-                first.value == second.value ? first.key < second.key : first.value > second.value
-            }
-            booksHistoryItems = rankedBooks.compactMap { entry -> BookHistoryItem? in
-                guard let book = container.bookManager.booksInShelf[entry.key],
-                      let minutesText = minutesFormatter.string(from: NSNumber(value: entry.value)) else {
-                    return nil
-                }
-                return BookHistoryItem(inShelfId: entry.key, book: book, minutesText: minutesText)
-            }
+    private func updateBookTotals() {
+        guard let latestStatistics else { return }
+        let shelf = container.bookManager.booksInShelf
+        booksHistoryItems = latestStatistics.rankedBookIDs.compactMap { id in
+            guard let book = shelf[id], let minutes = latestStatistics.minutesByBook[id],
+                  let text = minutesFormatter.string(from: NSNumber(value: minutes)) else { return nil }
+            return BookHistoryItem(inShelfId: id, book: book, minutesText: text)
         }
     }
 
@@ -376,6 +576,32 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
     }
 
     func showDetail(for position: BookDeviceReadingPosition) {
+        detailLoad?.cancel()
+        presentDetail(for: position)
+    }
+
+    func showDetail(for session: ReadingHistorySessionRow) {
+        guard isVisible else { return }
+        detailLoad?.cancel()
+        let scope = currentScope()
+        let repository = historyRepository
+        detailLoad = Task { [weak self] in
+            do {
+                let position = try await repository.endPosition(for: session.id, in: scope)
+                guard !Task.isCancelled, let self else { return }
+                guard let position, self.currentScope() == scope else {
+                    self.alertItem = AlertItem(id: "Session Unavailable", msg: "This reading session is no longer available.")
+                    return
+                }
+                self.presentDetail(for: position)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.alertItem = AlertItem(id: "Session Unavailable")
+            }
+        }
+    }
+
+    private func presentDetail(for position: BookDeviceReadingPosition) {
         guard let listViewModel else {
             alertItem = AlertItem(id: "Book Not Found", msg: "This book is no longer in the library")
             return
@@ -431,24 +657,21 @@ final class ReadingPositionHistoryViewModel: ObservableObject, Identifiable {
         )
     }
 
-    private func makeSessionRows(_ sessions: [BookDeviceReadingPositionHistory], now: Date) -> [ReadingHistorySessionRow] {
-        sessions.compactMap { session in
-            guard let endPosition = session.endPosition,
-                  endPosition.epoch.isFinite,
-                  session.startDatetime.timeIntervalSince1970.isFinite else { return nil }
-            let chapter = endPosition.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func updateSessionRows(window: ReadingStatisticsWindow) {
+        sessionDateFormatter.timeZone = window.calendar.timeZone
+        sessionRows = summaries.map { session in
+            let chapter = session.chapter.trimmingCharacters(in: .whitespacesAndNewlines)
             let durationText: String
-            if let duration = session.elapsedSeconds(through: now) {
+            if let duration = session.timing.elapsedSeconds(through: window.now) {
                 durationText = duration >= 60 ? durationFormatter.string(from: duration) ?? "<1 min" : "<1 min"
             } else {
                 durationText = "Duration unavailable"
             }
             return ReadingHistorySessionRow(
                 id: session.id,
-                chapter: chapter.isEmpty ? "Page \(endPosition.lastReadPage)" : chapter,
+                chapter: chapter.isEmpty ? "Page \(session.page)" : chapter,
                 durationText: durationText,
-                dateText: sessionDateFormatter.string(from: session.startDatetime),
-                endPosition: endPosition
+                dateText: sessionDateFormatter.string(from: session.timing.startDatetime)
             )
         }
     }

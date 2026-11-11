@@ -51,8 +51,10 @@ class CalibreLibraryManager {
         stateChangeBroadcaster.stream()
     }
 
-    func librarySnapshots() -> AsyncStream<[String: CalibreLibrary]> {
-        libraryBroadcaster.stream(initialValue: calibreLibraries)
+    func librarySnapshots(
+        bufferingPolicy: AsyncStream<[String: CalibreLibrary]>.Continuation.BufferingPolicy = .unbounded
+    ) -> AsyncStream<[String: CalibreLibrary]> {
+        libraryBroadcaster.stream(initialValue: calibreLibraries, bufferingPolicy: bufferingPolicy)
     }
 
     func libraryInfoStagingSnapshots() -> AsyncStream<[String: CalibreLibraryInfo]> {

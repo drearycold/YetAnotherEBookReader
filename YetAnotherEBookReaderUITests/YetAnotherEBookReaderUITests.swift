@@ -183,6 +183,16 @@ class UIJourneyTestCase: XCTestCase {
                 waitForNonExistence(AccessibilityID.readingPositionScreen)
                 waitForIdentifier(AccessibilityID.readingHistoryScreen)
 
+                // A local session loads its saved end position on demand.
+                let session = app.buttons["reading-history.session"].firstMatch
+                for _ in 0..<6 where !session.isHittable { app.swipeUp() }
+                XCTAssertTrue(session.isHittable, app.debugDescription)
+                session.tap()
+                waitForIdentifier(AccessibilityID.readingPositionScreen)
+                navigateBackFromNavigationStack()
+                waitForNonExistence(AccessibilityID.readingPositionScreen)
+                waitForIdentifier(AccessibilityID.readingHistoryScreen)
+
                 navigateBackFromNavigationStack()
                 waitForIdentifier(AccessibilityID.bookDetailScreen)
                 navigateBackFromNavigationStack()

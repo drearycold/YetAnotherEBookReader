@@ -127,8 +127,10 @@ class CalibreBookManager {
         stateChangeBroadcaster.stream()
     }
 
-    func booksInShelfSnapshots() -> AsyncStream<[String: CalibreBook]> {
-        booksInShelfBroadcaster.stream(initialValue: booksInShelf)
+    func booksInShelfSnapshots(
+        bufferingPolicy: AsyncStream<[String: CalibreBook]>.Continuation.BufferingPolicy = .unbounded
+    ) -> AsyncStream<[String: CalibreBook]> {
+        booksInShelfBroadcaster.stream(initialValue: booksInShelf, bufferingPolicy: bufferingPolicy)
     }
 
     func booksAnnotationSnapshots() -> AsyncStream<[String: CalibreBook]> {

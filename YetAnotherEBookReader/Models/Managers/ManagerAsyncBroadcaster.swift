@@ -12,15 +12,19 @@ final class ManagerAsyncBroadcaster<Element> {
     private var continuations = [UUID: AsyncStream<Element>.Continuation]()
 
     func stream() -> AsyncStream<Element> {
-        makeStream(initialValue: nil)
+        makeStream(initialValue: nil, bufferingPolicy: .unbounded)
     }
 
-    func stream(initialValue: Element) -> AsyncStream<Element> {
-        makeStream(initialValue: initialValue)
+    func stream(
+        initialValue: Element, bufferingPolicy: AsyncStream<Element>.Continuation.BufferingPolicy = .unbounded
+    ) -> AsyncStream<Element> {
+        makeStream(initialValue: initialValue, bufferingPolicy: bufferingPolicy)
     }
 
-    private func makeStream(initialValue: Element?) -> AsyncStream<Element> {
-        AsyncStream { [weak self] continuation in
+    private func makeStream(
+        initialValue: Element?, bufferingPolicy: AsyncStream<Element>.Continuation.BufferingPolicy
+    ) -> AsyncStream<Element> {
+        AsyncStream(bufferingPolicy: bufferingPolicy) { [weak self] continuation in
             guard let self else {
                 continuation.finish()
                 return

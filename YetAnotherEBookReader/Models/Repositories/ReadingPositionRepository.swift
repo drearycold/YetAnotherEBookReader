@@ -18,7 +18,6 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
-    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory]
     func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory]
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
@@ -238,13 +237,6 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition {
         return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
-    }
-
-    func legacySessions(forBookIds bookIds: Set<String>, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {
-        guard !bookIds.isEmpty, let realm = getRealm(server: nil) else { return [] }
-        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter("bookId IN %@", Array(bookIds))
-        return readSessions(results, startingIn: range, serverUUID: nil)
     }
 
     func sessions(forBookId bookId: String, server: CalibreServer?, startingIn range: ClosedRange<Date>?) -> [BookDeviceReadingPositionHistory] {

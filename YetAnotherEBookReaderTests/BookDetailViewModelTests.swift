@@ -1658,7 +1658,8 @@ class ReadingPositionViewModelTests: XCTestCase {
     /// A history view model for the mock book, with these saved positions and sessions.
     private func makeHistoryViewModel(
         positions: [BookDeviceReadingPosition],
-        sessions: [BookDeviceReadingPositionHistory] = []
+        sessions: [BookDeviceReadingPositionHistory] = [],
+        now: @escaping () -> Date = Date.init, calendar: @escaping () -> Calendar = { .current }
     ) -> ReadingPositionHistoryViewModel {
         let bookRepository = MockBookRepository()
         bookRepository.getBookReturn = mockBook
@@ -1666,12 +1667,17 @@ class ReadingPositionViewModelTests: XCTestCase {
 
         let readingPositionRepository = MockReadingPositionRepository()
         readingPositionRepository.getPositionsReturn = positions
-        readingPositionRepository.sessionsReturn = sessions
         mockAppContainer.readingPositionRepository = readingPositionRepository
+        let history = MockReadingHistoryRepository()
+        history.history = sessions
+        mockAppContainer.readingHistoryRepository = history
         // The history list keeps only sessions of books on the shelf.
         mockAppContainer.booksInShelf[mockBook.inShelfId] = mockBook
 
-        return ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
+        return ReadingPositionHistoryViewModel(
+            container: mockAppContainer, library: mockBook.library, bookId: mockBook.id,
+            now: now, calendar: calendar
+        )
     }
 
     func testListViewModelContinueReadingOpensReadingPositionPresentation() throws {
@@ -1756,7 +1762,8 @@ class ReadingPositionViewModelTests: XCTestCase {
             TestFixtures.makeReadingPosition(id: mockAppContainer.deviceName, lastReadChapter: " Chapter 3\n", lastProgress: 30, epoch: now)
         ])
 
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
 
         XCTAssertTrue(historyVM.isBookMode)
         XCTAssertEqual(historyVM.navigationTitle, "Reading History")
@@ -1770,7 +1777,7 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertTrue(latestRow.canContinue)
     }
 
-    func testHistoryViewModelBuildsLocalSessionRows() throws {
+    func testHistoryViewModelBuildsLocalSessionRows() async throws {
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2024-04-08T12:00:00Z"))
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
@@ -1787,9 +1794,13 @@ class ReadingPositionViewModelTests: XCTestCase {
             startPosition: nil,
             endPosition: endPosition
         )
-        let historyVM = makeHistoryViewModel(positions: [endPosition], sessions: [session])
+        let historyVM = makeHistoryViewModel(positions: [endPosition], sessions: [session],
+                                             now: { now }, calendar: { calendar })
 
-        historyVM.loadData(now: now, calendar: calendar)
+        historyVM.start()
+        defer { historyVM.stop() }
+        await expect(historyVM.$sessionRows) { $0.count == 1 }
+        await expect(historyVM.$readingStatistics) { $0.last == 30 }
 
         XCTAssertEqual(historyVM.sessionRows.count, 1)
         XCTAssertEqual(historyVM.sessionRows.first?.id, session.id)
@@ -1801,7 +1812,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertEqual(historyVM.avgMinutes, 0)
         XCTAssertEqual(historyVM.maxMinutes, 0)
 
-        let repository = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
+        let repository = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        XCTAssertTrue(repository.detailIDs.isEmpty)
         let newer = BookDeviceReadingPositionHistory(
             id: ReadingHistorySessionID(serverUUID: mockBook.library.server.uuid, objectID: "newer-session"),
             bookId: mockBook.bookPrefId,
@@ -1809,11 +1821,20 @@ class ReadingPositionViewModelTests: XCTestCase {
             startPosition: nil,
             endPosition: endPosition
         )
-        repository.sessionsReturn.append(newer)
-        historyVM.loadData(now: now, calendar: calendar)
+        repository.history.append(newer)
+        repository.sessionChanges.send(())
+        repository.statisticsChanges.send(())
+        await expect(historyVM.$sessionRows) { $0.count == 2 }
+        await expect(historyVM.$readingStatistics) { $0.last == 45 }
 
         XCTAssertEqual(historyVM.sessionRows.map(\.id), [newer.id, session.id])
         XCTAssertEqual(historyVM.todayMinutes, 45)
+
+        let selected = try XCTUnwrap(historyVM.sessionRows.last)
+        historyVM.showDetail(for: selected)
+        await expect(historyVM.$isDetailActive) { $0 }
+        XCTAssertEqual(repository.detailIDs, [session.id])
+        XCTAssertEqual(historyVM.displayedDetail?.position.epoch, endPosition.epoch)
     }
 
     func testHistoryViewModelContinueReadingRowOpensReader() throws {
@@ -1821,7 +1842,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         let historyVM = makeHistoryViewModel(positions: [
             TestFixtures.makeReadingPosition(id: "device-1", lastReadChapter: "Chapter 5")
         ])
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
         let row = try XCTUnwrap(historyVM.deviceSections.first?.rows.first)
         let workspaceID = UUID()
 
@@ -1837,7 +1859,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         let historyVM = makeHistoryViewModel(positions: [
             TestFixtures.makeReadingPosition(id: "device-1")
         ])
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
         let row = try XCTUnwrap(historyVM.deviceSections.first?.rows.first)
         XCTAssertFalse(row.canContinue)
 
@@ -1865,29 +1888,23 @@ class ReadingPositionViewModelTests: XCTestCase {
         historyVM.stop()
     }
 
-    /// A reader above History or a finished download doesn't make the page appear again, so it
-    /// reloads on book updates while shown.
-    func testHistoryViewModelReloadsWhenBooksUpdate() async throws {
+    func testHistoryViewModelObservesPositionsOnlyWhileVisible() async throws {
         let historyVM = makeHistoryViewModel(positions: [])
         historyVM.start()
         XCTAssertTrue(historyVM.deviceSections.isEmpty)
         let list = try XCTUnwrap(historyVM.listViewModel)
 
-        let repository = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
-        repository.getPositionsReturn = [TestFixtures.makeReadingPosition(id: "device-1", lastReadChapter: "Chapter 6")]
-        mockAppContainer.publishCalibreUpdate(.shelf)
-
-        let deadline = Date().addingTimeInterval(10)
-        while historyVM.deviceSections.isEmpty && Date() < deadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTAssertEqual(historyVM.deviceSections.first?.rows.first?.title, "Chapter 6")
+        let positions = try XCTUnwrap(mockAppContainer.readingPositionRepository as? MockReadingPositionRepository)
+        let history = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        await expect(historyVM.$isLoadingSessions) { !$0 }
+        let sectionLoads = history.sessionLimits.count
+        positions.positionsBroadcaster.send([TestFixtures.makeReadingPosition(lastReadChapter: "Chapter 6")])
+        await expect(historyVM.$deviceSections) { $0.first?.rows.first?.title == "Chapter 6" }
+        XCTAssertEqual(history.sessionLimits.count, sectionLoads)
         XCTAssertTrue(historyVM.listViewModel === list)
 
         historyVM.stop()
-        repository.getPositionsReturn = []
-        mockAppContainer.publishCalibreUpdate(.shelf)
-        await Task.yield()
+        positions.positionsBroadcaster.send([])
         XCTAssertEqual(historyVM.deviceSections.first?.rows.first?.title, "Chapter 6")
 
         historyVM.start()
@@ -1896,10 +1913,163 @@ class ReadingPositionViewModelTests: XCTestCase {
         historyVM.stop()
     }
 
+    func testHistoryPagesKeepTheirLoadedRangeAndStatisticsUseAllSessions() async throws {
+        let now = Date(timeIntervalSince1970: 1_712_577_600)
+        let history = (0..<65).map { makeSession(index: $0, now: now) }
+        let calendar = try utcCalendar()
+        let view = makeHistoryViewModel(positions: [], sessions: history, now: { now }, calendar: { calendar })
+        let repository = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        view.start()
+        defer { view.stop() }
+        await expect(view.$sessionRows) { $0.count == 30 }
+        await expect(view.$readingStatistics) { $0.last == 65 }
+        XCTAssertTrue(view.hasMoreSessions)
+        XCTAssertEqual(repository.sessionLimits, [30])
+
+        view.loadMoreSessions()
+        await expect(view.$sessionRows) { $0.count == 60 }
+        XCTAssertEqual(repository.sessionLimits, [30, 60])
+        XCTAssertEqual(view.todayMinutes, 65)
+
+        view.stop()
+        repository.history.removeLast(6)
+        view.start()
+        await expect(view.$sessionRows) { $0.count == 59 }
+        XCTAssertEqual(repository.sessionLimits.last, 60)
+        XCTAssertFalse(view.hasMoreSessions)
+    }
+
+    func testHistoryRejectsLatePageAfterDisappearanceAndKeepsRequestedLimit() async throws {
+        let now = Date(timeIntervalSince1970: 1_712_577_600)
+        let history = (0..<65).map { makeSession(index: $0, now: now) }
+        let calendar = try utcCalendar()
+        let view = makeHistoryViewModel(positions: [], sessions: history, now: { now }, calendar: { calendar })
+        let repository = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        view.start()
+        defer { view.stop() }
+        await expect(view.$sessionRows) { $0.count == 30 }
+
+        let suspended = expectation(description: "Load More suspended in repository")
+        let returned = expectation(description: "Obsolete page returned")
+        var release: CheckedContinuation<ReadingHistoryPage, Never>?
+        repository.sessionRead = { _, _ in
+            let page = await withCheckedContinuation { continuation in
+                release = continuation
+                suspended.fulfill()
+            }
+            returned.fulfill()
+            return page
+        }
+        view.loadMoreSessions()
+        view.loadMoreSessions()
+        await fulfillment(of: [suspended], timeout: 5)
+        view.stop()
+        repository.sessionRead = nil
+        repository.history.removeFirst()
+        view.start()
+        await expect(view.$sessionRows) { $0.first?.id == history[1].id && $0.count == 60 }
+
+        let continuation = try XCTUnwrap(release)
+        continuation.resume(returning: ReadingHistoryPage(rows: [], hasMore: false))
+        await fulfillment(of: [returned], timeout: 5)
+        XCTAssertEqual(view.sessionRows.first?.id, history[1].id)
+        XCTAssertEqual(view.sessionRows.count, 60)
+        XCTAssertEqual(repository.sessionLimits, [30, 60, 60])
+    }
+
+    func testHistoryUpdatesBookPresentationAndLegacyScopeIndependently() async throws {
+        let now = Date(timeIntervalSince1970: 1_712_577_600)
+        let legacy = makeSession(index: 0, now: now, legacy: true)
+        let calendar = try utcCalendar()
+        let view = makeHistoryViewModel(positions: [TestFixtures.makeReadingPosition()], sessions: [legacy],
+                                        now: { now }, calendar: { calendar })
+        let repository = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        view.start()
+        defer { view.stop() }
+        await expect(view.$sessionRows) { $0.count == 1 }
+        await expect(view.$readingStatistics) { $0.last == 1 }
+
+        let unrelated = TestFixtures.makeBook(library: TestFixtures.makeLibrary(key: "unrelated"))
+        mockAppContainer.booksInShelf[unrelated.inShelfId] = unrelated
+        var changed = try XCTUnwrap(mockBook)
+        changed.title = "Updated Title"
+        changed.formats["EPUB"] = FormatInfo(selected: true, filename: "book.epub", serverSize: 1,
+                                            serverMTime: now, cached: true, cacheSize: 1, cacheMTime: now)
+        mockAppContainer.booksInShelf[changed.inShelfId] = changed
+        await expect(view.$deviceSections) { $0.first?.rows.first?.canContinue == true }
+        XCTAssertEqual(view.listViewModel?.book.title, "Updated Title")
+        XCTAssertEqual(repository.sessionLimits.count, 1)
+        XCTAssertEqual(repository.statisticsWindows.count, 1)
+
+        let competitor = TestFixtures.makeLibrary(key: mockBook.library.key)
+        mockAppContainer.calibreLibraries[competitor.id] = competitor
+        await expect(view.$sessionRows) { $0.isEmpty }
+        await expect(view.$isLoadingSessions) { !$0 }
+        XCTAssertEqual(view.todayMinutes, 0)
+        mockAppContainer.calibreLibraries.removeValue(forKey: competitor.id)
+        await expect(view.$sessionRows) { $0.count == 1 }
+
+        let selected = try XCTUnwrap(view.sessionRows.first)
+        repository.history = []
+        view.showDetail(for: selected)
+        await expect(view.$alertItem) { $0?.id == "Session Unavailable" }
+        XCTAssertNil(view.displayedDetail)
+    }
+
+    func testHistoryClockChangesRequeryStatisticsWithoutReloadingThePage() async throws {
+        let midnight = Date(timeIntervalSince1970: 1_712_620_800)
+        var now = midnight.addingTimeInterval(-1)
+        var calendar = try utcCalendar()
+        let session = makeSession(index: 0, now: now)
+        let view = makeHistoryViewModel(positions: [], sessions: [session], now: { now }, calendar: { calendar })
+        let repository = try XCTUnwrap(mockAppContainer.readingHistoryRepository as? MockReadingHistoryRepository)
+        view.start()
+        defer { view.stop() }
+        await expect(view.$sessionRows) { $0.count == 1 }
+        await expect(view.$readingStatistics) { $0.last == 1 }
+        let before = try XCTUnwrap(repository.statisticsWindows.last)
+
+        now = midnight
+        view.clockDidChange()
+        await expect(view.$readingStatistics) { $0.suffix(2) == [1, 0] }
+        XCTAssertNotEqual(repository.statisticsWindows.last?.sessionStartRange.lowerBound, before.sessionStartRange.lowerBound)
+        XCTAssertEqual(repository.sessionLimits, [30])
+
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        view.clockDidChange()
+        await expect(view.$readingStatistics) { $0.last == 1 }
+        XCTAssertEqual(repository.statisticsWindows.last?.calendar.timeZone.identifier, "America/Los_Angeles")
+        XCTAssertEqual(repository.sessionLimits, [30])
+    }
+
+    private func makeSession(index: Int, now: Date, legacy: Bool = false) -> BookDeviceReadingPositionHistory {
+        let end = now.addingTimeInterval(-Double(index) * 60)
+        return BookDeviceReadingPositionHistory(
+            id: .init(serverUUID: legacy ? nil : mockBook.library.server.uuid, objectID: "session-\(index)"),
+            bookId: mockBook.bookPrefId, startDatetime: end.addingTimeInterval(-60), startPosition: nil,
+            endPosition: TestFixtures.makeReadingPosition(epoch: end.timeIntervalSince1970)
+        )
+    }
+
+    private func utcCalendar() throws -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        return calendar
+    }
+
+    private func expect<P: Publisher>(_ publisher: P, where predicate: @escaping (P.Output) -> Bool) async
+    where P.Failure == Never {
+        let published = expectation(description: "Expected history snapshot")
+        let subscription = publisher.first(where: predicate).sink { _ in published.fulfill() }
+        await fulfillment(of: [published], timeout: 5)
+        subscription.cancel()
+    }
+
     func testHistoryViewModelStatisticsModeHasNoDeviceSections() throws {
         let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: nil, bookId: nil)
 
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
 
         XCTAssertFalse(historyVM.isBookMode)
         XCTAssertEqual(historyVM.navigationTitle, "Reading Statistics")
@@ -1925,7 +2095,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
         XCTAssertEqual(historyVM.maxMinutes, 0)
         
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
         
         XCTAssertNotNil(historyVM.readingStatistics)
     }
@@ -1942,7 +2113,8 @@ class ReadingPositionViewModelTests: XCTestCase {
         mockAppContainer.readingPositionRepository = readingPositionRepository
 
         let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
-        historyVM.loadData()
+        historyVM.start()
+        defer { historyVM.stop() }
 
         XCTAssertTrue(bookRepository.getBookCalled)
         XCTAssertEqual(bookRepository.getBookBookIdParam, mockBook.id)
