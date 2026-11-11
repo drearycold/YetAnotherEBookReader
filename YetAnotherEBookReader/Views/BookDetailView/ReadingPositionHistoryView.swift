@@ -6,16 +6,9 @@
 //
 
 import SwiftUI
-import Combine
-import UIKit
 
-#if canImport(SwiftUICharts)
-import SwiftUICharts
-#endif
 
-/// A book's reading history (`library` and `bookId` given), or reading statistics for every book on
-/// the shelf. Pushed, never presented in a sheet: Continue Reading opens the reader workspace, an
-/// overlay in `MainView` that a sheet would cover.
+/// A single book's history. Reader-opening destinations are pushed above the tabs.
 struct ReadingPositionHistoryView: View {
     @Environment(\.readerWorkspaceID) var readerWorkspaceID
     @StateObject private var viewModel: ReadingPositionHistoryViewModel
@@ -26,14 +19,9 @@ struct ReadingPositionHistoryView: View {
 
     var body: some View {
         List {
-            statisticsSection
-
-            if viewModel.isBookMode {
-                positionSections
-                sessionsSection
-            } else {
-                booksSection
-            }
+            ReadingStatisticsSection(model: viewModel.statistics)
+            positionSections
+            sessionsSection
 
             #if DEBUG
             debugSection
@@ -41,53 +29,15 @@ struct ReadingPositionHistoryView: View {
         }
         .listStyle(.insetGrouped)
         .background(detailLink)
-        .navigationTitle(viewModel.navigationTitle)
+        .navigationTitle("Reading History")
         .navigationBarTitleDisplayMode(.inline)
         .alert(item: $viewModel.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
-        .onReceive(clockChanges) { _ in viewModel.clockDidChange() }
+        .modifier(ReadingClockUpdates(action: viewModel.clockDidChange))
         .accessibilityIdentifier("screen.reading-history")
-    }
-
-    private var clockChanges: AnyPublisher<Notification, Never> {
-        Publishers.MergeMany([
-            UIApplication.willEnterForegroundNotification,
-            UIApplication.significantTimeChangeNotification,
-            .NSCalendarDayChanged,
-            .NSSystemTimeZoneDidChange,
-            NSLocale.currentLocaleDidChangeNotification
-        ].map { NotificationCenter.default.publisher(for: $0) })
-        .receive(on: RunLoop.main)
-        .eraseToAnyPublisher()
-    }
-
-    private var statisticsSection: some View {
-        Section {
-            if viewModel.hasRecentReading {
-                #if canImport(SwiftUICharts)
-                if let data = viewModel.barChartData {
-                    BarChart(chartData: data)
-                        .xAxisLabels(chartData: data)
-                        .yAxisLabels(chartData: data)
-                        .yAxisGrid(chartData: data)
-                        .frame(height: 140)
-                        .padding(.vertical, 8)
-                }
-                #endif
-            } else {
-                Text("No reading today or in the previous \(ReadingPositionHistoryViewModel.limitDays) days")
-                    .foregroundColor(.secondary)
-            }
-        } header: {
-            Text(ReadingPositionHistoryViewModel.statisticsTitle)
-        } footer: {
-            if viewModel.hasRecentReading {
-                Text(viewModel.summaryText)
-            }
-        }
     }
 
     @ViewBuilder
@@ -124,6 +74,10 @@ struct ReadingPositionHistoryView: View {
         Section(header: Text("Local Sessions")) {
             if viewModel.isLoadingSessions && viewModel.sessionRows.isEmpty {
                 ProgressView()
+            } else if viewModel.sessionState == .failed {
+                Text("Unable to load local sessions").foregroundColor(.secondary)
+                Button("Retry", action: viewModel.retrySessions)
+                    .accessibilityIdentifier("reading-history.retry")
             } else if viewModel.sessionRows.isEmpty {
                 Text("No sessions on this device")
                     .foregroundColor(.secondary)
@@ -157,36 +111,17 @@ struct ReadingPositionHistoryView: View {
         }
     }
 
-    private var booksSection: some View {
-        Section(header: Text("Books")) {
-            if viewModel.booksHistoryItems.isEmpty {
-                Text("No books read today or in the previous \(ReadingPositionHistoryViewModel.limitDays) days")
-                    .foregroundColor(.secondary)
-            }
-            ForEach(viewModel.booksHistoryItems) { item in
-                NavigationLink(
-                    destination: LazyView(ReadingPositionHistoryView(viewModel: viewModel.history(for: item.book)))
-                ) {
-                    HStack {
-                        Text(item.book.title)
-                            .lineLimit(2)
-                        Spacer()
-                        Text("\(item.minutesText) min")
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
     #if DEBUG
     private var debugSection: some View {
         Section {
+            if viewModel.hasTestUpdate {
+                Button("Update Test History", action: viewModel.updateTestHistory)
+                    .accessibilityIdentifier("reading-history.test-update")
+            }
             DisclosureGroup("Debug") {
-                Text("BookId: \(viewModel.bookId ?? -1)")
-                Text("Library: \(viewModel.library?.id ?? "NO LIB")")
-                Text("Minutes: \(viewModel.readingStatistics.map { String(format: "%.1f", $0) }.joined(separator: ", "))")
+                Text("BookId: \(viewModel.bookId)")
+                Text("Library: \(viewModel.library.id)")
+                Text("Minutes: \(viewModel.statistics.minutes.map { String(format: "%.1f", $0) }.joined(separator: ", "))")
                 ForEach(Array(viewModel.debugReadingPositions.enumerated()), id: \.offset) { _, readingPosition in
                     HStack {
                         Text(readingPosition.id)
@@ -256,33 +191,21 @@ struct ReadingPositionHistoryView: View {
             .accessibilityHidden(true)
     }
 
-    /// The single hidden link for a position's detail, in book mode only. Settings mode has a
-    /// NavigationLink per book, and iOS 15 pops a programmatic link that shares its view with
-    /// another one.
-    @ViewBuilder
     private var detailLink: some View {
-        if viewModel.isBookMode {
-            NavigationLink(
-                isActive: Binding(
-                    get: { viewModel.isDetailActive },
-                    set: { isActive in
-                        if !isActive {
-                            viewModel.dismissDetail()
-                        }
-                    }
-                )
-            ) {
-                if let detail = viewModel.displayedDetail {
-                    ReadingPositionDetailView(viewModel: detail)
-                        .id(detail.id)
-                }
-            } label: {
-                EmptyView()
+        NavigationLink(
+            isActive: Binding(
+                get: { viewModel.isDetailActive },
+                set: { if !$0 { viewModel.dismissDetail() } }
+            )
+        ) {
+            if let detail = viewModel.displayedDetail {
+                ReadingPositionDetailView(viewModel: detail).id(detail.id)
             }
-            .hidden()
+        } label: {
+            EmptyView()
         }
+        .hidden()
     }
-    
 
 }
 
@@ -293,7 +216,7 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
         if let book = container.bookManager.booksInShelf.values.first {
             NavigationView {
                 ReadingPositionHistoryView(viewModel: ReadingPositionHistoryViewModel(
-                    container: container, library: book.library, bookId: book.id))
+                    container: container, book: book))
             }
             .navigationViewStyle(.stack)
             .environment(\.appContainer, container)

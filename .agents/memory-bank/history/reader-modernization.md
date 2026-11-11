@@ -4,6 +4,63 @@ Archived records for Readium, FolioReader, PDF reader, reading position, highlig
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Reading History RH3 (2026-11-11)
+
+`codex/reading-history-rh3` starts at the RH2 merge `3b3b8808`. Settings
+owns a `ReadingStatisticsViewModel` and pushes `ReadingStatisticsView`.
+That model owns the shelf ranking and one retained book-history route.
+Book Detail and Recent push `ReadingPositionHistoryView` using a concrete
+canonical book identity. The history model owns the selected book's
+positions, session page, and detail route. The shared `ReadingStatisticsModel`
+observes a resolved scope and formats its chart and summary. The two pages
+share the statistics section and clock notifications. Their loading, ready,
+and failure states have distinct presentation.
+
+The book route retains the loaded session limit and selected position on
+return. An obsolete page or end-position query cannot replace the current
+route after cancellation. The detail observes book metadata for its own
+visible lifetime and keeps its selected position. Continue Reading resolves
+current book metadata at the action, checks the cached format and file,
+and opens through the reading-session manager in the originating workspace.
+
+RH1 owns persisted identity, conservative legacy attribution and calendar
+math. RH2 owns batched worker reads, worker Realm refresh, scoped
+notifications, bounded session summaries, and on-demand end-position reads.
+RH3 owns page presentation and routes. Realm schema 151 is retained.
+FolioReader continues to use the full-session adapter for its engine API.
+
+The native statistics fixture seeds 35 completed sessions and can commit
+a title and session update while History is visible. A first run exposed
+a fixture mismatch. The reader pruned the fixture's linked end positions
+because they used the ordinary saved-position key. The raw session count
+went from 35 to 36 while the completed page dropped to one row. The fixture
+now uses the session writer's ` - History` key. The details retain their
+selected position and the loaded page returns after closing the reader.
+
+The same-scope refresh keeps the loaded chart and list in place. The iOS 15
+journey checks that the selected session is still hittable immediately after
+a detail pop. At accessibility text sizes, the statistics section uses
+daily values, the ranked book row stacks title and duration, and position
+detail has a wrapping Continue Reading label and inline reader choices.
+Standard text sizes use the SwiftUICharts graph and segmented picker.
+
+Final verification on iPhone 17 / iOS 26.5 covered the full 1,096-test unit
+suite, with 22 Calibre contracts skipped for lack of a configured server
+and zero unexpected failures. The Settings statistics and Book Detail
+history journeys passed on iPhone 17 and iPhone 7 / iOS 15.5. The
+statistics journey also passed on iPad mini / iPadOS 18.5 at the largest
+accessibility text size. The system multitasking menu opened a real
+split window under 600 points alongside Safari. The journey exercised
+Load More, session detail, live title and session updates, and closing
+the reader back to the retained history. Screenshots cover the full-width
+statistics layout and the split statistics, sessions, and detail layouts.
+
+The iOS test build, Mac Catalyst build, Swift parse, project lint,
+Realm boundary scan, old-constructor scan, and diff checks passed.
+Result bundles and screenshots are in `/tmp/YabrRH3`. Catalyst verification
+covered the build. A physical device and real Calibre service were outside
+this run.
+
 ## Reading History RH2 (2026-11-10)
 
 `codex/reading-history-rh2` starts at the RH1 merge `35207447`.

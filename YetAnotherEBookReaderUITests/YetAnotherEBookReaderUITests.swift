@@ -649,6 +649,128 @@ final class YetAnotherEBookReaderBrowseBatchUITests: UIJourneyTestCase {
     }
 }
 
+final class ReadingStatisticsUITests: UIJourneyTestCase {
+    func testStatisticsHistoryPaginationDetailsAndReaderReturn() throws {
+        app.launchArguments.append("--ui-testing-history")
+        let largeType = ProcessInfo.processInfo.environment["YABR_RH3_LARGE_TYPE"] == "1"
+        if largeType {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        launchApp()
+        tapTab(label: "Settings", screen: AccessibilityID.settingsScreen)
+        reveal(app.buttons["settings.reading-statistics"].firstMatch)
+        app.buttons["settings.reading-statistics"].firstMatch.tap()
+        waitForIdentifier("screen.reading-statistics")
+        let book = app.buttons["reading-statistics.book"].firstMatch
+        if largeType {
+            let day = app.descendants(matching: .any).matching(identifier: "reading-statistics.day").firstMatch
+            waitForElement(day, description: "Accessible daily statistics")
+        } else {
+            waitForElement(book, description: "Statistics book")
+        }
+        capture("Statistics")
+        enterSplitViewIfRequested()
+        reveal(book)
+        book.tap()
+        waitForIdentifier(AccessibilityID.readingHistoryScreen)
+
+        let more = app.buttons["reading-history.load-more"].firstMatch
+        reveal(more)
+        more.tap()
+        let oldest = app.buttons.matching(identifier: "reading-history.session").matching(NSPredicate(format: "label CONTAINS %@", "History Session 35")).firstMatch
+        reveal(oldest)
+        capture("History loaded range")
+        oldest.tap()
+        waitForIdentifier(AccessibilityID.readingPositionScreen)
+        capture("Position detail")
+        let chapter = app.staticTexts["History Session 35"].firstMatch
+        if largeType { reveal(chapter) }
+        XCTAssertTrue(chapter.exists, app.debugDescription)
+        navigateBackFromNavigationStack()
+        waitForIdentifier(AccessibilityID.readingHistoryScreen)
+        XCTAssertTrue(oldest.isHittable, app.debugDescription)
+        XCTAssertFalse(more.exists, app.debugDescription)
+
+        let update = app.buttons["reading-history.test-update"].firstMatch
+        reveal(update)
+        update.tap()
+        let changed = app.buttons.matching(identifier: "reading-history.session").matching(NSPredicate(format: "label CONTAINS %@", "Updated History Session 35")).firstMatch
+        reveal(changed, upward: false)
+        changed.tap()
+        waitForIdentifier(AccessibilityID.readingPositionScreen)
+        let continueReading = app.buttons["reading-position.continue"].firstMatch
+        reveal(continueReading)
+        continueReading.tap()
+        waitForIdentifier(AccessibilityID.readerFolioContent, timeout: readerLoadTimeout)
+        waitForIdentifier(AccessibilityID.readerFolioClose).tap()
+        waitForIdentifier(AccessibilityID.readingPositionScreen)
+        navigateBackFromNavigationStack()
+        waitForIdentifier(AccessibilityID.readingHistoryScreen)
+        reveal(changed)
+        navigateBackFromNavigationStack()
+        waitForIdentifier("screen.reading-statistics")
+        reveal(book)
+        XCTAssertTrue(book.label.contains("Updated History Book"), app.debugDescription)
+        book.tap()
+        waitForIdentifier(AccessibilityID.readingHistoryScreen)
+        reveal(changed)
+        XCTAssertFalse(more.exists, app.debugDescription)
+    }
+
+    private func enterSplitViewIfRequested() {
+        guard ProcessInfo.processInfo.environment["YABR_RH3_SPLIT"] == "1" else { return }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let frame = self.app.windows.firstMatch.frame
+            return frame.width > frame.height || frame.width < 600
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 10), .completed, app.debugDescription)
+        if app.windows.firstMatch.frame.width < 600 {
+            capture("Statistics split window")
+            return
+        }
+        capture("Statistics landscape")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let control = springboard.buttons["top-affordance:io.github.drearycold.DSReader"].firstMatch
+        waitForElement(control, description: "Multitasking controls")
+        control.tap()
+        let split = springboard.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Split View")).firstMatch
+        waitForElement(split, description: "Split View")
+        split.tap()
+        let safari = springboard.icons["Safari"].firstMatch
+        if safari.waitForExistence(timeout: 5) {
+            safari.tap()
+        } else {
+            let settings = springboard.icons["Settings"].firstMatch
+            waitForElement(settings, description: "Settings companion app")
+            settings.tap()
+        }
+        let resized = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.app.windows.firstMatch.frame.width < 600
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [resized], timeout: 15), .completed, app.debugDescription)
+        XCTAssertGreaterThan(app.windows.firstMatch.frame.width, 300)
+        capture("Statistics split window")
+    }
+
+    private func capture(_ name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    private func reveal(_ element: XCUIElement, upward: Bool = true) {
+        for index in 0..<60 {
+            if element.exists && element.isHittable { return }
+            // An update can change the viewport while its row is being replaced.
+            if upward || index >= 3 { app.swipeUp() } else { app.swipeDown() }
+        }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
+    }
+}
+
 final class YetAnotherEBookReaderBrowseCategoriesUITests: UIJourneyTestCase {
     func testJourneyBrowseCategoriesAndFilters() throws {
         runBrowseCategoriesAndFiltersJourney()

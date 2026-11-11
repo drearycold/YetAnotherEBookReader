@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ReadingPositionDetailView: View {
     @Environment(\.readerWorkspaceID) var readerWorkspaceID
+    @Environment(\.dynamicTypeSize) private var textSize
     @StateObject private var viewModel: ReadingPositionDetailViewModel
 
     init(viewModel: @autoclosure @escaping () -> ReadingPositionDetailViewModel) {
@@ -21,8 +22,19 @@ struct ReadingPositionDetailView: View {
                 Button(action: {
                     viewModel.readSelectedFormat(targetWorkspaceID: readerWorkspaceID)
                 }) {
-                    Label("Continue Reading", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
+                    Group {
+                        if textSize.isAccessibilitySize {
+                            VStack(spacing: 8) {
+                                Image(systemName: "play.fill").accessibilityHidden(true)
+                                Text("Continue Reading")
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } else {
+                            Label("Continue Reading", systemImage: "play.fill")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -42,14 +54,11 @@ struct ReadingPositionDetailView: View {
 
             Section(header: Text("Reader")) {
                 if viewModel.availableReaders.count > 1 {
-                    Picker("Reader", selection: $viewModel.selectedFormatReader) {
-                        ForEach(ReaderType.allCases) { type in
-                            if viewModel.availableReaders.contains(type) {
-                                Text(type.rawValue).tag(type)
-                            }
-                        }
+                    if textSize.isAccessibilitySize {
+                        readerPicker.pickerStyle(.inline).labelsHidden()
+                    } else {
+                        readerPicker.pickerStyle(.segmented)
                     }
-                    .pickerStyle(SegmentedPickerStyle())
                 } else {
                     row("Reader", viewModel.selectedFormatReader.rawValue)
                 }
@@ -101,6 +110,18 @@ struct ReadingPositionDetailView: View {
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
         .accessibilityIdentifier("screen.reading-position")
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.stop() }
+    }
+
+    private var readerPicker: some View {
+        Picker("Reader", selection: $viewModel.selectedFormatReader) {
+            ForEach(ReaderType.allCases) { type in
+                if viewModel.availableReaders.contains(type) {
+                    Text(type.rawValue).tag(type)
+                }
+            }
+        }
     }
 
     private func row(_ title: String, _ value: String) -> some View {

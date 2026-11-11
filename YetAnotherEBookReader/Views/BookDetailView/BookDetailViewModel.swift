@@ -457,7 +457,7 @@ class BookDetailViewModel: ObservableObject {
         guard let container, book.inShelfId == loadedBookId else { return }
         pendingReading = nil
         cancelRefresh()
-        readingHistoryViewModel = ReadingPositionHistoryViewModel(container: container, library: book.library, bookId: book.id)
+        readingHistoryViewModel = ReadingPositionHistoryViewModel(container: container, book: book)
         isReturningFromHistory = true
         isReadingPositionHistoryActive = true
     }

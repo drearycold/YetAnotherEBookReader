@@ -518,7 +518,7 @@ import Combine
         let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
         XCTAssertFalse(readerInfo.missing)
 
-        let history = ReadingPositionHistoryViewModel(container: mockAppContainer, library: book.library, bookId: book.id)
+        let history = ReadingPositionHistoryViewModel(container: mockAppContainer, book: book)
         history.start()
         defer { history.stop() }
         history.continueReading(at: readerInfo.position, targetWorkspaceID: secondViewModel.readerWorkspaceViewModel.id)
