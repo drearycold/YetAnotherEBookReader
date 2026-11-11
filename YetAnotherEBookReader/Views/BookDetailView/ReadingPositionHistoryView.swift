@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import Combine
+import UIKit
 
 #if canImport(SwiftUICharts)
 import SwiftUICharts
@@ -46,7 +48,20 @@ struct ReadingPositionHistoryView: View {
         }
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
+        .onReceive(clockChanges) { _ in viewModel.clockDidChange() }
         .accessibilityIdentifier("screen.reading-history")
+    }
+
+    private var clockChanges: AnyPublisher<Notification, Never> {
+        Publishers.MergeMany([
+            UIApplication.willEnterForegroundNotification,
+            UIApplication.significantTimeChangeNotification,
+            .NSCalendarDayChanged,
+            .NSSystemTimeZoneDidChange,
+            NSLocale.currentLocaleDidChangeNotification
+        ].map { NotificationCenter.default.publisher(for: $0) })
+        .receive(on: RunLoop.main)
+        .eraseToAnyPublisher()
     }
 
     private var statisticsSection: some View {
@@ -107,13 +122,15 @@ struct ReadingPositionHistoryView: View {
 
     private var sessionsSection: some View {
         Section(header: Text("Local Sessions")) {
-            if viewModel.sessionRows.isEmpty {
+            if viewModel.isLoadingSessions && viewModel.sessionRows.isEmpty {
+                ProgressView()
+            } else if viewModel.sessionRows.isEmpty {
                 Text("No sessions on this device")
                     .foregroundColor(.secondary)
             }
             ForEach(viewModel.sessionRows) { row in
                 Button(action: {
-                    viewModel.showDetail(for: row.endPosition)
+                    viewModel.showDetail(for: row)
                 }) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -130,6 +147,12 @@ struct ReadingPositionHistoryView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Shows this session’s saved position")
+                .accessibilityIdentifier("reading-history.session")
+            }
+            if viewModel.hasMoreSessions {
+                Button("Load More Sessions", action: viewModel.loadMoreSessions)
+                    .disabled(viewModel.isLoadingSessions)
+                    .accessibilityIdentifier("reading-history.load-more")
             }
         }
     }

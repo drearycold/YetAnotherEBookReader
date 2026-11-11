@@ -27,12 +27,12 @@ final class InMemoryServerScopedRealmConfigurationProvider: ServerScopedRealmCon
         self.identifierPrefix = identifierPrefix
     }
 
-    func configuration(for server: CalibreServer) -> Realm.Configuration {
+    func configuration(forServerUUID uuid: UUID) -> Realm.Configuration {
         lock.lock()
         defer { lock.unlock() }
-        if let cached = cache[server.uuid] { return cached }
+        if let cached = cache[uuid] { return cached }
         let config = Realm.Configuration(
-            inMemoryIdentifier: "\(identifierPrefix)-\(server.uuid.uuidString)",
+            inMemoryIdentifier: "\(identifierPrefix)-\(uuid.uuidString)",
             schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in },
             objectTypes: [
@@ -45,7 +45,7 @@ final class InMemoryServerScopedRealmConfigurationProvider: ServerScopedRealmCon
                 ReadiumPreferenceRealm.self
             ]
         )
-        cache[server.uuid] = config
+        cache[uuid] = config
         return config
     }
 }

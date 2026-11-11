@@ -19,8 +19,8 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
     private var cache = [CacheKey: Realm.Configuration]()
     private let lock = NSLock()
     
-    func configuration(for server: CalibreServer) -> Realm.Configuration {
-        let key = CacheKey(serverUUID: server.uuid.uuidString, schemaVersion: DatabaseSchema.version)
+    func configuration(forServerUUID uuid: UUID) -> Realm.Configuration {
+        let key = CacheKey(serverUUID: uuid.uuidString, schemaVersion: DatabaseSchema.version)
         
         lock.lock()
         if let cachedConfig = cache[key] {
@@ -29,7 +29,7 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
         }
         lock.unlock()
         
-        let newConfig = makeConfiguration(for: server)
+        let newConfig = makeConfiguration(for: uuid)
         
         lock.lock()
         if let cachedConfig = cache[key] {
@@ -42,7 +42,7 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
         return newConfig
     }
 
-    private func makeConfiguration(for server: CalibreServer) -> Realm.Configuration {
+    private func makeConfiguration(for uuid: UUID) -> Realm.Configuration {
         let applicationSupportURL = try! FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -51,7 +51,7 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
         )
 
         return Realm.Configuration(
-            fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
+            fileURL: applicationSupportURL.appendingPathComponent("\(uuid.uuidString).realm"),
             schemaVersion: DatabaseSchema.version,
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 125 {

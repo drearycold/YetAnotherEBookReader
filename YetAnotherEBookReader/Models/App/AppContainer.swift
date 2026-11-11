@@ -313,6 +313,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         databaseService: databaseService,
         realmConfigurationProvider: serverScopedRealmProvider
     )
+    @MainActor lazy var readingHistoryRepository: ReadingHistoryRepository = RealmReadingHistoryRepository(
+        databaseService: databaseService, provider: serverScopedRealmProvider
+    )
     lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
     lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, container: self)
     lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository { [weak self] server in

@@ -18,5 +18,11 @@ protocol ServerScopedRealmConfigurationProviding: AnyObject {
     /// given CalibreServer's sidecar Realm (reading positions, reader
     /// preferences, etc.). Implementations are free to cache the
     /// result per server.
-    func configuration(for server: CalibreServer) -> Realm.Configuration
+    func configuration(forServerUUID uuid: UUID) -> Realm.Configuration
+}
+
+extension ServerScopedRealmConfigurationProviding {
+    func configuration(for server: CalibreServer) -> Realm.Configuration {
+        configuration(forServerUUID: server.uuid)
+    }
 }

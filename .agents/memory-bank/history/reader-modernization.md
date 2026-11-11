@@ -4,6 +4,88 @@ Archived records for Readium, FolioReader, PDF reader, reading position, highlig
 
 Source: split from `.agents/memory-bank/activeContext.md` on 2026-07-03. Entries are preserved as historical records unless this file explicitly says otherwise.
 
+## Reading History RH2 (2026-11-10)
+
+`codex/reading-history-rh2` starts at the RH1 merge `35207447`.
+`ReadingHistoryScope` snapshots canonical shelf book IDs, persisted preference
+keys and their eligible Realm scopes. All configured libraries and the
+libraries represented on the shelf participate in RH1 ambiguity checks.
+The repository prepares a configuration per scope and uses one grouped query
+per Realm for the statistics window. Synchronous worker reads open their own
+Realms and return detached values. Statistics visit session identity, start
+time and end epoch, and rank per-book totals on the worker.
+
+The Local Sessions list expands in 30-row steps. Each Realm supplies at most
+the requested prefix plus one summary, sorted by start date and persisted ID.
+The merged prefix uses scope as its final tie-breaker. Refreshes repeat the
+loaded range so inserts and removals keep it coherent. Realm still performs
+the matching and sort internally. Selecting a summary loads the end position
+by primary key in its original scope and checks ownership again before
+navigation. If it is unavailable, the page reports it. An already opened
+detail keeps its selected position through updates and the pop animation.
+
+History uses filtered Realm observations with separate key paths for the
+statistics window and session summaries. Notifications coalesce to one pending
+invalidation and registration and token disposal share a serial queue.
+Visibility owns those subscriptions and the per-book saved-position and
+metadata subscriptions. Shelf and library snapshots rebuild subscriptions
+only when persisted ownership changes. Shelf title and cache changes update
+display state separately. Foreground entry and clock, calendar and time-zone
+events refresh the statistics window. Cancellation rejects obsolete reads.
+An unfinished session enters the visible query when it is completed. A reused
+session updates when its saved end position changes.
+
+Schema 151 and reader writes are retained. The old history query was removed
+from ReadingSessionManager. FolioReader retains its existing full-session
+repository adapter for the engine's history API. RH3 can reuse the repository
+and separate the two presentation models while keeping the navigation,
+workspace routing, file checks and selected-position semantics.
+
+A real Realm fixture with 64 books and 2,528 sessions on one server measured
+64 sidecar queries and 2,528 full session mappings on the main actor in RH1.
+The selected book's all-time query mapped all 512 sessions. RH2 read the same
+statistics with one sidecar query, 2,528 minutes, and zero full session
+mappings. Its first page returned 30 summaries. One iPhone 17 simulator
+sample took about 232 ms and 32 ms for the RH1 global read and single-book
+read. RH2 took about 61 ms and 5 ms for the statistics and first page.
+Preparing the global scope took about 0.34 ms on the main actor. These are
+local samples. Tests assert counts and results.
+
+Final verification passed 287 focused tests and the Recent/FolioReader
+history journey on iPhone 17 / iOS 26.5, and 77 focused tests and the same
+journey on iPhone 7 / iOS 15.5. Both journeys include the on-demand session
+detail push and return. The iOS test build, Mac Catalyst build, Swift parse,
+project lint, Realm boundary scan and diff checks passed. Logs, result
+bundles and the benchmark attachment are in `/tmp/YabrRH2`. The full suite,
+Release, physical-device, Catalyst interaction and real Calibre service
+checks remain outside this run.
+
+### Background Realm refresh follow-up (2026-11-11)
+
+The fixed-thread fixture confirmed that opening a Realm again can reuse its
+previous read version even after the history notification has arrived on a
+different queue. It retains an existing Realm on one NSThread without running
+a run loop, commits a session update and an insertion on the main thread, and
+waits for the repository's invalidation before querying through its public
+statistics, summary-page and end-position methods. A small injected read
+executor keeps each actual query on that same thread. Production retains its
+detached worker and cancellation behavior.
+
+Before the fix, three tests produced 18 failed assertions across server-scoped
+and legacy main Realms. Statistics returned one minute instead of four, the
+page omitted the insertion and kept the old chapter, and details returned the
+old epoch or no newly inserted row. Every fixture precondition passed,
+including its explicit stale-version check after notification delivery.
+All three reads now open through `HistorySource.openRealm()`, which calls
+`refresh()` before querying.
+
+Five rounds of the history repository and statistics tests passed 65 cases,
+including 15 executions of the new tests, each checking both Realm sources.
+The Catalyst build, Swift parse and diff checks passed. Red and green results
+are `/tmp/YabrRH2/freshness-red.xcresult` and
+`/tmp/YabrRH2/freshness-green.xcresult`. This follow-up did not repeat the
+full suite or native UI journeys above.
+
 ## Reading History RH1 (2026-11-10)
 
 `codex/reading-history-rh1` starts at `f3b8c5f9` after AL4. The history read

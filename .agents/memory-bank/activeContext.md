@@ -2,10 +2,26 @@
 
 ## Current Focus
 
-**Reading History and Reading Statistics (RH).** RH1 is implemented on
-`codex/reading-history-rh1`, based on main `f3b8c5f9` after Activity Log AL1–AL4
-merged through PR #144. RH2 is the next phase. The earlier PDF investigation
+**Reading History and Reading Statistics (RH).** RH2 is implemented on
+`codex/reading-history-rh2`, based on main `35207447` after RH1 merged
+through PR #145. RH3 is the next phase. The earlier PDF investigation
 remains documented under Current Branch Notes.
+
+## Reading History RH2 (2026-11-10)
+
+A scoped repository batches statistics by Realm and reads on workers using
+detached values. The Local Sessions page expands in 30-row steps and loads
+an end position only when selected. Separate observations handle the window,
+session list, current book metadata and saved positions. iPhone 17 passed
+287 focused tests and iPhone 7 passed 77. Both passed the Recent/FolioReader
+history journey with on-demand session detail. The performance evidence
+and RH3 handoff are in [Reader Modernization History](history/reader-modernization.md#reading-history-rh2-2026-11-10).
+
+The 2026-11-11 review follow-up adds a fixed-NSThread regression fixture and
+explicitly refreshes worker Realms before statistics, page and detail reads.
+The fixture reproduced 18 stale-result assertions before the fix. Five rounds
+passed 65 tests after it, and the Catalyst build passed. The evidence is in
+[Reader Modernization History](history/reader-modernization.md#background-realm-refresh-follow-up-2026-11-11).
 
 ## Reading History RH1 (2026-11-10)
 
@@ -28,15 +44,11 @@ and numeric IDs, separate sessions with the same end position, midnight and
 window overlap, DST, and time-zone changes. The product scope stays with
 shelf books, seven previous days plus today, and attribution by start day.
 
-`ReadingPositionHistoryViewModel.loadData` still combines book history, global
-statistics, chart construction and navigation on the main actor. It reloads
-on broad reader and Calibre events.
-
-RH2 should move scoped reads/aggregation into repository/service boundaries,
-separate bounded history summaries from position detail, and target observation
-instead of rebuilding everything on unrelated updates. RH3 should separate
-statistics and book-history presentation while preserving pushed navigation,
-originating workspace, position selection, file checks and all reader engines.
+RH2 moved history reads and statistics aggregation off the main actor, with
+bounded session summaries, on-demand details and scoped observation. RH3
+should separate statistics and book-history presentation while preserving
+pushed navigation, originating workspace, position selection, file checks
+and all reader engines.
 
 The initial assessment used static code and existing coverage. RH1 then
 reproduced the identity and deduplication failures with Realm fixtures.
