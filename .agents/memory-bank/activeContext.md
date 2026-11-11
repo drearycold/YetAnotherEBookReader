@@ -2,10 +2,22 @@
 
 ## Current Focus
 
-**Reading History and Reading Statistics (RH).** RH2 is implemented on
-`codex/reading-history-rh2`, based on main `35207447` after RH1 merged
-through PR #145. RH3 is the next phase. The earlier PDF investigation
-remains documented under Current Branch Notes.
+**Reading History and Reading Statistics (RH).** RH3 is implemented on
+`codex/reading-history-rh3`, based on main `3b3b8808` after RH2 merged
+through PR #146. The earlier PDF investigation remains documented under
+Current Branch Notes.
+
+## Reading History RH3 (2026-11-11)
+
+Settings owns the global statistics page and a stable book-history route.
+Book Detail and Recent open single-book history with a concrete canonical
+book identity. Shared statistics presentation keeps loaded content during
+refresh. The book page owns positions, the session prefix, and the pushed
+detail, including its selected position and originating reader workspace.
+The iPhone 17 full unit run reported 1,096 tests, 22 service-dependent skips,
+and zero failures. Both entry journeys passed on iPhone 17 and iPhone 7.
+The statistics journey passed in a real iPad split window at the largest
+accessibility text size. See [Reader Modernization History](history/reader-modernization.md#reading-history-rh3-2026-11-11).
 
 ## Reading History RH2 (2026-11-10)
 
@@ -46,9 +58,9 @@ shelf books, seven previous days plus today, and attribution by start day.
 
 RH2 moved history reads and statistics aggregation off the main actor, with
 bounded session summaries, on-demand details and scoped observation. RH3
-should separate statistics and book-history presentation while preserving
-pushed navigation, originating workspace, position selection, file checks
-and all reader engines.
+separated statistics and book-history presentation and retained pushed
+navigation, originating workspace, position selection, file checks and
+all reader engines.
 
 The initial assessment used static code and existing coverage. RH1 then
 reproduced the identity and deduplication failures with Realm fixtures.

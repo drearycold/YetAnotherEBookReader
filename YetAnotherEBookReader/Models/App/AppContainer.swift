@@ -652,6 +652,19 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
             self.readingPositionRepository.savePosition(position, for: book)
             mockBooks.forEach { self.bookRepository.saveBook($0) }
+            #if DEBUG
+            if UITestingReadingHistoryFixture.isEnabled {
+                do {
+                    try UITestingReadingHistoryFixture.seed(
+                        book: book, position: position,
+                        configuration: serverScopedRealmProvider.configuration(for: book.library.server)
+                    )
+                } catch {
+                    defaultLog.error("Unable to seed reading history fixture")
+                }
+            }
+            #endif
+
 
             if UITestingConfiguration.isEnabled() {
                 self.readerPreferenceRepository.saveFolioPreferences(

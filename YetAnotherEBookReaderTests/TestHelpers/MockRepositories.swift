@@ -842,11 +842,14 @@ final class MockReadingHistoryRepository: ReadingHistoryRepository {
     var sessionLimits: [Int] = []
     var detailIDs: [ReadingHistorySessionID] = []
     var sessionRead: ((ReadingHistoryScope, Int) async throws -> ReadingHistoryPage)?
+    var statisticsRead: ((ReadingHistoryScope, ReadingStatisticsWindow) async throws -> ReadingStatistics)?
+    var positionRead: ((ReadingHistorySessionID, ReadingHistoryScope) async throws -> BookDeviceReadingPosition?)?
     let statisticsChanges = TestAsyncStreamBroadcaster<Void>()
     let sessionChanges = TestAsyncStreamBroadcaster<Void>()
 
     func statistics(in scope: ReadingHistoryScope, window: ReadingStatisticsWindow) async throws -> ReadingStatistics {
         statisticsWindows.append(window)
+        if let statisticsRead { return try await statisticsRead(scope, window) }
         var accumulator = ReadingStatistics.Accumulator(window: window)
         for session in history {
             if let bookID = scope.booksBySource[session.id.serverUUID]?[session.bookId], let timing = session.timing {
@@ -869,6 +872,7 @@ final class MockReadingHistoryRepository: ReadingHistoryRepository {
 
     func endPosition(for id: ReadingHistorySessionID, in scope: ReadingHistoryScope) async throws -> BookDeviceReadingPosition? {
         detailIDs.append(id)
+        if let positionRead { return try await positionRead(id, scope) }
         return history.first { $0.id == id && scope.booksBySource[id.serverUUID]?[$0.bookId] != nil }?.endPosition
     }
 

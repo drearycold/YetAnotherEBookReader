@@ -11,9 +11,11 @@ struct SettingsView: View {
     @Environment(\.appContainer) var container
     @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var addServerViewModel: ServerViewModel
+    @StateObject private var statisticsViewModel: ReadingStatisticsViewModel
     
     init(viewModel: SettingsViewModel) {
         self.viewModel = viewModel
+        _statisticsViewModel = StateObject(wrappedValue: ReadingStatisticsViewModel(container: viewModel.container))
         _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: viewModel.container, server: nil))
     }
     
@@ -92,8 +94,8 @@ struct SettingsView: View {
             
             Section(header: Text("More")) {
                 NavigationLink("Readers Options", destination: ReaderOptionsView())
-                NavigationLink("Reading Statistics", destination: LazyView(ReadingPositionHistoryView(viewModel: ReadingPositionHistoryViewModel(
-                    container: container, library: nil, bookId: nil))))
+                NavigationLink("Reading Statistics", destination: ReadingStatisticsView(viewModel: statisticsViewModel))
+                    .accessibilityIdentifier("settings.reading-statistics")
                 NavigationLink("Activity Logs", destination: LazyView(ActivityList(viewModel: ActivityListViewModel(repository: container.activityLogRepository))))
             }
             

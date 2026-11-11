@@ -221,6 +221,22 @@ import Combine
         XCTAssertEqual(viewModel.displayedRoute, .readingHistory(bookId: "book-1"))
     }
 
+    func testHistoryRouteKeepsItsModelAndClearsItForAnUnavailableBook() throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        mockAppContainer.booksInShelf[book.inShelfId] = book
+        viewModel.presentingHistoryBookId = book.inShelfId
+        let history = try XCTUnwrap(viewModel.displayedHistory)
+        XCTAssertEqual(history.bookIdentity, book.inShelfId)
+
+        viewModel.dismissRoute()
+        XCTAssertTrue(viewModel.displayedHistory === history)
+        viewModel.presentingHistoryBookId = book.inShelfId
+        XCTAssertTrue(viewModel.displayedHistory === history)
+
+        viewModel.presentingHistoryBookId = "unavailable-book"
+        XCTAssertNil(viewModel.displayedHistory)
+    }
+
     func testCalibreUpdatedDeletionDismissesHistoryRoute() async throws {
         viewModel.presentingHistoryBookId = "deleted-book-id"
         await waitForViewModelUpdate {

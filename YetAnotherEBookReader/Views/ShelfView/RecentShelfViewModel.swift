@@ -62,11 +62,16 @@ final class RecentShelfViewModel: ObservableObject {
         didSet {
             guard let bookId = presentingHistoryBookId else { return }
             presentingBookDetailId = nil
+            let book = readingHistoryBook(bookId: bookId)
+            if book == nil || displayedHistory?.bookIdentity != bookId {
+                displayedHistory = book.map { ReadingPositionHistoryViewModel(container: container, book: $0) }
+            }
             displayedRoute = .readingHistory(bookId: bookId)
         }
     }
     /// The route's destination. Kept after the route is dismissed, so the page doesn't go blank
     /// while it slides out.
+    @Published private(set) var displayedHistory: ReadingPositionHistoryViewModel?
     @Published private(set) var displayedRoute: RecentShelfRoute? = nil
     @Published var activeAlert: RecentShelfAlert? = nil
     
