@@ -61,6 +61,13 @@ struct ServerOptionsDSReaderHelper: View {
                     Text(failure.message)
                         .accessibilityIdentifier("server.helper.failure")
                 }
+            case .saveFailed:
+                Section {
+                    Text(HelperConfigurationFailure.couldNotSave.message)
+                        .accessibilityIdentifier("server.helper.save.failure")
+                    Button("Retry Save", action: viewModel.retryHelperSave)
+                        .accessibilityIdentifier("server.helper.save.retry")
+                }
             case .cancelled:
                 Text("Download cancelled.")
             case .idle, .awaitingConfirmation:

@@ -34,7 +34,10 @@ class BookDetailViewModelTests: XCTestCase {
             password: ""
         )
         let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
-        mockAppContainer.serverManager.addServer(server: server, libraries: [library])
+        try mockAppContainer.serverRepository.saveServer(server)
+        mockAppContainer.calibreServers[server.id] = server
+        try mockAppContainer.libraryRepository.saveLibrary(library)
+        mockAppContainer.calibreLibraries[library.id] = library
 
         let probeRequest = CalibreProbeServerRequest(
             server: server,
@@ -375,7 +378,8 @@ class BookDetailViewModelTests: XCTestCase {
         var other = CalibreBook(id: book.id,
             library: CalibreLibrary(server: book.library.server, key: "other", name: "Other"))
         other.title = "Other Book"
-        mockAppContainer.serverManager.addServer(server: other.library.server, libraries: [book.library, other.library])
+        try mockAppContainer.libraryRepository.saveLibrary(other.library)
+        mockAppContainer.calibreLibraries[other.library.id] = other.library
         mockAppContainer.bookRepository.saveBook(other)
         XCTAssertTrue(viewModel.setup(bookId: other.inShelfId))
         XCTAssertFalse(viewModel.isWaitingToRead(book))
@@ -851,7 +855,10 @@ class BookDetailViewModelTests: XCTestCase {
     func testLocalOriginalCannotBeClearedOrDownloaded() throws {
         let server = TestFixtures.makeServer(name: "Local Original", baseUrl: ".")
         let library = TestFixtures.makeLibrary(server: server, key: "BD3-Local", name: "BD3 Local")
-        mockAppContainer.serverManager.addServer(server: server, libraries: [library])
+        try mockAppContainer.serverRepository.saveServer(server)
+        mockAppContainer.calibreServers[server.id] = server
+        try mockAppContainer.libraryRepository.saveLibrary(library)
+        mockAppContainer.calibreLibraries[library.id] = library
         var book = CalibreBook(id: 123, library: library)
         book.inShelf = true
         book.formats["EPUB"] = FormatInfo(filename: "original.epub", serverSize: 4,
@@ -2397,9 +2404,21 @@ class LibraryViewModelTests: XCTestCase {
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
 
+        let manager = CalibreLibraryManager(container: container, databaseService: container.databaseService,
+                                            libraryRepository: repository)
+        manager.calibreLibraries[library.id] = library
+        container.libraryManager = manager
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
         repository.updateLibraryFlagsCalled = false
+        repository.updateLibraryFlagsError = CocoaError(.fileWriteNoPermission)
 
+        viewModel.setDiscoverable(!library.discoverable)
+        XCTAssertTrue(repository.updateLibraryFlagsCalled)
+        XCTAssertEqual(viewModel.discoverable, library.discoverable)
+        XCTAssertEqual(container.libraryManager.calibreLibraries[library.id]?.discoverable, library.discoverable)
+        XCTAssertEqual(viewModel.saveFailure, .failed)
+
+        repository.updateLibraryFlagsError = nil
         viewModel.setDiscoverable(!library.discoverable)
 
         XCTAssertTrue(repository.updateLibraryFlagsCalled)
@@ -2407,6 +2426,7 @@ class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(repository.updateLibraryFlagsDiscoverableParam, !library.discoverable)
         // The manager's copy too, which it saves whole.
         XCTAssertEqual(container.libraryManager.calibreLibraries[library.id]?.discoverable, !library.discoverable)
+        XCTAssertNil(viewModel.saveFailure)
     }
 }
 

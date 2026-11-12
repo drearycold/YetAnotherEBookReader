@@ -42,6 +42,7 @@ final class ServerDetailViewModel: ObservableObject {
         var name: String?
         var probing = false
         var syncing = false
+        var refreshFailed = false
         var visible: [LibraryRow] = []
         var hidden: [LibraryRow] = []
     }
@@ -50,6 +51,7 @@ final class ServerDetailViewModel: ObservableObject {
     private let container: AppContainer
     @Published private(set) var snapshot = Snapshot()
     @Published var restoreSelection: Set<String> = []
+    @Published private(set) var librarySaveFailure: ServerSettingsSaveError?
     private var surfaces: Set<Surface> = []
     private var observations: [Task<Void, Never>] = []
 
@@ -95,6 +97,9 @@ final class ServerDetailViewModel: ObservableObject {
             let libraries = manager.calibreLibraries.values.filter { $0.server.id == serverID }
             current.name = server.name
             current.probing = container.serverManager.isServerProbing(server: server)
+            if let info = container.serverManager.getServerInfo(server: server) {
+                current.refreshFailed = !current.probing && (!info.reachable || info.libraryRefreshFailed)
+            }
             current.visible = libraries.filter { !$0.hidden }
                 .sorted { $0.name < $1.name }
                 .map { LibraryRow($0, status: manager.librarySyncStatus[$0.id]) }
@@ -114,31 +119,42 @@ final class ServerDetailViewModel: ObservableObject {
 
     func removeLibraries(at offsets: IndexSet) {
         let ids = offsets.compactMap { snapshot.visible.indices.contains($0) ? snapshot.visible[$0].id : nil }
-        let manager = container.libraryManager
+        librarySaveFailure = nil
         for id in ids {
-            guard let library = library(for: id) else { continue }
-            manager.hideLibrary(libraryId: id)
-            guard manager.librarySyncStatus[id]?.isSync != true else { continue }
-            container.publishCalibreUpdate(.library(library))
-            Task { @MainActor in
-                guard let hidden = manager.calibreLibraries[id], hidden.hidden else { return }
-                await manager.removeLibrary(library: hidden)
+            do {
+                try container.libraryManager.removeOrHideLibrary(libraryID: id, serverID: serverID)
+            } catch is CancellationError {
+                break
+            } catch {
+                librarySaveFailure = error as? ServerSettingsSaveError ?? .failed
             }
         }
         refresh()
     }
 
-    func restoreLibraries(_ ids: Set<String>) {
-        guard server != nil else { return }
-        let manager = container.libraryManager
-        for id in ids {
-            guard let library = manager.calibreLibraries[id], library.server.id == serverID, library.hidden else { continue }
-            manager.restoreLibrary(libraryId: id)
-            if let restored = manager.calibreLibraries[id], restored.discoverable {
-                container.publishCalibreUpdate(.library(restored))
+    @discardableResult
+    func restoreLibraries(_ ids: Set<String>) -> Bool {
+        librarySaveFailure = nil
+        var pending = ids
+        for id in ids.sorted() {
+            do {
+                try container.libraryManager.restoreLibrary(libraryId: id, serverID: serverID)
+                pending.remove(id)
+            } catch is CancellationError {
+                break
+            } catch {
+                librarySaveFailure = error as? ServerSettingsSaveError ?? .failed
             }
         }
+        restoreSelection = pending
         refresh()
+        return pending.isEmpty
+    }
+
+    func beginRestoringLibraries() {
+        restoreSelection = []
+        librarySaveFailure = nil
+        startObserving(.hiddenLibraries)
     }
 
     func probeReachability() {

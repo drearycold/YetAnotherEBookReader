@@ -36,7 +36,7 @@ final class ServerConnectionEditorViewModel: ObservableObject {
 
     enum Confirmation {
         case added(libraryToBrowse: CalibreLibrary?)
-        case edited(original: CalibreServer, updated: CalibreServer)
+        case edited(CalibreServer)
     }
 
     struct Reachability: Equatable {
@@ -54,6 +54,7 @@ final class ServerConnectionEditorViewModel: ObservableObject {
     @Published var passwordVisible = false
     @Published var resultPresented = false
     @Published var alertItem: AlertItem?
+    @Published private(set) var saveFailure: ServerSettingsSaveError?
     @Published var browseLibraryID: String?
     @Published private(set) var originalServer: CalibreServer?
     @Published private(set) var serverInfo: CalibreServerInfo?
@@ -68,7 +69,7 @@ final class ServerConnectionEditorViewModel: ObservableObject {
     private var serverObservation: Task<Void, Never>?
     private var probeTask: Task<Void, Never>?
     private var probeID: UUID?
-    private var savedConnectionAtProbe: DSReaderHelperConnection?
+    private var savedServerAtProbe: CalibreServer?
 
     init(
         container: AppContainer,
@@ -78,8 +79,12 @@ final class ServerConnectionEditorViewModel: ObservableObject {
     ) {
         self.container = container
         self.mode = mode
-        self.probeServer = probeServer ?? { await container.serverManager.probeServer(request: $0) }
-        self.probeLibrary = probeLibrary ?? { await container.libraryManager.probeLibrary(request: $0) }
+        self.probeServer = probeServer ?? { await container.serverManager.probeConnection($0) }
+        self.probeLibrary = probeLibrary ?? { request in
+            await container.calibreServerService.probeLibrary(
+                library: request.library, serverURL: URL(string: request.library.server.baseUrl)
+            )
+        }
     }
 
     deinit {
@@ -139,7 +144,7 @@ final class ServerConnectionEditorViewModel: ObservableObject {
         let current = currentEditTarget
         let available = isAdding || current != nil
         if editTargetAvailable != available { editTargetAvailable = available }
-        if let savedConnectionAtProbe, current.map(DSReaderHelperConnection.init) != savedConnectionAtProbe {
+        if savedServerAtProbe != nil, !matchesSavedServerAtProbe(current) {
             cancelProbe()
             connectionChanged = true
         }
@@ -196,7 +201,7 @@ final class ServerConnectionEditorViewModel: ObservableObject {
             username: draft.username,
             password: draft.password
         )
-        savedConnectionAtProbe = current.map(DSReaderHelperConnection.init)
+        savedServerAtProbe = current
         let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
         let id = UUID()
         probeID = id
@@ -240,9 +245,15 @@ final class ServerConnectionEditorViewModel: ObservableObject {
     }
 
     var canConfirmServer: Bool {
-        resultPresented && !isProbing && !connectionChanged && serverInfo?.reachable == true
+        resultPresented && probeID != nil && !isProbing && !connectionChanged && serverInfo?.reachable == true
             && serverInfo?.errorMsg == "Success"
-            && (isAdding || currentEditTarget.map(DSReaderHelperConnection.init) == savedConnectionAtProbe)
+            && (isAdding || matchesSavedServerAtProbe(currentEditTarget))
+    }
+
+    private func matchesSavedServerAtProbe(_ server: CalibreServer?) -> Bool {
+        guard let server, let savedServerAtProbe else { return false }
+        return server.name == savedServerAtProbe.name
+            && DSReaderHelperConnection(server) == DSReaderHelperConnection(savedServerAtProbe)
     }
 
     var librariesFromProbe: [CalibreLibrary] {
@@ -266,29 +277,32 @@ final class ServerConnectionEditorViewModel: ObservableObject {
         var updated = serverInfo.request.server
         updated.defaultLibrary = serverInfo.defaultLibrary
 
-        if !isAdding {
-            guard let original = currentEditTarget, original.id == updated.id else { return nil }
-            updated.removed = original.removed
-            return .edited(original: original, updated: updated)
-        }
-
         let selectedLibrary = libraryToBrowse
         guard !browseAfterAdding || selectedLibrary != nil else { return nil }
-        let libraries = librariesFromProbe
-        let manager = container.serverManager
-        manager.addServer(server: updated, libraries: libraries)
-        guard manager.calibreServers[updated.id] != nil,
-              libraries.allSatisfy({ container.libraryManager.calibreLibraries[$0.id] != nil }) else {
-            alertItem = AlertItem(id: "Error", msg: "Could not save the server. Please try again.")
+
+        do {
+            let manager = container.serverManager
+            let confirmation: Confirmation
+            if let expected = savedServerAtProbe, !isAdding {
+                try manager.updateConnection(updated, ifCurrent: expected, validation: serverInfo)
+                confirmation = .edited(updated)
+            } else {
+                guard isAdding else { return nil }
+                try manager.addServer(server: updated, libraries: librariesFromProbe, validation: serverInfo)
+                let committedLibrary = selectedLibrary.flatMap { container.libraryManager.calibreLibraries[$0.id] }
+                confirmation = .added(libraryToBrowse: browseAfterAdding ? committedLibrary : nil)
+            }
+            saveFailure = nil
+            probeID = nil
+            return confirmation
+        } catch is CancellationError {
+            return nil
+        } catch {
+            let failure = error as? ServerSettingsSaveError ?? .failed
+            saveFailure = failure
+            if failure == .stale || failure == .duplicate { connectionChanged = true }
             return nil
         }
-        if let port = URL(string: updated.baseUrl)?.port, port < Int.max {
-            manager.updateServerDSReaderHelper(serverId: updated.id, dsreaderHelper: .init(port: port + 1))
-        } else if URL(string: updated.baseUrl) != nil {
-            manager.updateServerDSReaderHelper(serverId: updated.id, dsreaderHelper: .init(port: 0))
-        }
-        manager.probeServersReachability(with: [updated.id], updateLibrary: true, autoUpdateOnly: true)
-        return .added(libraryToBrowse: browseAfterAdding ? selectedLibrary : nil)
     }
 
     func dismissResult() {
@@ -301,7 +315,8 @@ final class ServerConnectionEditorViewModel: ObservableObject {
         probeTask?.cancel()
         probeTask = nil
         probeID = nil
-        savedConnectionAtProbe = nil
+        savedServerAtProbe = nil
+        saveFailure = nil
         browseLibraryID = nil
         serverInfo = nil
         libraryResults = [:]

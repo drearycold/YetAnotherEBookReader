@@ -87,6 +87,20 @@ class MockServerRepository: ServerRepositoryProtocol {
         }
     }
 
+    func insertServer(_ server: CalibreServer, libraries: [CalibreLibrary], helper: CalibreServerDSReaderHelper?) throws {
+        try saveServer(server)
+    }
+
+    func updateServer(_ server: CalibreServer, ifCurrent expected: CalibreServer) throws {
+        try saveServer(server)
+    }
+
+    func removeServerConfiguration(ifCurrent expected: CalibreServer) throws {
+        var removed = expected
+        removed.removed = true
+        try saveServer(removed)
+    }
+
     func deleteServer(id: String) throws {
         deleteServerCalled = true
         deleteServerIdParam = id
@@ -157,6 +171,7 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
     var updateLibraryFlagsIdParam: String?
     var updateLibraryFlagsDiscoverableParam: Bool?
     var updateLibraryFlagsError: Error?
+    var visibilityErrors: [String: Error] = [:]
 
     func getAllLibraries() -> [CalibreLibrary] {
         getAllLibrariesCalled = true
@@ -169,6 +184,10 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
         if let error = saveLibraryError {
             throw error
         }
+    }
+
+    func setLibraryHidden(id: String, serverID: String, hidden: Bool) throws {
+        if let error = visibilityErrors[id] { throw error }
     }
 
     func deleteLibrary(serverUUID: String, name: String) throws {

@@ -8,37 +8,6 @@
 import Foundation
 @testable import YetAnotherEBookReader
 
-class MockServerManager: CalibreServerManager {
-    var addServerCalled = false
-    var addServerParam: (server: CalibreServer, libraries: [CalibreLibrary])?
-    
-    var removeServerCalled = false
-    var removeServerParam: CalibreServer?
-    
-    override func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
-        addServerCalled = true
-        addServerParam = (server, libraries)
-        super.addServer(server: server, libraries: libraries)
-    }
-    
-    override func removeServer(server: CalibreServer) async {
-        removeServerCalled = true
-        removeServerParam = server
-        await super.removeServer(server: server)
-    }
-}
-
-class MockLibraryManager: CalibreLibraryManager {
-    var removeLibraryCalled = false
-    var removeLibraryParam: CalibreLibrary?
-    
-    override func removeLibrary(library: CalibreLibrary) async {
-        removeLibraryCalled = true
-        removeLibraryParam = library
-        await super.removeLibrary(library: library)
-    }
-}
-
 class MockBookManager: CalibreBookManager {
     var addToShelfCalled = false
     var addToShelfBookParam: CalibreBook?

@@ -12,34 +12,18 @@ final class SettingsViewModel: ObservableObject {
     let container: AppContainer
     private var serverObservationTask: Task<Void, Never>?
     private var serverInfoObservationTask: Task<Void, Never>?
-    private let refreshDatabaseAction: () -> Void
-    private let populateBookShelfAction: () -> Void
-    private let probeServersReachabilityAction: (Set<String>) -> Void
-    
+    private var helperObservationTask: Task<Void, Never>?
+
     @Published var serverList = [CalibreServer]()
-    @Published var serverListDelete: CalibreServer? = nil {
-        didSet {
-            updateServerList()
-        }
-    }
+    @Published var serverListDelete: CalibreServer?
     @Published private(set) var selectedServer: String?
     @Published private(set) var displayedServerID: String?
     @Published var addServerActive = false
     @Published var alertItem: AlertItem?
     @Published private(set) var serverInfoStaging = [String: CalibreServerInfo]()
     
-    init(
-        container: AppContainer,
-        refreshDatabaseAction: (() -> Void)? = nil,
-        populateBookShelfAction: (() -> Void)? = nil,
-        probeServersReachabilityAction: ((Set<String>) -> Void)? = nil
-    ) {
+    init(container: AppContainer) {
         self.container = container
-        self.refreshDatabaseAction = refreshDatabaseAction ?? { container.refreshDatabase() }
-        self.populateBookShelfAction = populateBookShelfAction ?? { container.bookManager.populateBookShelf() }
-        self.probeServersReachabilityAction = probeServersReachabilityAction ?? { serverIds in
-            container.serverManager.probeServersReachability(with: serverIds)
-        }
         self.serverInfoStaging = container.serverManager.calibreServerInfoStaging
         setupSubscriptions()
     }
@@ -47,6 +31,7 @@ final class SettingsViewModel: ObservableObject {
     deinit {
         serverObservationTask?.cancel()
         serverInfoObservationTask?.cancel()
+        helperObservationTask?.cancel()
     }
     
     private func setupSubscriptions() {
@@ -65,6 +50,13 @@ final class SettingsViewModel: ObservableObject {
                 self?.serverInfoStaging = snapshot
             }
         }
+        let helperUpdates = container.serverManager.helperConfigurationUpdates()
+        helperObservationTask = Task { @MainActor [weak self] in
+            for await _ in helperUpdates {
+                guard !Task.isCancelled else { return }
+                self?.updateServerList()
+            }
+        }
     }
 
     var isRefreshing: Bool {
@@ -76,7 +68,6 @@ final class SettingsViewModel: ObservableObject {
         serverList = container.serverManager.calibreServers
             .filter {
                 ($1.isLocal == false || (includeUITestLocalServer && $1.name == "UI Test Server"))
-                    && $1.id != serverListDelete?.id
                     && $1.removed == false
             }
             .map { $0.value }
@@ -122,62 +113,18 @@ final class SettingsViewModel: ObservableObject {
 
     func confirmDeleteServer() {
         guard let server = serverListDelete else { return }
-
-        container.serverManager.cancelHelperConfiguration(serverID: server.id)
-        container.serverManager.calibreServers[server.id]?.removed = true
-        if let updatedServer = container.serverManager.calibreServers[server.id] {
-            try? container.serverManager.saveServer(server: updatedServer)
-        }
-        Task {
-            await self.container.serverManager.removeServer(server: server)
-        }
         serverListDelete = nil
-    }
-
-    func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
-        if oldServer.id == newServer.id {
-            let currentServer = container.serverManager.calibreServers[oldServer.id] ?? oldServer
-            if DSReaderHelperConnection(currentServer) != DSReaderHelperConnection(newServer) {
-                container.serverManager.cancelHelperConfiguration(serverID: oldServer.id)
-            }
-            container.serverManager.calibreServers[newServer.id] = newServer
-            try? container.serverManager.saveServer(server: newServer)
-            if let index = serverList.firstIndex(where: { $0.id == newServer.id }) {
-                serverList[index] = newServer
-            }
-            for libraryId in container.libraryManager.calibreLibraries.filter({ $0.value.server.id == newServer.id }).map({ $0.key }) {
-                container.libraryManager.calibreLibraries[libraryId]?.server = newServer
-            }
+        do {
+            try container.serverManager.removeServer(server: server)
+            updateServerList()
+        } catch is CancellationError {
             return
-        }
-
-        serverListDelete = oldServer
-
-        let newServerLibraries = container.libraryManager.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
-            var newLibrary = library
-            newLibrary.server = newServer
-            if var syncStat = container.libraryManager.librarySyncStatus[library.id] {
-                syncStat.library = newLibrary
-                container.libraryManager.librarySyncStatus[newLibrary.id] = syncStat
-            }
-            return newLibrary
-        }
-
-        container.serverManager.addServer(server: newServer, libraries: newServerLibraries)
-        selectedServer = nil
-
-        DispatchQueue(label: "data").async { [weak self] in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                self.refreshDatabaseAction()
-                self.container.bookManager.booksInShelf.removeAll(keepingCapacity: true)
-                self.populateBookShelfAction()
-                self.serverListDelete = nil
-                self.probeServersReachabilityAction([newServer.id])
-            }
+        } catch {
+            let failure = error as? ServerSettingsSaveError ?? .failed
+            alertItem = AlertItem(id: "Error", msg: failure.message)
         }
     }
-    
+
     // Derived display state for rows
     struct ServerRowState {
         let hasDSReaderHelper: Bool
@@ -211,10 +158,13 @@ final class SettingsViewModel: ObservableObject {
         var serverInfoText: String? = nil
         var isServerError = false
         if let serverInfo = serverInfo(for: server) {
-            if serverInfo.reachable {
+            if serverInfo.libraryRefreshFailed {
+                serverInfoText = "Library refresh failed"
+                isServerError = true
+            } else if serverInfo.reachable {
                 serverInfoText = "Server has \(serverInfo.libraryMap.count) libraries"
             } else {
-                serverInfoText = serverInfo.errorMsg
+                serverInfoText = serverInfo.probing ? "Connecting" : "Server refresh failed"
                 isServerError = true
             }
         }

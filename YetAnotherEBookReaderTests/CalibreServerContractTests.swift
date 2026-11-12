@@ -338,7 +338,7 @@ final class CalibreServerContractTests: XCTestCase {
     /// A whole sync through the manager: the summary and categories, and no book taken for deleted.
     func testASyncReadsTheLibrary() async throws {
         let libraryManager = container.libraryManager
-        libraryManager.calibreLibraries[library.id] = library
+        try container.serverManager.addServer(server: library.server, libraries: [library])
 
         await libraryManager.syncLibrary(request: .init(library: library))
 

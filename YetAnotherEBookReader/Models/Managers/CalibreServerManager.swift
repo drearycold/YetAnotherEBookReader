@@ -127,42 +127,108 @@ class CalibreServerManager {
         calibreServers = tempServers
     }
     
-    func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
-        libraries.forEach {
-            do {
-                try container?.libraryRepository.saveLibrary($0)
-                container?.calibreLibraries[$0.id] = $0
-            } catch {
-                logger.error("Failed to update library realm: \(error.localizedDescription)")
-            }
+    @MainActor
+    func addServer(
+        server: CalibreServer, libraries: [CalibreLibrary], validation: CalibreServerInfo? = nil
+    ) throws {
+        guard let container else { throw ServerSettingsSaveError.unavailable }
+        let helper = URL(string: server.baseUrl).map { url in
+            CalibreServerDSReaderHelper(port: url.port.flatMap { $0 < Int.max ? $0 + 1 : nil } ?? 0)
         }
-        
-        do {
-            try saveServer(server: server)
-            calibreServers[server.id] = server
-        } catch {
-            logger.error("Failed to update server realm: \(error.localizedDescription)")
-        }
+        try Task.checkCancellation()
+        try serverRepository.insertServer(server, libraries: libraries, helper: helper)
+
+        calibreServers[server.id] = server
+        container.libraryManager.calibreLibraries.merge(
+            libraries.map {
+                var committed = $0
+                committed.server = server
+                return (committed.id, committed)
+            }, uniquingKeysWith: { _, committed in committed }
+        )
+        if let validation { refreshCommittedConnection(server, validation: validation) }
     }
-    
+
     func saveServer(server: CalibreServer) throws {
         try serverRepository.saveServer(server)
     }
-    
-    @MainActor
-    func removeServer(server: CalibreServer) async {
-        cancelHelperConfiguration(serverID: server.id)
-        guard let container = self.container else { return }
-        let librariesToRemove = container.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }
-        for (_, library) in librariesToRemove {
-            container.libraryManager.hideLibrary(libraryId: library.id)
-            await container.libraryManager.removeLibrary(library: library)
-        }
-        container.calibreServerService.retireSessions(for: server)
 
+    @MainActor
+    func updateConnection(
+        _ updated: CalibreServer, ifCurrent expected: CalibreServer, validation: CalibreServerInfo? = nil
+    ) throws {
+        guard let container else { throw ServerSettingsSaveError.unavailable }
+        guard let current = calibreServers[expected.id], !current.removed,
+              current.name == expected.name, DSReaderHelperConnection(current) == DSReaderHelperConnection(expected) else {
+            throw ServerSettingsSaveError.stale
+        }
+
+        try Task.checkCancellation()
+        try serverRepository.updateServer(updated, ifCurrent: expected)
+
+        let connectionChanged = DSReaderHelperConnection(current) != DSReaderHelperConnection(updated)
+        if connectionChanged {
+            retireConnection(current)
+            if !updated.username.isEmpty, !updated.password.isEmpty {
+                configureCredentials(for: updated.baseUrl, server: updated)
+                if updated.hasPublicUrl { configureCredentials(for: updated.publicUrl, server: updated) }
+            }
+        }
+        calibreServers[updated.id] = updated
+        container.libraryManager.updateServerSnapshot(updated, connectionChanged: connectionChanged)
+        refreshCommittedConnection(updated, validation: validation, connectionChanged: connectionChanged)
+    }
+
+    @MainActor
+    private func refreshCommittedConnection(
+        _ server: CalibreServer, validation: CalibreServerInfo?, connectionChanged: Bool = true
+    ) {
+        var shouldRefresh = connectionChanged
+        if var verified = validation, verified.reachable,
+           DSReaderHelperConnection(verified.server) == DSReaderHelperConnection(server) {
+            if let latest = calibreServerInfoStaging[verified.id],
+               DSReaderHelperConnection(latest.server) == DSReaderHelperConnection(server),
+               let latestStart = latest.probeStartedAt, let validatedStart = verified.probeStartedAt,
+               latestStart > validatedStart {
+                return
+            }
+            // Browse can use the validated address immediately after the commit.
+            // Retire the older probe for this address role so it cannot replace the result.
+            probeIDs.removeValue(forKey: verified.id)
+            verified.probing = false
+            calibreServerInfoStaging[verified.id] = verified
+            shouldRefresh = true
+        }
+        if shouldRefresh { probeServersReachability(with: [server.id], updateLibrary: true) }
+    }
+
+    @MainActor
+    func removeServer(server: CalibreServer) throws {
+        guard let container else { throw ServerSettingsSaveError.unavailable }
+        guard let current = calibreServers[server.id], !current.removed,
+              current.name == server.name, DSReaderHelperConnection(current) == DSReaderHelperConnection(server) else {
+            throw ServerSettingsSaveError.stale
+        }
+
+        try Task.checkCancellation()
+        try serverRepository.removeServerConfiguration(ifCurrent: server)
+        retireConnection(current)
+        calibreServers.removeValue(forKey: server.id)
+        container.libraryManager.discardRemovedServer(serverID: server.id)
         container.publishCalibreUpdate(.shelf)
     }
-    
+
+    @MainActor
+    private func retireConnection(_ server: CalibreServer) {
+        cancelHelperConfiguration(serverID: server.id)
+        for isPublic in [false, true] {
+            let id = CalibreProbeServerRequest(server: server, isPublic: isPublic, updateLibrary: true, autoUpdateOnly: true).id
+            probeIDs.removeValue(forKey: id)
+            calibreServerInfoStaging.removeValue(forKey: id)
+        }
+        container?.calibreServerService.retireSessions(for: server)
+    }
+
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         return serverRepository.getDSReaderHelper(for: server.id)
     }
@@ -202,7 +268,13 @@ class CalibreServerManager {
     @MainActor
     func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
         // A retry must use this request's credentials and address, even for the same server ID.
+        guard !request.updateLibrary || isCurrentConnection(request.server) else { return nil }
         let previousInfo = calibreServerInfoStaging[request.id]
+        if request.updateLibrary, probeIDs[request.id] != nil, let previousInfo,
+           previousInfo.request.updateLibrary,
+           DSReaderHelperConnection(previousInfo.server) == DSReaderHelperConnection(request.server) {
+            return nil
+        }
         let sameConnection = previousInfo?.server == request.server
             && previousInfo?.server.password == request.server.password
             && previousInfo?.url.absoluteString == (request.isPublic ? request.server.publicUrl : request.server.baseUrl)
@@ -215,6 +287,7 @@ class CalibreServerManager {
             errorMsg: "Connecting",
             defaultLibrary: request.server.defaultLibrary,
             libraryMap: sameConnection ? previousInfo?.libraryMap ?? [:] : [:],
+            probeStartedAt: DispatchTime.now().uptimeNanoseconds,
             request: request
         )
         guard let calibreServerService = container?.calibreServerService else { return nil }
@@ -225,6 +298,7 @@ class CalibreServerManager {
 
         guard probeIDs[request.id] == probeID else { return nil }
         probeIDs.removeValue(forKey: request.id)
+        guard !request.updateLibrary || isCurrentConnection(request.server) else { return nil }
         if Task.isCancelled {
             // Restore a settled snapshot when a cancelled draft never replaced it.
             calibreServerInfoStaging[request.id] = previousInfo?.probing == false ? previousInfo : nil
@@ -247,39 +321,46 @@ class CalibreServerManager {
             serverInfo.libraryMap = newServerInfo.libraryMap
             serverInfo.defaultLibrary = newServerInfo.defaultLibrary
         }
-        self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
-        
-        if serverInfo.server.isLocal == false && serverInfo.request.updateLibrary {
-            serverInfo.libraryMap.forEach { key, name in
-                let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-                if container?.calibreLibraries[newLibrary.id] == nil {
-                    container?.calibreLibraries[newLibrary.id] = newLibrary
-                    try? container?.libraryRepository.saveLibrary(newLibrary)
+        if serverInfo.reachable, !serverInfo.server.isLocal, request.updateLibrary, let container {
+            serverInfo.libraryRefreshFailed = !container.libraryManager.registerLibraries(from: serverInfo)
+            calibreServerInfoStaging[request.id] = serverInfo
+            if !request.autoUpdateOnly { requestServerHelperConfigSync(serverId: serverInfo.server.id) }
+
+            let libraryIDs = container.libraryManager.calibreLibraries.values
+                .filter { $0.server.id == serverInfo.server.id }.map(\.id)
+            for id in libraryIDs {
+                Task { @MainActor [weak self] in
+                    guard let self, self.isCurrentConnection(request.server),
+                          let library = container.libraryManager.calibreLibraries[id] else { return }
+                    await container.libraryManager.syncLibrary(request: .init(library: library))
                 }
             }
-            
-            if serverInfo.request.autoUpdateOnly == false {
-                requestServerHelperConfigSync(serverId: serverInfo.server.id)
-            }
-            
-            container?.calibreLibraries.filter {
-                $0.value.server.id == serverInfo.server.id
-            }.forEach { id, library in
-                Task {
-                    await container?.libraryManager.syncLibrary(request: .init(library: library))
-                }
-            }
-            
-            if serverInfo.reachable {
-                Task { @MainActor in
-                    container?.publishCalibreUpdate(.server(serverInfo.server))
-                }
-            }
+            container.publishCalibreUpdate(.server(serverInfo.server))
+        } else {
+            calibreServerInfoStaging[request.id] = serverInfo
         }
-        
+
         return serverInfo
     }
     
+    @MainActor
+    func probeConnection(_ request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
+        guard let service = container?.calibreServerService else { return nil }
+        let info = CalibreServerInfo(
+            server: request.server, isPublic: request.isPublic,
+            url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
+            probing: true, errorMsg: "Connecting", defaultLibrary: request.server.defaultLibrary,
+            libraryMap: [:], probeStartedAt: DispatchTime.now().uptimeNanoseconds, request: request
+        )
+        return await service.probeServerReachability(serverInfo: info)
+    }
+
+    @MainActor
+    private func isCurrentConnection(_ server: CalibreServer) -> Bool {
+        guard let current = calibreServers[server.id], !current.removed else { return false }
+        return DSReaderHelperConnection(current) == DSReaderHelperConnection(server)
+    }
+
     // MARK: - Helpers
     
     func isServerReachable(server: CalibreServer) -> Bool {
@@ -353,9 +434,19 @@ class CalibreServerManager {
     @MainActor
     func applyHelperConfiguration(_ candidate: DSReaderHelperConfigurationCandidate) throws -> CalibreServerDSReaderHelper {
         let ticket = candidate.ticket
-        defer { cancelHelperConfiguration(ticket) }
-        let operation = try pendingManualHelperOperation(for: ticket)
-        return try persistHelperConfiguration(candidate, for: operation.request)
+        do {
+            let operation = try pendingManualHelperOperation(for: ticket)
+            try Task.checkCancellation()
+            let saved = try persistHelperConfiguration(candidate, for: operation.request)
+            cancelHelperConfiguration(ticket)
+            return saved
+        } catch DSReaderHelperConfigurationError.couldNotSave {
+            // The accepted candidate can retry the same conditional write while its ticket is current.
+            throw DSReaderHelperConfigurationError.couldNotSave
+        } catch {
+            cancelHelperConfiguration(ticket)
+            throw error
+        }
     }
 
     @MainActor

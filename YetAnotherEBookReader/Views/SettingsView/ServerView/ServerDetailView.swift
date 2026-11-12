@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ServerDetailView: View {
     private let container: AppContainer
-    private let onConnectionUpdate: (CalibreServer, CalibreServer) -> Void
 
     @StateObject private var viewModel: ServerDetailViewModel
     @StateObject private var editor: ServerConnectionEditorViewModel
@@ -22,12 +21,8 @@ struct ServerDetailView: View {
     @State private var activeRoute: Route?
     @State private var displayedRoute: Route?
 
-    init(
-        container: AppContainer, serverID: String,
-        onConnectionUpdate: @escaping (CalibreServer, CalibreServer) -> Void
-    ) {
+    init(container: AppContainer, serverID: String) {
         self.container = container
-        self.onConnectionUpdate = onConnectionUpdate
         _viewModel = StateObject(wrappedValue: .init(container: container, serverID: serverID))
         _editor = StateObject(wrappedValue: .init(container: container, mode: .edit(serverID: serverID)))
         _helper = StateObject(wrappedValue: .init(container: container, serverID: serverID))
@@ -47,6 +42,14 @@ struct ServerDetailView: View {
             }
 
             Section(header: librarySectionHeader) {
+                if snapshot.refreshFailed {
+                    Text("Server settings are saved. Refresh failed. Try refreshing again.")
+                        .accessibilityIdentifier("server.detail.refresh.failure")
+                }
+                if let failure = viewModel.librarySaveFailure {
+                    Text(failure.message)
+                        .accessibilityIdentifier("server.detail.library.save.failure")
+                }
                 ForEach(snapshot.visible) { row in
                     routeButton(.library(row.id)) { libraryRow(row) }
                         .accessibilityIdentifier("server.detail.library.\(row.id)")
@@ -91,7 +94,7 @@ struct ServerDetailView: View {
         ) {
             switch displayedRoute {
             case .editor:
-                AddModServerView(viewModel: editor, onConfirm: confirmEdit, onFinish: dismissRoute)
+                AddModServerView(viewModel: editor, onFinish: dismissRoute)
                     .navigationTitle("Modify: \(viewModel.snapshot.name ?? "")")
             case .helper:
                 ServerOptionsDSReaderHelper(viewModel: helper)
@@ -116,11 +119,6 @@ struct ServerDetailView: View {
         case .library, .hiddenLibraries, nil: break
         }
         activeRoute = nil
-    }
-
-    private func confirmEdit(_ confirmation: ServerConnectionEditorViewModel.Confirmation) {
-        guard case .edited(let original, let updated) = confirmation else { return }
-        onConnectionUpdate(original, updated)
     }
 
     private var librarySectionHeader: some View {
@@ -207,16 +205,17 @@ private struct HiddenServerLibrariesView: View {
 
     var body: some View {
         List(selection: $viewModel.restoreSelection) {
+            if let failure = viewModel.librarySaveFailure {
+                Text(failure.message)
+                    .accessibilityIdentifier("server.detail.restore.failure")
+            }
             ForEach(viewModel.snapshot.hidden) { row in
                 Text(row.name).tag(row.id)
             }
         }
         .navigationTitle("Restore Hidden Libraries")
         .environment(\.editMode, .constant(.active))
-        .onAppear {
-            viewModel.restoreSelection.removeAll()
-            viewModel.startObserving(.hiddenLibraries)
-        }
+        .onAppear(perform: viewModel.beginRestoringLibraries)
         .onDisappear { viewModel.stopObserving(.hiddenLibraries) }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -232,8 +231,7 @@ private struct RestoreServerLibrariesButton: View {
 
     var body: some View {
         Button {
-            viewModel.restoreLibraries(viewModel.restoreSelection)
-            onRestore()
+            if viewModel.restoreLibraries(viewModel.restoreSelection) { onRestore() }
         } label: {
             Image(systemName: "checkmark.circle")
                 .frame(minWidth: 44, minHeight: 44)
@@ -250,7 +248,7 @@ struct ServerDetailView_Previews: PreviewProvider {
     static var previews: some View {
         let serverID = container.serverManager.calibreServers.values.first?.id ?? CalibreServer.LocalServerUUID.uuidString
         NavigationView {
-            ServerDetailView(container: container, serverID: serverID, onConnectionUpdate: { _, _ in })
+            ServerDetailView(container: container, serverID: serverID)
         }
         .navigationViewStyle(.stack)
     }

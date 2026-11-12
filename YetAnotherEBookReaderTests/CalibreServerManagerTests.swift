@@ -143,6 +143,68 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertEqual(serverManager.calibreServerInfoStaging[first.id]?.defaultLibrary, "new")
     }
 
+    func testLateProbeCannotReplaceCommittedValidationForTheSameConnection() async throws {
+        let server = TestFixtures.makeServer(baseUrl: "http://same-connection.test:8080")
+        let library = CalibreLibrary(server: server, key: "a", name: "Library", hidden: true)
+        try serverManager.addServer(server: server, libraries: [library])
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeferredProbeURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        container.calibreServerService.metadataSessions[
+            CalibreServerURLSessionKey(server: server, timeout: 10, qos: .default)
+        ] = session
+
+        let earlierEntered = expectation(description: "Earlier saved-connection probe held")
+        let refreshEntered = expectation(description: "Post-commit refresh held")
+        let lock = NSLock()
+        var requestCount = 0
+        var earlierResponse: DeferredProbeURLProtocol?
+        var refreshResponse: DeferredProbeURLProtocol?
+        DeferredProbeURLProtocol.onStart = { response in
+            let index = lock.withLock {
+                requestCount += 1
+                if requestCount == 1 { earlierResponse = response }
+                if requestCount == 3 { refreshResponse = response }
+                return requestCount
+            }
+            if index == 1 { earlierEntered.fulfill() }
+            else if index == 3 { refreshEntered.fulfill() }
+            else { response.finish(defaultLibrary: "a") }
+        }
+        defer { DeferredProbeURLProtocol.onStart = nil }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: true, autoUpdateOnly: true)
+        let earlier = Task { await serverManager.probeServer(request: request) }
+        await fulfillment(of: [earlierEntered], timeout: 3)
+        let editor = ServerConnectionEditorViewModel(
+            container: container, mode: .edit(serverID: server.id),
+            probeLibrary: { .init(library: $0.library, probeUrl: URL(fileURLWithPath: "/")) }
+        )
+        editor.startEditing()
+        let validate = try XCTUnwrap(editor.connect())
+        await validate.value
+        guard case .edited? = editor.confirm() else { return XCTFail("Expected committed edit") }
+        XCTAssertEqual(serverManager.getServerInfo(server: server)?.reachable, true)
+        await fulfillment(of: [refreshEntered], timeout: 3)
+
+        try XCTUnwrap(lock.withLock { earlierResponse }).finish(defaultLibrary: "a", statusCode: 503)
+        let earlierResult = await earlier.value
+        XCTAssertNil(earlierResult)
+        XCTAssertEqual(serverManager.getServerInfo(server: server)?.reachable, true)
+        let settled = expectation(description: "New refresh settled")
+        let snapshots = serverManager.serverInfoStagingSnapshots()
+        let observation = Task {
+            for await snapshot in snapshots where snapshot[request.id]?.probing == false {
+                settled.fulfill()
+                return
+            }
+        }
+        defer { observation.cancel() }
+        try XCTUnwrap(lock.withLock { refreshResponse }).finish(defaultLibrary: "a")
+        await fulfillment(of: [settled], timeout: 3)
+        XCTAssertEqual(serverManager.getServerInfo(server: server)?.reachable, true)
+    }
+
     func testPopulateServers() throws {
         // Create custom mock servers and save to repository
         let server1 = CalibreServer(uuid: UUID(), name: "A Server", baseUrl: "http://localhost/a", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "userA", password: "")
@@ -167,7 +229,7 @@ final class CalibreServerManagerTests: XCTestCase {
         let newLib = CalibreLibrary(server: newServer, key: "add_lib", name: "Add Library")
         
         // Add server via manager
-        serverManager.addServer(server: newServer, libraries: [newLib])
+        try serverManager.addServer(server: newServer, libraries: [newLib])
         
         // Verify in manager dictionary
         XCTAssertNotNil(serverManager.calibreServers[newServer.id])
@@ -190,6 +252,70 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(allServers.contains(where: { $0.id == server.id }))
     }
 
+    func testEditCommitsBeforeRefreshAndKeepsTheEditWhenRefreshFails() async throws {
+        let server = TestFixtures.makeServer(baseUrl: "http://before-save.test:8080")
+        let library = CalibreLibrary(server: server, key: "books", name: "Books", hidden: true)
+        try serverManager.addServer(server: server, libraries: [library])
+        let helper = serverRepository.getDSReaderHelper(for: server.id)
+        var updated = server
+        updated.baseUrl = "http://after-save.test:8080"
+        updated.hasAuth = true
+        updated.username = "account"
+        updated.password = "replacement"
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let key = CalibreServerURLSessionKey(server: updated, timeout: 10, qos: .default)
+        container.calibreServerService.metadataSessions[key] = URLSession(configuration: configuration)
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            XCTAssertEqual(url.host, "after-save.test")
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (response, Data("private response body".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+        let failed = expectation(description: "Post-commit refresh reports a separate failure")
+        let snapshots = serverManager.serverInfoStagingSnapshots()
+        let observation = Task {
+            for await snapshot in snapshots {
+                if snapshot.values.contains(where: { $0.server.id == updated.id && $0.httpStatusCode == 503 }) {
+                    failed.fulfill()
+                    return
+                }
+            }
+        }
+        defer { observation.cancel() }
+        try serverManager.updateConnection(updated, ifCurrent: server)
+        XCTAssertEqual(serverRepository.getAllServers().first { $0.id == server.id }?.baseUrl, updated.baseUrl)
+        XCTAssertEqual(container.calibreLibraries[library.id]?.server.password, "replacement")
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id), helper)
+        await fulfillment(of: [failed], timeout: 5)
+        XCTAssertEqual(serverManager.calibreServers[server.id]?.baseUrl, updated.baseUrl)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (response, Data(#"{"default_library":"books","library_map":{"books":"Books"}}"#.utf8))
+        }
+        let retry = await serverManager.probeServer(request: .init(server: updated, isPublic: false, updateLibrary: true, autoUpdateOnly: true))
+        XCTAssertEqual(retry?.reachable, true)
+        XCTAssertEqual(serverRepository.getAllServers().first { $0.id == server.id }?.password, "replacement")
+    }
+
+    func testCancelledAddDoesNotWriteOrPublishConfiguration() async {
+        let server = TestFixtures.makeServer(baseUrl: "http://cancel-before-commit.test")
+        let library = CalibreLibrary(server: server, key: "books", name: "Books")
+        let cancelled = Task { try serverManager.addServer(server: server, libraries: [library]) }
+        cancelled.cancel()
+        do {
+            try await cancelled.value
+            XCTFail("Cancelled operation committed")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertNil(serverManager.calibreServers[server.id])
+        XCTAssertFalse(serverRepository.getAllServers().contains { $0.id == server.id })
+        XCTAssertNil(container.calibreLibraries[library.id])
+    }
+
     func testRemoveServer() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Delete Server", baseUrl: "http://localhost/del", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         container.serverManager.calibreServers[server.id] = server
@@ -204,7 +330,7 @@ final class CalibreServerManagerTests: XCTestCase {
         _ = container.calibreServerService.urlSession(server: server)
 
         // Remove server
-        await serverManager.removeServer(server: server)
+        try serverManager.removeServer(server: server)
 
         // Verify libraries associated with server are deleted from repository
         XCTAssertNil(container.libraryRepository.getAllLibraries().first { $0.id == library.id })
@@ -564,6 +690,7 @@ final class CalibreServerManagerTests: XCTestCase {
         let server = TestFixtures.makeServer(baseUrl: "http://helper-library-scope")
         try installServerForHelperSync(server)
         let library = CalibreLibrary(server: server, key: "visible", name: "Visible")
+        try container.libraryRepository.saveLibrary(library)
         container.libraryManager.calibreLibraries[library.id] = library
         let helper = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
         helper.resume()
@@ -576,7 +703,7 @@ final class CalibreServerManagerTests: XCTestCase {
         let dismissed = expectation(description: "The stale confirmation was dismissed")
         let observation = helper.$helperConfirmation.dropFirst().first { $0 == nil }.sink { _ in dismissed.fulfill() }
         defer { observation.cancel() }
-        container.libraryManager.hideLibrary(libraryId: library.id)
+        try container.libraryManager.hideLibrary(libraryId: library.id, serverID: server.id)
         await fulfillment(of: [dismissed], timeout: 3)
         helper.applyHelperConfiguration(ticket)
         XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
@@ -602,6 +729,32 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertEqual(helper.portStr, "9090")
         XCTAssertNil(helper.helperConfirmation)
         XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.port, 8080)
+    }
+
+    func testHelperSaveCanRetryTheSameAcceptedCandidateAfterWriteFailure() async throws {
+        let loader = ControlledHelperLoader()
+        let repository = FailOnceHelperWriteRepository(databaseService: databaseService)
+        serverManager = CalibreServerManager(container: container, databaseService: databaseService,
+                                             serverRepository: repository, loadHelperConfiguration: loader.load)
+        container.serverManager = serverManager
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-write-retry.test")
+        try installServerForHelperSync(server)
+        let helper = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        helper.resume()
+        helper.setPortDraft("9090")
+        let download = try XCTUnwrap(helper.connectDSReader())
+        let request = try await loader.nextRequest()
+        try request.succeed(servicePort: 9191)
+        await download.value
+
+        helper.applyHelperConfiguration(try XCTUnwrap(helper.helperConfirmation))
+        guard case .saveFailed = helper.helperState else { return XCTFail("Expected a retryable save failure") }
+        XCTAssertEqual(repository.getDSReaderHelper(for: server.id)?.port, 8080)
+        XCTAssertEqual(helper.portStr, "9090")
+        helper.retryHelperSave()
+        XCTAssertEqual(repository.getDSReaderHelper(for: server.id)?.port, 9090)
+        XCTAssertEqual(loader.requestCount, 1)
+        XCTAssertNil(helper.helperConfirmation)
     }
 
     func testHelperCredentialsPortAndDeletionInvalidateTheRequestOrCandidate() async throws {
@@ -929,6 +1082,20 @@ private final class ControlledHelperLoader {
 }
 
 
+private final class FailOnceHelperWriteRepository: RealmServerRepository {
+    private var shouldFail = true
+
+    override func replaceDSReaderHelper(
+        _ helper: CalibreServerDSReaderHelper, ifCurrent expected: DSReaderHelperStoredConfiguration
+    ) throws -> Bool {
+        if shouldFail {
+            shouldFail = false
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        return try super.replaceDSReaderHelper(helper, ifCurrent: expected)
+    }
+}
+
 private final class DeferredProbeURLProtocol: URLProtocol, @unchecked Sendable {
     static var onStart: ((DeferredProbeURLProtocol) -> Void)?
 
@@ -937,9 +1104,9 @@ private final class DeferredProbeURLProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() { Self.onStart?(self) }
     override func stopLoading() {}
 
-    func finish(defaultLibrary: String) {
+    func finish(defaultLibrary: String, statusCode: Int = 200) {
         guard let url = request.url,
-              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+              let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil,
                                              headerFields: ["Content-Type": "application/json"]) else { return }
         let data = Data(#"{"default_library":"\#(defaultLibrary)","library_map":{"\#(defaultLibrary)":"Library"}}"#.utf8)
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

@@ -121,7 +121,7 @@ import Combine
     func testConnectedLibraryIsOpenedOnlyAfterConnectionDismissal() throws {
         let server = TestFixtures.makeServer()
         let library = CalibreLibrary(server: server, key: "new-library", name: "New Library")
-        mockAppContainer.serverManager.addServer(server: server, libraries: [library])
+        try mockAppContainer.serverManager.addServer(server: server, libraries: [library])
         viewModel.openWelcomeConnection()
 
         viewModel.browseConnectedLibrary(library)

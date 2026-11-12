@@ -60,6 +60,50 @@ final class RealmServerRepositoryTests: XCTestCase {
         try repository.deleteServer(id: server.id)
         XCTAssertTrue(repository.getAllServers().isEmpty)
     }
+
+    func testServerSaveFailsBeforeDatabaseIsReady() {
+        let unopened = RealmServerRepository(databaseService: DatabaseService())
+        XCTAssertThrowsError(try unopened.saveServer(TestFixtures.makeServer()))
+    }
+
+    func testSavingHelperForMissingServerFails() {
+        XCTAssertThrowsError(try repository.saveDSReaderHelper(.init(port: 8081), for: UUID().uuidString))
+    }
+
+    func testInsertIsAtomicWhenAnInitialLibraryConflicts() throws {
+        let server = TestFixtures.makeServer()
+        let library = CalibreLibrary(server: server, key: "existing", name: "Existing")
+        let fresh = CalibreLibrary(server: server, key: "fresh", name: "Fresh")
+        let realm = try XCTUnwrap(databaseService.realm)
+        try realm.write { realm.add(library.makeRealmObject()) }
+
+        XCTAssertThrowsError(try repository.insertServer(server, libraries: [fresh, library], helper: .init(port: 8081)))
+        XCTAssertTrue(repository.getAllServers().isEmpty)
+        XCTAssertNil(realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: fresh.id))
+        XCTAssertNil(repository.getDSReaderHelper(for: server.id))
+    }
+
+    func testConditionalEditAndRemovalPreserveEmbeddedHelperAndRejectStaleTargets() throws {
+        let server = TestFixtures.makeServer(baseUrl: "http://old:8080")
+        let library = CalibreLibrary(server: server, key: "books", name: "Books")
+        let helper = CalibreServerDSReaderHelper(port: 8081, configurationData: Data([1, 2, 3]))
+        try repository.insertServer(server, libraries: [library], helper: helper)
+        var updated = server
+        updated.baseUrl = "http://new:8080"
+        updated.hasAuth = true
+        updated.password = "updated"
+        try repository.updateServer(updated, ifCurrent: server)
+        XCTAssertEqual(repository.getAllServers().first?.password, "updated")
+        XCTAssertEqual(repository.getDSReaderHelper(for: server.id), helper)
+        XCTAssertThrowsError(try repository.removeServerConfiguration(ifCurrent: server))
+
+        try repository.removeServerConfiguration(ifCurrent: updated)
+        XCTAssertTrue(repository.getAllServers().first?.removed == true)
+        XCTAssertThrowsError(try repository.updateServer(updated, ifCurrent: updated))
+        XCTAssertThrowsError(try repository.saveServer(updated))
+        let realm = try XCTUnwrap(databaseService.realm)
+        XCTAssertNil(realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id))
+    }
     
     func testDSReaderHelperCRUD() throws {
         let server = TestFixtures.makeServer(name: "DSR Server")

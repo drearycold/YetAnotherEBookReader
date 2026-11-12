@@ -54,7 +54,7 @@ class HelperFixture(BaseHTTPRequestHandler):
                     held = type(self).held_summary
                 if held is not None:
                     held.arrived.set()
-                    if not held.released.wait(30):
+                    if not held.released.wait(90):
                         self.reply(504)
                         return
             self.json_reply({
