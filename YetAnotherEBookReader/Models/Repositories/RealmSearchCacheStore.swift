@@ -45,12 +45,22 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         )
     }
     
-    private func getRealm() throws -> Realm {
+    private func openRealm() throws -> Realm {
         var conf = customConfig ?? databaseService.realmConf ?? Realm.Configuration()
         // Strip closures to prevent EXC_BAD_ACCESS in swift_retain when copying on concurrent queues
         conf.migrationBlock = nil
         conf.shouldCompactOnLaunch = nil
         return try Realm(configuration: conf)
+    }
+
+    private func openRealmForRead() throws -> Realm {
+        let realm = try openRealm()
+        // Reopening can reuse a Realm with an old read version on a thread without a run loop.
+        // Advance it before the synchronous query and mapping to detached values.
+        if !realm.isInWriteTransaction && !realm.configuration.readOnly {
+            realm.refresh()
+        }
+        return realm
     }
 
     private func mapCategorySummaries<S: Sequence>(objects: S) -> [CategoryCacheSummary] where S.Element == CalibreLibraryCategoryObject {
@@ -80,7 +90,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         sortAsc: Bool,
         filters: [String: Set<String>]
     ) throws -> LibraryCachedResult? {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         
         let matchingObj = realm.objects(CalibreLibrarySearchObject.self)
             .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
@@ -107,7 +117,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         sourceUrl: String,
         result: LibrarySourceSearchResult
     ) throws {
-        let realm = try getRealm()
+        let realm = try openRealm()
 
         let existingSearchObject = realm.objects(CalibreLibrarySearchObject.self)
             .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
@@ -198,7 +208,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         library: CalibreLibrary,
         bookIds: [Int32]
     ) throws -> [Int32: CalibreBook] {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         let serverUUID = library.server.uuid.uuidString
 
         return bookIds.reduce(into: [Int32: CalibreBook]()) { partialResult, bookId in
@@ -220,7 +230,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         offset: Int,
         limit: Int
     ) throws -> LocalLibrarySearchResult {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         let libraryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
             NSPredicate(format: "libraryName = %@", library.name)
@@ -254,7 +264,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         entries: [String: CalibreBookEntry?],
         json: NSDictionary?
     ) throws {
-        let realm = try getRealm()
+        let realm = try openRealm()
         let serverUUID = library.server.uuid.uuidString
 
         try realm.write {
@@ -386,7 +396,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         libraryId: String,
         categoryName: String
     ) throws -> LibraryCategoryResult? {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         
         guard let obj = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
@@ -416,7 +426,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         categoryName: String,
         result: LibraryCategoryResult
     ) throws {
-        let realm = try getRealm()
+        let realm = try openRealm()
         
         try realm.write {
             var cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
@@ -459,7 +469,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
     
     func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
         return mapCategorySummaries(objects: objects)
     }
@@ -469,7 +479,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             return try fetchCategorySummaries()
         }
 
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("libraryId IN %@", Array(libraryIds))
         return mapCategorySummaries(objects: objects)
@@ -482,7 +492,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         offset: Int,
         limit: Int
     ) throws -> UnifiedCategoryPageResult {
-        let realm = try getRealm()
+        let realm = try openRealmForRead()
         let trimmedSearch = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeOffset = max(0, offset)
         let safeLimit = max(1, limit)
@@ -572,14 +582,12 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
 
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
-        guard let realm = try? getRealm() else {
+        guard let realm = try? openRealmForRead() else {
             return AsyncStream { continuation in
                 continuation.yield([])
                 continuation.finish()
             }
         }
-
-        _ = realm.refresh()
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
         return AsyncStream { [weak self] continuation in
@@ -606,13 +614,11 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
 
     func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
-        guard let realm = try? getRealm() else {
+        guard let realm = try? openRealmForRead() else {
             return AsyncStream { continuation in
                 continuation.finish()
             }
         }
-
-        _ = realm.refresh()
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("categoryName == %@", categoryName)
@@ -651,7 +657,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
-        let realm = try getRealm()
+        let realm = try openRealm()
         try realm.write {
             if let cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
                 .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
@@ -665,7 +671,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         libraryId: String,
         activeCategoryNames: Set<String>
     ) throws {
-        let realm = try getRealm()
+        let realm = try openRealm()
         try realm.write {
             let libraryCategories = realm.objects(CalibreLibraryCategoryObject.self)
                 .filter("libraryId == %@", libraryId)

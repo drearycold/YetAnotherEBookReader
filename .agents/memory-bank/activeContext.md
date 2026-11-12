@@ -2,10 +2,71 @@
 
 ## Current Focus
 
-**Server Settings and DSReader Helper Configuration (SC).** SC3 is implemented
-on `codex/server-configuration-sc3` from main `31cd16fd`. SC1 and SC2 merged
-through PRs #148 and #149. RH1–RH3 is complete through PR #147. The earlier
-PDF investigation remains under Current Branch Notes.
+**Search and Category Cache Consistency (CC).** CC1 is implemented and
+verified on `codex/cache-consistency-cc1` from main `ce5f25ae`, which
+includes SC1–SC3 through PR #150. CC2 is next. The earlier PDF investigation
+remains under Current Branch Notes.
+
+## Cache Consistency CC1 (2026-11-12)
+
+Each synchronous read of `RealmSearchCacheStore` advances the current
+thread's mutable Realm to include commits already made by other threads.
+The query and mapping build detached values in the same synchronous
+operation. Separate queries can observe different versions. An existing
+write transaction reads its own version, and a read-only Realm keeps its
+immutable snapshot. The read boundary covers local search, book lookup,
+search-source results and their book mapping, library category results,
+both category summary scopes, and unified category pages. Category
+observers use the same boundary when registering, and their callbacks
+map the Results delivered by Realm.
+
+Writes still use the plain Realm opener. The source save's preflight and
+identical-source no-op stay on the existing path. Metadata writes, source
+keys, generation checks, cache invalidation, and schema 151 are unchanged.
+
+SC1 and SC3 full suites exposed
+`testLocalLibrarySearchSeesABookAddedAfterAnEmptySearch`. The original
+pre-SC diagnostic remains in
+`/tmp/YabrSC1/baseline-source/YetAnotherEBookReaderTests/LibraryInfoBookListViewModelTests.swift`
+and `/tmp/YabrSC1/baseline-search.log`. On current main `ce5f25ae`,
+`RealmSearchCacheFreshnessTests` now checks the same failure with an
+isolated database and a fixed thread without a run loop. The fixture
+checks that the writer committed a different value, then checks the
+thread's retained Realm still has the old value before the repository
+read. On the baseline, six cases produced 31 stale-result assertion
+failures. The transaction and read-only controls passed.
+
+With CC1, iPhone 17 passed 187 focused tests, including the existing
+empty-search-then-import service path, the RH2 freshness regressions,
+category notifications, cache-first and fallback results, and cache
+write tests. The eight new tests also passed three consecutive runs
+(24 executions). The final full iOS unit suite recorded 1,143 tests,
+with 22 skips, two existing expected PDFKit failures, and zero unexpected
+failures. The skips are the 21 real Calibre contract tests and the opt-in
+PDF margin benchmark. The iOS Simulator Release and Mac Catalyst builds passed
+using the existing package pins. Native Import and Browse UI journeys
+were outside this verification. Logs and result bundles are in
+`/tmp/YabrCC1`.
+
+## Cache Consistency Follow-up
+
+CC2 should make database and library query context explicit and stable
+across concurrency boundaries, including unavailable configuration,
+library removal and connection changes. The cache store still reads a
+mutable library provider while it is `@unchecked Sendable`, and the
+Realm opener can fall back to a default configuration. DatabaseService
+configuration access already has a lock from AL3. Characterize write
+preconditions and source-save preflight before changing cache generation
+or commit behavior. CC3 should verify invalidation, observation and native
+Browse and offline behavior across interleaved updates.
+
+Keep the V2 actors, value snapshots and repository boundaries, including
+criteria isolation, limit expansion, cache generation checks, empty
+library IDs meaning all active libraries, early cache display, and
+any-source cache fallback on network failure. The two June unified-search
+analysis files describe the removed V1 pipeline. The old unresolved
+actor-runtime trap has no established connection to the stale read.
+Maintain schema 151 unless separately justified by a persistence change.
 
 ## Server Configuration SC3 (2026-11-12)
 
