@@ -86,8 +86,8 @@ extension CalibreServerService {
         }
     }
 
-    func probeLibrary(library: CalibreLibrary) async -> CalibreLibraryProbeTask {
-        guard let task = buildProbeLibraryTask(library: library) else {
+    func probeLibrary(library: CalibreLibrary, serverURL: URL? = nil) async -> CalibreLibraryProbeTask {
+        guard let task = buildProbeLibraryTask(library: library, serverURL: serverURL) else {
             return CalibreLibraryProbeTask(library: library, probeUrl: .init(fileURLWithPath: "/realm"), probeResult: nil)
         }
 
@@ -105,9 +105,10 @@ extension CalibreServerService {
         }
     }
 
-    func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {
+    func buildProbeLibraryTask(library: CalibreLibrary, serverURL: URL? = nil) -> CalibreLibraryProbeTask? {
+        guard let serverURL = serverURL ?? getServerUrlByReachability(server: library.server) else { return nil }
         guard let probeUrl = try? makeEndpointURL(
-            server: library.server,
+            serverURL: serverURL,
             path: "/ajax/search/\(library.key)",
             queryItems: [URLQueryItem(name: "num", value: "0")]
         ) else {

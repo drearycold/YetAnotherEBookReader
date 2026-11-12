@@ -14,6 +14,8 @@ class LibraryViewModel: ObservableObject {
     private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var discoverable: Bool = false
+    @Published private(set) var discoverabilityAvailable = false
+    @Published private(set) var saveFailure: ServerSettingsSaveError?
     
     // UI state derived from container.librarySyncStatus
     @Published var isSync = false
@@ -53,13 +55,13 @@ class LibraryViewModel: ObservableObject {
     
     private func setupBindings() {
         if let persistedLibrary = libraryRepository.getLibrary(id: library.id) {
-            self.discoverable = persistedLibrary.discoverable
+            applyObservedFlags(from: persistedLibrary)
         }
 
         libraryObservationTask?.cancel()
         libraryObservationTask = Task { @MainActor [weak self, libraryRepository, libraryId = library.id] in
             for await observedLibrary in libraryRepository.observeLibrary(id: libraryId) {
-                guard !Task.isCancelled, let observedLibrary else { continue }
+                guard !Task.isCancelled else { return }
                 self?.applyObservedFlags(from: observedLibrary)
             }
         }
@@ -73,20 +75,23 @@ class LibraryViewModel: ObservableObject {
         }
     }
 
+    @MainActor
     func setDiscoverable(_ newValue: Bool) {
         guard discoverable != newValue else { return }
-        discoverable = newValue
-        // The manager saves its copy of the library whole (a sync's summary, hiding it), so that
-        // copy changes too, or the next save would put the old value back.
-        container.libraryManager.calibreLibraries[library.id]?.discoverable = newValue
-        try? libraryRepository.updateLibraryFlags(
-            id: library.id,
-            discoverable: newValue
-        )
+        do {
+            try container.libraryManager.setDiscoverable(newValue, libraryID: library.id, serverID: library.server.id)
+            discoverable = newValue
+            saveFailure = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            saveFailure = error as? ServerSettingsSaveError ?? .failed
+        }
     }
 
-    private func applyObservedFlags(from library: CalibreLibrary) {
-        discoverable = library.discoverable
+    private func applyObservedFlags(from library: CalibreLibrary?) {
+        discoverabilityAvailable = library?.hidden == false && library?.server.removed == false
+        if let library { discoverable = library.discoverable }
     }
 
     private func applySyncStatus(_ statusMap: [String: CalibreSyncStatus]) {

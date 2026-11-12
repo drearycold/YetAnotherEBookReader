@@ -21,6 +21,11 @@ struct LibraryDetailView: View {
                     get: { viewModel.discoverable },
                     set: { viewModel.setDiscoverable($0) }
                 ))
+                .disabled(!viewModel.discoverabilityAvailable)
+                if let failure = viewModel.saveFailure {
+                    Text(failure.message)
+                        .accessibilityIdentifier("library.discoverability.save.failure")
+                }
             }
             
             Section(header: Text("Troubleshooting")) {

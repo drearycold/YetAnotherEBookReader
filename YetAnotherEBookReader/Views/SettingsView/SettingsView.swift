@@ -143,8 +143,7 @@ struct SettingsView: View {
             if let serverID = viewModel.displayedServerID {
                 ServerDetailView(
                     container: viewModel.container,
-                    serverID: serverID,
-                    onConnectionUpdate: viewModel.updateServer(oldServer:newServer:)
+                    serverID: serverID
                 )
                 .id(serverID)
             }

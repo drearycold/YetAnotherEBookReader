@@ -195,14 +195,30 @@ final class DSReaderHelperConfigurationViewModel: ObservableObject {
 
     func applyHelperConfiguration(_ ticket: DSReaderHelperConfigurationTicket) {
         guard helperTicket == ticket, case .awaitingConfirmation(let candidate) = helperState else { return }
-        defer { clearHelperRequest() }
+        saveCandidate(candidate)
+    }
+
+    func retryHelperSave() {
+        guard case .saveFailed(let candidate) = helperState, helperTicket == candidate.ticket else { return }
+        saveCandidate(candidate)
+    }
+
+    private func saveCandidate(_ candidate: DSReaderHelperConfigurationCandidate) {
         do {
             let saved = try serverManager.applyHelperConfiguration(candidate)
+            clearHelperRequest()
             savedHelper = saved
             defaultPortDraft = String(saved.port)
             portStr = defaultPortDraft
             helperState = .idle
+        } catch DSReaderHelperConfigurationError.couldNotSave {
+            helperConfirmation = nil
+            helperState = .saveFailed(candidate)
+        } catch is CancellationError {
+            clearHelperRequest()
+            helperState = .cancelled
         } catch {
+            clearHelperRequest()
             helperState = .failure(.init(error))
         }
     }
@@ -228,6 +244,7 @@ enum HelperConfigurationState {
     case idle
     case loading
     case awaitingConfirmation(DSReaderHelperConfigurationCandidate)
+    case saveFailed(DSReaderHelperConfigurationCandidate)
     case failure(HelperConfigurationFailure)
     case cancelled
 }
@@ -275,7 +292,7 @@ enum HelperConfigurationFailure {
         switch self {
         case .invalidPort: return "Enter a plugin service port between 1024 and 65535."
         case .stale: return "The server or saved configuration changed. Download the configuration again."
-        case .couldNotSave: return "Could not save the configuration. Download it again and retry."
+        case .couldNotSave: return "Could not save the configuration. Try again."
         case .authentication: return "DSReader Helper denied access. Check the server credentials and permissions."
         case .invalidResponse: return "DSReader Helper returned an incomplete or unreadable configuration."
         case .timeout: return "DSReader Helper did not respond in time. Check the service and retry."

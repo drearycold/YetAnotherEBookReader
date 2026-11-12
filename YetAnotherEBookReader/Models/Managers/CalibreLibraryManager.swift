@@ -39,6 +39,7 @@ class CalibreLibraryManager {
             publishStateChange()
         }
     }
+    @MainActor private var librarySyncIDs: [String: UUID] = [:]
     var localLibrary: CalibreLibrary?
 
     init(container: AppContainerProtocol, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
@@ -224,56 +225,89 @@ class CalibreLibraryManager {
         try libraryRepository.saveLibrary(library)
     }
 
-    func hideLibrary(libraryId: String) {
-        calibreLibraries[libraryId]?.hidden = true
-        if let library = calibreLibraries[libraryId] {
-            try? libraryRepository.saveLibrary(library)
-        }
+    @MainActor
+    func setDiscoverable(_ value: Bool, libraryID: String, serverID: String) throws {
+        var library = try currentLibrary(id: libraryID, serverID: serverID)
+        guard !library.hidden else { throw ServerSettingsSaveError.stale }
+        guard value != library.discoverable else { return }
+        try Task.checkCancellation()
+        try libraryRepository.updateLibraryFlags(id: libraryID, discoverable: value)
+        library.discoverable = value
+        calibreLibraries[libraryID] = library
+        container?.publishCalibreUpdate(.library(library))
     }
 
-    func restoreLibrary(libraryId: String) {
-        calibreLibraries[libraryId]?.hidden = false
-        calibreLibraries[libraryId]?.lastModified = Date(timeIntervalSince1970: 0)
-        if let library = calibreLibraries[libraryId] {
-            try? libraryRepository.saveLibrary(library)
+    @MainActor
+    func hideLibrary(libraryId: String, serverID: String) throws {
+        try setHidden(true, libraryID: libraryId, serverID: serverID)
+    }
+
+    @MainActor
+    func restoreLibrary(libraryId: String, serverID: String) throws {
+        try setHidden(false, libraryID: libraryId, serverID: serverID)
+    }
+
+    @MainActor
+    private func setHidden(_ hidden: Bool, libraryID: String, serverID: String) throws {
+        var library = try currentLibrary(id: libraryID, serverID: serverID)
+        guard hidden != library.hidden else { throw ServerSettingsSaveError.stale }
+        try Task.checkCancellation()
+        try libraryRepository.setLibraryHidden(id: libraryID, serverID: serverID, hidden: hidden)
+        library.hidden = hidden
+        if !hidden { library.lastModified = Date(timeIntervalSince1970: 0) }
+        calibreLibraries[libraryID] = library
+        container?.publishCalibreUpdate(.library(library))
+    }
+
+    @MainActor
+    private func currentLibrary(id: String, serverID: String) throws -> CalibreLibrary {
+        guard let library = calibreLibraries[id], library.server.id == serverID,
+              let server = container?.calibreServers[serverID], !server.removed else {
+            throw ServerSettingsSaveError.stale
         }
+        return library
     }
 
     func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Any? = nil) -> Int {
         return libraryRepository.countBooks(for: library)
     }
 
-    func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
-        guard let server = container?.calibreServers[serverInfo.server.id] else { return }
-
-        serverInfo.libraryMap.forEach { key, name in
-            let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-            let libraryId = newLibrary.id
-
-            if calibreLibraries[libraryId] != nil {
-                calibreLibraries[libraryId]!.key = newLibrary.key
-            } else {
-                let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
-                calibreLibraries[libraryId] = library
-            }
+    @MainActor
+    func registerLibraries(from info: CalibreServerInfo) -> Bool {
+        guard let server = container?.calibreServers[info.server.id], !server.removed,
+              DSReaderHelperConnection(server) == DSReaderHelperConnection(info.server) else { return false }
+        var allSaved = true
+        for (key, name) in info.libraryMap {
+            let newLibrary = CalibreLibrary(server: server, key: key, name: name)
+            var library = calibreLibraries[newLibrary.id] ?? newLibrary
+            if calibreLibraries[newLibrary.id] != nil, library.key == key { continue }
+            library.key = key
             do {
-                try libraryRepository.saveLibrary(calibreLibraries[libraryId]!)
+                try libraryRepository.saveLibrary(library)
+                calibreLibraries[library.id] = library
             } catch {
-                logger.error("Failed to update library realm in updateServerLibraryInfo: \(error.localizedDescription)")
+                allSaved = false
+                logger.error("Could not save a library during server refresh")
             }
         }
+        return allSaved
+    }
 
-        // If the server's defaultLibrary changed, persist it on the server.
-        if let serverManager = container?.serverManager,
-           var mutableServer = serverManager.calibreServers[serverInfo.server.id],
-           mutableServer.defaultLibrary != serverInfo.defaultLibrary {
-            mutableServer.defaultLibrary = serverInfo.defaultLibrary
-            serverManager.calibreServers[serverInfo.server.id] = mutableServer
-            do {
-                try serverManager.saveServer(server: mutableServer)
-            } catch {
-                logger.error("Failed to update server realm defaultLibrary: \(error.localizedDescription)")
+    @MainActor
+    func updateServerSnapshot(_ server: CalibreServer, connectionChanged: Bool) {
+        let ids = calibreLibraries.values.filter { $0.server.id == server.id }.map(\.id)
+        for id in ids {
+            calibreLibraries[id]?.server = server
+            if var status = librarySyncStatus[id] {
+                status.library.server = server
+                if connectionChanged {
+                    status.isSync = false
+                    status.isError = false
+                    status.msg = nil
+                }
+                librarySyncStatus[id] = status
             }
+            if connectionChanged { librarySyncIDs.removeValue(forKey: id) }
         }
     }
 
@@ -294,30 +328,41 @@ class CalibreLibraryManager {
         return task
     }
 
+    /// A library whose summary is syncing is hidden and remains available to Restore.
     @MainActor
-    func removeLibrary(library: CalibreLibrary) async {
-        guard let container = self.container else { return }
-        if librarySyncStatus[library.id] != nil {
-            librarySyncStatus[library.id]?.isSync = true
+    func removeOrHideLibrary(libraryID: String, serverID: String) throws {
+        let library = try currentLibrary(id: libraryID, serverID: serverID)
+        guard !library.hidden else { throw ServerSettingsSaveError.stale }
+        if librarySyncStatus[libraryID]?.isSync == true {
+            try hideLibrary(libraryId: libraryID, serverID: serverID)
         } else {
-            librarySyncStatus[library.id] = .init(library: library, isSync: true)
+            try removeLibrary(library: library)
         }
+    }
 
-        //remove cached book files
-        let libraryBooksInShelf = container.bookManager.booksInShelf.filter {
-            $0.value.library.id == library.id
+    @MainActor
+    func removeLibrary(library: CalibreLibrary) throws {
+        let current = try currentLibrary(id: library.id, serverID: library.server.id)
+        try Task.checkCancellation()
+        try libraryRepository.deleteLibrary(serverUUID: current.server.id, name: current.name)
+        discardLibraries([current.id])
+        container?.publishCalibreUpdate(.library(current))
+    }
+
+    @MainActor
+    func discardRemovedServer(serverID: String) {
+        discardLibraries(Set(calibreLibraries.values.filter { $0.server.id == serverID }.map(\.id)))
+    }
+
+    @MainActor
+    private func discardLibraries(_ ids: Set<String>) {
+        container?.bookManager.discardShelfBooks(in: ids)
+        for id in ids {
+            librarySyncIDs.removeValue(forKey: id)
+            calibreLibraries.removeValue(forKey: id)
+            calibreLibraryInfoStaging.removeValue(forKey: id)
+            librarySyncStatus.removeValue(forKey: id)
         }
-        libraryBooksInShelf.forEach {
-            container.bookManager.clearCache(inShelfId: $0.key)
-            container.bookManager.removeFromShelf(inShelfId: $0.key)     //just in case
-        }
-
-        let serverUUIDString = library.server.uuid.uuidString
-        let libraryName = library.name
-        try? libraryRepository.deleteLibrary(serverUUID: serverUUIDString, name: libraryName)
-
-        self.calibreLibraries.removeValue(forKey: library.id)
-        self.librarySyncStatus[library.id]?.isSync = false
     }
 
     /// Refreshes what the app keeps about a library besides its books, which calibre is asked for
@@ -331,78 +376,72 @@ class CalibreLibraryManager {
     /// the user refreshes meanwhile (`UnifiedCategoryViewModel`) syncs again rather than waiting.
     @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
-        guard let container = self.container else { return }
-        let libraryId = request.library.id
-        guard (self.librarySyncStatus[libraryId]?.isSync ?? false) == false else {
-            return
+        guard let container,
+              var library = try? currentLibrary(id: request.library.id, serverID: request.library.server.id),
+              !library.hidden, librarySyncStatus[library.id]?.isSync != true else { return }
+        let libraryID = library.id
+        let syncID = UUID()
+        let connection = DSReaderHelperConnection(library.server)
+        let key = library.key
+        librarySyncIDs[libraryID] = syncID
+        var status = librarySyncStatus[libraryID] ?? .init(library: library)
+        status.isSync = true
+        status.isError = false
+        status.msg = ""
+        librarySyncStatus[libraryID] = status
+
+        func isCurrent() -> Bool {
+            librarySyncIDs[libraryID] == syncID && calibreLibraries[libraryID]?.key == key
+                && container.calibreServers[connection.serverID].map(DSReaderHelperConnection.init) == connection
         }
-
-        guard request.library.hidden == false else {
-            return
-        }
-
-        if var status = self.librarySyncStatus[libraryId] {
-            status.isSync = true
-            status.isError = false
-            status.msg = ""
-            self.librarySyncStatus[libraryId] = status
-        } else {
-            self.librarySyncStatus[libraryId] = .init(library: request.library, isSync: true)
-        }
-
-        let calibreServerService = container.calibreServerService
-        var library = calibreLibraries[libraryId] ?? request.library
-        var summaryError: String?
-
-        do {
-            let summary = try await calibreServerService.getLibrarySummary(library: library)
-            let previousBookCount = self.librarySyncStatus[libraryId]?.cnt
-            let (updatedLibrary, changed) = applySummary(summary, previousBookCount: previousBookCount, to: library)
-            library = updatedLibrary
-            self.librarySyncStatus[libraryId]?.cnt = summary.bookCount
-            if changed {
-                container.publishCalibreUpdate(.library(library))
+        defer {
+            if librarySyncIDs[libraryID] == syncID {
+                librarySyncIDs.removeValue(forKey: libraryID)
+                if librarySyncStatus[libraryID]?.isSync == true { librarySyncStatus[libraryID]?.isSync = false }
             }
-        } catch {
-            logger.error("Failed to read the summary of \(library.name): \(error.localizedDescription)")
-            summaryError = error.localizedDescription
         }
 
-        self.librarySyncStatus[libraryId]?.isSync = false
-        self.librarySyncStatus[libraryId]?.isError = summaryError != nil
-        self.librarySyncStatus[libraryId]?.msg = summaryError ?? "Success"
+        let service = container.calibreServerService
+        var summaryError: String?
+        do {
+            let summary = try await service.getLibrarySummary(library: library)
+            guard isCurrent(), !Task.isCancelled else { return }
+            let previousBookCount = librarySyncStatus[libraryID]?.cnt
+            let (updatedLibrary, changed) = try applySummary(summary, previousBookCount: previousBookCount, to: library)
+            library = updatedLibrary
+            librarySyncStatus[libraryID]?.cnt = summary.bookCount
+            if changed { container.publishCalibreUpdate(.library(library)) }
+        } catch {
+            guard isCurrent(), !Task.isCancelled else { return }
+            logger.error("Could not refresh the library summary")
+            summaryError = "Library refresh failed. Try refreshing again."
+        }
 
-        // A library removed meanwhile stays removed: no categories are cached for it.
-        guard calibreLibraries[libraryId] != nil else { return }
+        librarySyncStatus[libraryID]?.isSync = false
+        librarySyncStatus[libraryID]?.isError = summaryError != nil
+        librarySyncStatus[libraryID]?.msg = summaryError ?? "Success"
 
         var categoryError: String?
         do {
-            let categories = try await calibreServerService.getLibraryCategories(library: library)
-            library = applyCategoryFields(of: categories, to: library)
-            categoryError = await refreshCategoryCaches(
-                container: container,
-                library: library,
-                categories: categories
-            )
+            let categories = try await service.getLibraryCategories(library: library)
+            guard isCurrent(), !Task.isCancelled else { return }
+            library = try applyCategoryFields(of: categories, to: library)
+            categoryError = await refreshCategoryCaches(container: container, library: library, categories: categories, isCurrent: isCurrent)
         } catch {
-            logger.error("Failed to read the categories of \(library.name): \(error.localizedDescription)")
-            categoryError = error.localizedDescription
+            logger.error("Could not refresh the library categories")
+            categoryError = "Category refresh failed. Try refreshing again."
         }
 
-        // Unless a newer sync has started, or the summary already failed.
-        if let categoryError,
-           let status = self.librarySyncStatus[libraryId],
-           status.isSync == false,
-           status.isError == false {
-            self.librarySyncStatus[libraryId]?.isError = true
-            self.librarySyncStatus[libraryId]?.msg = categoryError
+        if isCurrent(), !Task.isCancelled, let categoryError, summaryError == nil {
+            librarySyncStatus[libraryID]?.isError = true
+            librarySyncStatus[libraryID]?.msg = categoryError
         }
     }
 
     /// Keeps the field calibre searches each category by (`CalibreLibrary.categoryFields`): a
     /// category's name is in the server's language, and isn't one.
     @MainActor
-    private func applyCategoryFields(of categories: [CalibreLibraryCategory], to library: CalibreLibrary) -> CalibreLibrary {
+    private func applyCategoryFields(of categories: [CalibreLibraryCategory], to library: CalibreLibrary) throws -> CalibreLibrary {
         let categoryFields = categories
             .filter(\.is_category)
             .reduce(into: [String: String]()) { fields, category in
@@ -415,12 +454,8 @@ class CalibreLibraryManager {
         }
 
         updated.categoryFields = categoryFields
+        try libraryRepository.saveLibrary(updated)
         calibreLibraries[library.id] = updated
-        do {
-            try libraryRepository.saveLibrary(updated)
-        } catch {
-            logger.error("Failed to save the category fields of \(updated.name): \(error.localizedDescription)")
-        }
         return updated
     }
 
@@ -441,8 +476,8 @@ class CalibreLibraryManager {
         _ summary: CalibreLibrarySummary,
         previousBookCount: Int?,
         to library: CalibreLibrary
-    ) -> (CalibreLibrary, Bool) {
-        var updated = calibreLibraries[library.id] ?? library
+    ) throws -> (CalibreLibrary, Bool) {
+        guard var updated = calibreLibraries[library.id] else { throw ServerSettingsSaveError.stale }
         var changed = false
         if let lastModified = summary.lastModified, lastModified > updated.lastModified {
             updated.lastModified = lastModified
@@ -460,12 +495,8 @@ class CalibreLibraryManager {
             return (updated, false)
         }
 
+        try libraryRepository.saveLibrary(updated)
         calibreLibraries[library.id] = updated
-        do {
-            try libraryRepository.saveLibrary(updated)
-        } catch {
-            logger.error("Failed to save the summary of \(updated.name): \(error.localizedDescription)")
-        }
         return (updated, true)
     }
 
@@ -474,7 +505,8 @@ class CalibreLibraryManager {
     private func refreshCategoryCaches(
         container: AppContainerProtocol,
         library: CalibreLibrary,
-        categories: [CalibreLibraryCategory]
+        categories: [CalibreLibraryCategory],
+        isCurrent: () -> Bool
     ) async -> String? {
         let activeCategories = categories.filter { $0.is_category }
         let activeCategoryNames = Set(activeCategories.map(\.name))
@@ -485,19 +517,21 @@ class CalibreLibraryManager {
                 activeCategoryNames: activeCategoryNames
             )
         } catch {
-            logger.error("Failed to prune stale categories for \(library.name): \(error.localizedDescription)")
+            logger.error("Could not prune stale library categories")
+            return "Category refresh failed. Try refreshing again."
         }
 
         var firstError: String?
         for category in activeCategories {
+            guard isCurrent(), !Task.isCancelled else { return nil }
             do {
                 _ = try await container.libraryCategoryService.fetchAndCacheCategory(
                     library: library,
                     category: category
                 )
             } catch {
-                logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
-                firstError = firstError ?? "\(category.name): \(error.localizedDescription)"
+                logger.error("Could not refresh a library category")
+                firstError = "Category refresh failed. Try refreshing again."
             }
         }
         return firstError

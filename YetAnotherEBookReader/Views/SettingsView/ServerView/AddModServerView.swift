@@ -199,6 +199,13 @@ struct AddModServerView: View {
                 }
             }
             
+            if let failure = viewModel.saveFailure {
+                Section {
+                    Text(failure.message)
+                        .accessibilityIdentifier("server.connection.save.failure")
+                }
+            }
+
             Section {
                 if !viewModel.isProbing && !viewModel.canConfirmServer {
                     Button("Edit Connection") {
@@ -221,17 +228,11 @@ struct AddModServerView: View {
                 .accessibilityIdentifier("server.connection.result.cancel")
                 
                 Button(action: {
-                    if let confirmation = viewModel.confirm(browseAfterAdding: browseAfterAdding) {
-                        onConfirm(confirmation)
-                        if usesResultSheet {
-                            confirmed = true
-                        } else {
-                            viewModel.dismissResult()
-                            onFinish()
-                            return
-                        }
-                    }
+                    guard let confirmation = viewModel.confirm(browseAfterAdding: browseAfterAdding) else { return }
+                    onConfirm(confirmation)
+                    if usesResultSheet { confirmed = true }
                     viewModel.dismissResult()
+                    if !usesResultSheet { onFinish() }
                 }) {
                     if viewModel.isAdding {
                         Text(browseAfterAdding ? "Add and Browse Library" : "Add")

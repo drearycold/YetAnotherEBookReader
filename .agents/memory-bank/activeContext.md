@@ -2,10 +2,92 @@
 
 ## Current Focus
 
-**Server Settings and DSReader Helper Configuration (SC).** SC2 is implemented
-on `codex/server-configuration-sc2`. SC1 merged through PR #148. RH1–RH3 is
-complete through PR #147. The earlier PDF investigation remains under Current
-Branch Notes.
+**Server Settings and DSReader Helper Configuration (SC).** SC3 is implemented
+on `codex/server-configuration-sc3` from main `31cd16fd`. SC1 and SC2 merged
+through PRs #148 and #149. RH1–RH3 is complete through PR #147. The earlier
+PDF investigation remains under Current Branch Notes.
+
+## Server Configuration SC3 (2026-11-12)
+
+`codex/server-configuration-sc3` starts at main `31cd16fd` after SC2 merged
+through PR #149. The server manager commits before publishing settings.
+Adding a server stores its initial libraries and Helper port in the same
+Realm transaction. Editing checks the saved UUID, addresses, credentials,
+flags and name inside the transaction. It updates the existing Realm object
+so the embedded Helper record survives. Removal marks the server removed and
+deletes its library and book records together. Local file and shelf cleanup
+starts after the commit and does not save deleted records again. The existing
+settings removal scope is local.
+
+The editor runs validation probes without changing saved reachability.
+Save failure stays on the result page with the draft and selected library.
+Transient failures can retry the same validation, and changed or duplicate
+settings require a fresh connection. Success consumes the confirmation once.
+Navigation uses the typed result after the commit. The validated address
+becomes reachable only after commit so Welcome can open Browse immediately
+while the independent refresh runs. The SC2 iOS 15 inline
+result and the later-system sheet dismissal order still apply.
+
+Post-commit refresh belongs to the manager and uses the saved connection.
+A connection change retires old probe and Helper generations, updates
+the associated library and status snapshots, and starts one refresh.
+A successful validation for an unchanged connection also publishes after
+the commit and queues a refresh. The manager keeps a newer probe for the
+same address role and discards an older in-flight probe for that role.
+A failed refresh leaves saved settings available and exposes a refresh
+retry. A pre-commit cancellation writes nothing. Once committed, local
+snapshots and cleanup converge even when the originating view leaves.
+A fresh attempt captures the current server and library key, and a late
+summary for a replaced connection or removed library cannot update settings.
+
+Library visibility and discoverability write only the affected flags.
+An idle library removed in Settings still deletes its cached records.
+A library with a summary in flight is hidden and can be restored.
+The in-flight summary merges metadata into the current library without
+reverting its flags. Restore resets the generation and a partial batch
+keeps the failed selections on screen. A failed removal leaves the shelf
+and files intact.
+
+Helper Update still requires an accepted SC1 ticket and an atomic comparison
+of its saved connection and Helper record. A transient write failure can
+retry the same accepted candidate while the ticket is current. Changes to
+scope or draft, cancellation, Help and leaving the page invalidate it. The
+legacy fallback and Count Pages aggregation rules remain with the shared
+loader. Successful Helper writes notify the visible Helper and Settings
+models. Schema 151 remains readable.
+
+The red fixture reproduced three failures on the SC2 baseline. An unopened
+Realm and a missing Helper target both reported success. A rejected server
+edit still replaced the in-memory address. The evidence is in
+`/tmp/YabrSC3/save-repro.log`.
+
+The iPhone 17 focused run passed 145 tests. The final iPhone 17 full run
+covered 1,130 tests, with 22 skips, the existing expected PDFKit assertions
+and zero unexpected failures. The first full run reproduced the known
+local-library stale Realm read. The test passed in isolation and in the
+final full run. The iPhone 7 final run passed 146 focused tests.
+
+The reachability review fixture reproduced two failing saves with unchanged
+connection fields, one with a name change. The iPhone 17 follow-up passed
+all 61 Settings and Calibre server manager tests, including Browse and Helper
+reachability after save, rejected and deleted saves, and competing probes.
+The logs are `/tmp/YabrSC3/reachability-repro.log` and
+`/tmp/YabrSC3/reachability-verified.log`.
+
+Both devices passed the Release Settings and Helper journeys. The isolated
+build enables `SC3_UI_TEST_FIXTURE` and uses the UI test consent gate with
+`YABR_SC3_SAVE_FAILURES=1`. It rejects one write per covered operation before
+delegating retries to the real Realm repositories. The Settings journey
+covers add, edit, hide, restore and discoverability failures and retries.
+The Helper journey covers Welcome-to-Browse, a write failure after Update,
+Retry Save and reopening. The loopback service controls network timing.
+Normal iOS Release and Mac Catalyst builds passed, and the normal Release
+binary excludes the failure fixture.
+
+Logs, results and screenshots are under `/tmp/YabrSC3`. An existing Calibre
+session remained active, so the real calibre-server contract tests were
+outside this run. The real Calibre GUI Helper plugin, iPad and Catalyst
+window interaction also remain outside the verification matrix.
 
 ## Server Configuration SC2 (2026-11-12)
 
@@ -63,10 +145,6 @@ and Mac Catalyst builds, project validation and diff checks passed.
 Evidence is in `/tmp/YabrSC2`. This matrix covers the two iPhone simulators.
 The full suite, iPad, Catalyst window interaction and the real Calibre GUI
 plugin were outside this run.
-
-SC3 owns the save-result and subsequent refresh contract for connection
-edits, library hide/restore and Helper apply/retry. Keep the existing
-repository boundaries and SC1 request and fallback rules.
 
 ## Server Configuration SC1 (2026-11-11)
 

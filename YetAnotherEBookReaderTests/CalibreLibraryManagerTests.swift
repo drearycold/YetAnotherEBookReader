@@ -92,7 +92,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let libId = library.id
         
         // Hide
-        libraryManager.hideLibrary(libraryId: libId)
+        try libraryManager.hideLibrary(libraryId: libId, serverID: server.id)
         
         XCTAssertTrue(libraryManager.calibreLibraries[libId]?.hidden ?? false)
         
@@ -102,7 +102,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertTrue(hiddenLib?.hidden ?? false)
         
         // Restore
-        libraryManager.restoreLibrary(libraryId: libId)
+        try libraryManager.restoreLibrary(libraryId: libId, serverID: server.id)
         
         XCTAssertFalse(libraryManager.calibreLibraries[libId]?.hidden ?? true)
         XCTAssertEqual(libraryManager.calibreLibraries[libId]?.lastModified, Date(timeIntervalSince1970: 0))
@@ -120,7 +120,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(count, 1)
     }
 
-    func testUpdateServerLibraryInfo() throws {
+    func testRegisterLibrariesFromRefresh() throws {
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false)
         
         let libraryMap = [
@@ -144,7 +144,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager.calibreLibraries[existingLib.id] = existingLib
         try libraryRepository.saveLibrary(existingLib)
         
-        libraryManager.updateServerLibraryInfo(serverInfo: serverInfo)
+        XCTAssertTrue(libraryManager.registerLibraries(from: serverInfo))
         
         XCTAssertEqual(libraryManager.calibreLibraries[existingLib.id]?.key, "existingKey")
         
@@ -244,13 +244,68 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let dbLibBefore = libraryRepository.getAllLibraries().first { $0.id == library.id }
         XCTAssertNotNil(dbLibBefore)
         
-        await libraryManager.removeLibrary(library: library)
+        try libraryManager.removeLibrary(library: library)
         
         let dbLibAfter = libraryRepository.getAllLibraries().first { $0.id == library.id }
         XCTAssertNil(dbLibAfter)
         
         XCTAssertNil(container.bookManager.booksInShelf[book.inShelfId])
-        XCTAssertFalse(libraryManager.librarySyncStatus[library.id]?.isSync ?? true)
+        XCTAssertNil(libraryManager.librarySyncStatus[library.id])
+    }
+
+    func testFailedLibraryRemovalKeepsShelfMetadataAndCachedFile() throws {
+        var book = CalibreBook(id: 778, library: library)
+        book.inShelf = true
+        book.formats["EPUB"] = FormatInfo(filename: "sc3-fixture.epub", serverSize: 4,
+            serverMTime: Date(), cached: true, cacheSize: 4, cacheMTime: Date())
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("EPUB".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        container.bookManager.updateBook(book: book)
+        let repository = MockLibraryRepository()
+        repository.deleteLibraryError = CocoaError(.fileWriteNoPermission)
+        let manager = CalibreLibraryManager(container: container, databaseService: databaseService, libraryRepository: repository)
+        manager.calibreLibraries[library.id] = library
+        container.libraryManager = manager
+
+        XCTAssertThrowsError(try manager.removeOrHideLibrary(libraryID: library.id, serverID: server.id))
+        XCTAssertNotNil(container.booksInShelf[book.inShelfId])
+        XCTAssertNotNil(container.bookRepository.getBook(library: library, bookId: book.id))
+        XCTAssertFalse(manager.calibreLibraries[library.id]?.hidden ?? true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testInFlightLibrarySummaryPreservesNewVisibilityAndDiscoverability() async throws {
+        configureReachableMockSession()
+        _ = MockURLProtocol.answer(Self.syncAnswers())
+        let reply = try XCTUnwrap(MockURLProtocol.requestHandler)
+        let entered = expectation(description: "Summary request is in flight")
+        let resume = DispatchSemaphore(value: 0)
+        MockURLProtocol.requestHandler = { request in
+            if request.url?.path == "/ajax/search/test_lib" {
+                entered.fulfill()
+                guard resume.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            }
+            return try reply(request)
+        }
+        defer {
+            resume.signal()
+            MockURLProtocol.requestHandler = nil
+        }
+        let syncing = Task { await libraryManager.syncLibrary(request: .init(library: library)) }
+        await fulfillment(of: [entered], timeout: 3)
+        try libraryManager.setDiscoverable(false, libraryID: library.id, serverID: server.id)
+        try libraryManager.hideLibrary(libraryId: library.id, serverID: server.id)
+        try libraryManager.restoreLibrary(libraryId: library.id, serverID: server.id)
+        resume.signal()
+        await syncing.value
+
+        let persisted = try XCTUnwrap(libraryRepository.getLibrary(id: library.id))
+        XCTAssertFalse(persisted.hidden)
+        XCTAssertFalse(persisted.discoverable)
+        XCTAssertFalse(libraryManager.calibreLibraries[library.id]?.discoverable ?? true)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.msg, "Success")
     }
 
     /// A newer `last_modified` moves the library's generation, which the search and category caches
@@ -468,11 +523,11 @@ final class CalibreLibraryManagerTests: XCTestCase {
     func testARemovedLibraryIsNotSavedOrGivenCategories() async throws {
         configureReachableMockSession()
         let requests = MockURLProtocol.answer(Self.syncAnswers())
-        await libraryManager.removeLibrary(library: library)
+        try libraryManager.removeLibrary(library: library)
 
         await libraryManager.syncLibrary(request: CalibreSyncLibraryRequest(library: library))
 
-        XCTAssertEqual(Set(requests.answered), ["/ajax/search/test_lib", "/ajax/books/test_lib"])
+        XCTAssertTrue(requests.answered.isEmpty)
         XCTAssertNil(libraryManager.calibreLibraries[library.id])
         XCTAssertNil(libraryRepository.getLibrary(id: library.id))
     }

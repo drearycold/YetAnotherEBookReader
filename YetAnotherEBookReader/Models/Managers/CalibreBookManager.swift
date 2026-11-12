@@ -400,15 +400,7 @@ class CalibreBookManager {
     }
 
     func clearCache(book: CalibreBook, format: Format) {
-        guard let bookFileURL = getSavedUrl(book: book, format: format) else { return }
-
-        if FileManager.default.fileExists(atPath: bookFileURL.path) {
-            do {
-                try FileManager.default.removeItem(at: bookFileURL)
-            } catch {
-                logger.error("clearCache \(error.localizedDescription)")
-            }
-        }
+        guard removeCachedFile(book: book, format: format) else { return }
         var newBook = book
 
         newBook.formats[format.rawValue]?.cacheMTime = .distantPast
@@ -422,6 +414,32 @@ class CalibreBookManager {
         if newBook.inShelf, newBook.formats.filter({ $1.cached }).isEmpty {
             removeFromShelf(inShelfId: newBook.inShelfId)
         }
+    }
+
+    /// The repository has already deleted these books. Cache cleanup must not save them again.
+    @MainActor
+    func discardShelfBooks(in libraryIDs: Set<String>) {
+        let books = booksInShelf.values.filter { libraryIDs.contains($0.library.id) }
+        for book in books {
+            for (key, info) in book.formats where info.cached {
+                if let format = Format(rawValue: key) { _ = removeCachedFile(book: book, format: format) }
+            }
+            if readingBook?.inShelfId == book.inShelfId { readingBook?.inShelf = false }
+            booksInShelf.removeValue(forKey: book.inShelfId)
+            container?.publishCalibreUpdate(.deleted(book.inShelfId))
+        }
+    }
+
+    private func removeCachedFile(book: CalibreBook, format: Format) -> Bool {
+        guard let url = getSavedUrl(book: book, format: format) else { return false }
+        if FileManager.default.fileExists(atPath: url.path) {
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                logger.error("Failed to remove cached book file: \(error.localizedDescription)")
+            }
+        }
+        return true
     }
 
     func getCacheInfo(book: CalibreBook, format: Format) -> (UInt64, Date?)? {
@@ -873,10 +891,8 @@ class CalibreBookManager {
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
             .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
             .reduce(into: [CalibreLibrary: [CalibreBook]]()) { partialResult, book in
-                if partialResult[book.library] == nil {
-                    partialResult[book.library] = []
-                }
-                partialResult[book.library]?.append(book)
+                guard let library = container?.calibreLibraries[book.library.id], !library.hidden else { return }
+                partialResult[library, default: []].append(book)
             }
 
         if serverReachableChanged && libraryBooks.isEmpty {

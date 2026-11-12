@@ -19,7 +19,8 @@ extension CalibreServerRealm {
             hasAuth: self.hasAuth,
             username: self.username ?? "",
             password: self.password ?? "",
-            defaultLibrary: self.defaultLibrary ?? ""
+            defaultLibrary: self.defaultLibrary ?? "",
+            removed: self.removed
         )
     }
 

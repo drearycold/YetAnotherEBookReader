@@ -306,8 +306,29 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     let databaseService = DatabaseService()
 
-    lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
-    lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
+    lazy var serverRepository: ServerRepositoryProtocol = {
+        #if SC3_UI_TEST_FIXTURE
+        if configurationWriteFailureFixtureEnabled {
+            return ServerSettingsFailureFixtureRepository(databaseService: databaseService)
+        }
+        #endif
+        return RealmServerRepository(databaseService: databaseService)
+    }()
+    lazy var libraryRepository: LibraryRepositoryProtocol = {
+        #if SC3_UI_TEST_FIXTURE
+        if configurationWriteFailureFixtureEnabled {
+            return LibrarySettingsFailureFixtureRepository(databaseService: databaseService, serverResolver: self)
+        }
+        #endif
+        return RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
+    }()
+
+    #if SC3_UI_TEST_FIXTURE
+    private var configurationWriteFailureFixtureEnabled: Bool {
+        UITestingConfiguration.skipsConsentPrompts()
+            && ProcessInfo.processInfo.environment["YABR_SC3_SAVE_FAILURES"] == "1"
+    }
+    #endif
     lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
     lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(
         databaseService: databaseService,

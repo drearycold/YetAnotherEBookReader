@@ -887,6 +887,7 @@ final class CalibreOnboardingUITests: XCTestCase {
     private var app: XCUIApplication!
     private var singleURL = ""
     private var multiURL = ""
+    private var injectConfigurationSaveFailures = false
 
     override func setUpWithError() throws {
         let environment = ProcessInfo.processInfo.environment
@@ -899,6 +900,8 @@ final class CalibreOnboardingUITests: XCTestCase {
         app = XCUIApplication(bundleIdentifier: bundleID)
         // Uses the existing test-host consent gate, with normal disk persistence and networking.
         app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/CalibreOnboardingValidation"
+        injectConfigurationSaveFailures = environment["YABR_SC3_SAVE_FAILURES"] == "1"
+        if injectConfigurationSaveFailures { app.launchEnvironment["YABR_SC3_SAVE_FAILURES"] = "1" }
         app.launch()
         element("welcome.calibre")
     }
@@ -912,6 +915,13 @@ final class CalibreOnboardingUITests: XCTestCase {
         let connectButton = element("server.connection.confirm")
         waitForEnabled(connectButton)
         connectButton.tap()
+        if injectConfigurationSaveFailures {
+            element("server.connection.save.failure")
+            XCTAssertFalse(app.descendants(matching: .any)["screen.browse.book-list"].exists)
+            capture("sc3-welcome-add-save-failed")
+            waitForEnabled(connectButton)
+            connectButton.tap()
+        }
         element("screen.browse.book-list")
         waitForHittable(app.navigationBars["Fixture"].buttons.element(boundBy: 0))
         back()
@@ -953,6 +963,13 @@ final class CalibreOnboardingUITests: XCTestCase {
         download.tap()
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10), app.debugDescription)
         confirmation.buttons["Update"].tap()
+        if injectConfigurationSaveFailures {
+            element("server.helper.save.failure")
+            XCTAssertFalse(dictionary.exists)
+            XCTAssertEqual(port.value as? String, String(originalPort + 1))
+            capture("sc3-helper-save-failed")
+            element("server.helper.save.retry").tap()
+        }
         XCTAssertTrue(dictionary.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(dictionary.label.contains("Fixture Dictionary"))
         capture("sc1-confirmed-configuration")
@@ -1037,6 +1054,12 @@ final class CalibreOnboardingUITests: XCTestCase {
         waitForEnabled(add)
         XCTAssertEqual(add.label, "Add")
         add.tap()
+        if injectConfigurationSaveFailures {
+            element("server.connection.save.failure")
+            XCTAssertFalse(app.staticTexts[originalName].exists)
+            waitForEnabled(add)
+            add.tap()
+        }
 
         element(originalName).tap()
         XCTAssertTrue(app.navigationBars[originalName].waitForExistence(timeout: 10), app.debugDescription)
@@ -1061,23 +1084,40 @@ final class CalibreOnboardingUITests: XCTestCase {
         waitForEnabled(update)
         XCTAssertEqual(update.label, "Update")
         update.tap()
+        if injectConfigurationSaveFailures {
+            element("server.connection.save.failure")
+            XCTAssertFalse(app.navigationBars[newName].exists)
+            capture("sc3-edit-save-failed")
+            waitForEnabled(update)
+            update.tap()
+        }
         waitForHittable(app.navigationBars[newName])
         back()
         waitForHittable(app.navigationBars["Settings"])
         element(newName).tap()
         waitForHittable(app.navigationBars[newName])
 
+        let library = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "server.detail.library.")).firstMatch
+        let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "0 books"), object: library)
+        XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 15), .completed, app.debugDescription)
         try configureFixture("hold-summary", environmentKey: control)
         let refresh = app.buttons["Refresh Server"]
         waitForEnabled(refresh)
         waitForHittable(refresh)
         refresh.tap()
         try configureFixture("wait-summary", environmentKey: control)
-        let library = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "server.detail.library.")).firstMatch
         XCTAssertTrue(library.waitForExistence(timeout: 10), app.debugDescription)
-        library.swipeLeft()
-        let delete = app.buttons["Delete"].firstMatch
-        if delete.waitForExistence(timeout: 2) { delete.tap() }
+        func swipeToRemoveLibrary() {
+            library.swipeLeft()
+            let delete = app.buttons["Delete"].firstMatch
+            if delete.waitForExistence(timeout: 2) { delete.tap() }
+        }
+        swipeToRemoveLibrary()
+        if injectConfigurationSaveFailures {
+            element("server.detail.library.save.failure")
+            XCTAssertTrue(library.exists)
+            swipeToRemoveLibrary()
+        }
         let restore = element("Restore Hidden Libraries")
         waitForEnabled(restore)
         restore.tap()
@@ -1086,10 +1126,32 @@ final class CalibreOnboardingUITests: XCTestCase {
         let apply = app.buttons["Restore Selected Libraries"]
         waitForEnabled(apply)
         apply.tap()
+        if injectConfigurationSaveFailures {
+            element("server.detail.restore.failure")
+            XCTAssertTrue(app.navigationBars["Restore Hidden Libraries"].exists)
+            waitForEnabled(apply)
+            capture("sc3-restore-save-failed")
+            apply.tap()
+        }
         try configureFixture("release-summary", environmentKey: control)
         XCTAssertTrue(app.navigationBars[newName].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(library.waitForExistence(timeout: 10), app.debugDescription)
         capture("sc2-restored-library-on-edited-server")
+        if injectConfigurationSaveFailures {
+            library.tap()
+            let discover = app.switches["Include in Discover"].firstMatch
+            XCTAssertTrue(discover.waitForExistence(timeout: 10), app.debugDescription)
+            let prior = discover.value as? String
+            let control = discover.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
+            control.tap()
+            element("library.discoverability.save.failure")
+            XCTAssertEqual(discover.value as? String, prior)
+            control.tap()
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value != %@", prior ?? ""), object: discover)
+            XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed, app.debugDescription)
+            back()
+            waitForHittable(app.navigationBars[newName])
+        }
         back()
         element(newName)
         XCTAssertFalse(app.staticTexts[originalName].exists)

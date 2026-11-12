@@ -40,7 +40,7 @@ final class IntegrationTests: XCTestCase {
         
         let server = CalibreServer(uuid: UUID(), name: "Read Server", baseUrl: "http://read-server", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "read_lib", name: "Read Lib")
-        container.serverManager.addServer(server: server, libraries: [library])
+        try container.serverManager.addServer(server: server, libraries: [library])
         
         var book = CalibreBook(id: 789, library: library)
         book.title = "Read Flow Book"
@@ -110,7 +110,7 @@ final class IntegrationTests: XCTestCase {
         
         let server = CalibreServer(uuid: UUID(), name: "Search Server", baseUrl: "http://search-server", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "search_lib", name: "Search Lib")
-        container.serverManager.addServer(server: server, libraries: [library])
+        try container.serverManager.addServer(server: server, libraries: [library])
         
         var book = CalibreBook(id: 456, library: library)
         book.title = "Search Download Book"
@@ -163,7 +163,7 @@ final class IntegrationTests: XCTestCase {
         let library = CalibreLibrary(server: server, key: "setup_lib", name: "Setup Lib")
         
         // Add server and library
-        container.serverManager.addServer(server: server, libraries: [library])
+        try container.serverManager.addServer(server: server, libraries: [library])
         
         // Assert they are in repository / Realm
         let savedServer = container.serverRepository.getAllServers().first(where: { $0.id == server.id })

@@ -207,6 +207,10 @@ final class CalibreServerService {
             throw CalibreAPIError.serverUnreachable
         }
 
+        return try makeEndpointURL(serverURL: serverURL, path: path, queryItems: queryItems)
+    }
+
+    func makeEndpointURL(serverURL: URL, path: String, queryItems: [URLQueryItem] = []) throws -> URL {
         var components = URLComponents()
         components.path = path
         components.queryItems = queryItems.isEmpty ? nil : queryItems
@@ -467,6 +471,8 @@ struct CalibreServerInfo: Identifiable {
     var error: CalibreAPIError? = nil
     // Probe-only context; shared API error cases retain their existing semantics.
     var httpStatusCode: Int? = nil
+    var libraryRefreshFailed = false
+    var probeStartedAt: UInt64? = nil
 
     var request: CalibreProbeServerRequest
 }
