@@ -84,10 +84,14 @@ Retry Save and reopening. The loopback service controls network timing.
 Normal iOS Release and Mac Catalyst builds passed, and the normal Release
 binary excludes the failure fixture.
 
-Logs, results and screenshots are under `/tmp/YabrSC3`. An existing Calibre
-session remained active, so the real calibre-server contract tests were
-outside this run. The real Calibre GUI Helper plugin, iPad and Catalyst
-window interaction also remain outside the verification matrix.
+Logs, results and screenshots are under `/tmp/YabrSC3`. PR #150's first
+Calibre 9.11 CI run found a contract fixture that only installed an in-memory
+library. It now registers the server and library through the manager so the
+sync runs with saved settings. The same assertion failed locally before the
+fixture change and passed afterward. The first iOS CI run also timed out in
+the unchanged reading-history clock test, which passed on main and in both
+local follow-up runs. The real Calibre GUI Helper plugin, iPad and Catalyst
+window interaction remain outside the verification matrix.
 
 ## Server Configuration SC2 (2026-11-12)
 
