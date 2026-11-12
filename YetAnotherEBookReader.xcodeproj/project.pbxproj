@@ -242,6 +242,7 @@
 		E71F34AF2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34AE2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift */; };
 		E71F34B82FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B72FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift */; };
 		E71F34BA2FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B92FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift */; };
+		19805F4C875B49E6B89BD722 /* RealmSearchCacheFreshnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19805F4D875B49E6B89BD722 /* RealmSearchCacheFreshnessTests.swift */; };
 		E71F34BC2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34BB2FDA926F007AB0B1 /* LibrarySearchService.swift */; };
 		E71F34BD2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34BB2FDA926F007AB0B1 /* LibrarySearchService.swift */; };
 		E71F34BF2FDA9284007AB0B1 /* UnifiedSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34BE2FDA9284007AB0B1 /* UnifiedSearchService.swift */; };
@@ -739,6 +740,7 @@
 		E71F34AE2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchMergeServiceTests.swift; sourceTree = "<group>"; };
 		E71F34B72FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchServiceTests.swift; sourceTree = "<group>"; };
 		E71F34B92FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchIntegrationTests.swift; sourceTree = "<group>"; };
+		19805F4D875B49E6B89BD722 /* RealmSearchCacheFreshnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmSearchCacheFreshnessTests.swift; sourceTree = "<group>"; };
 		E71F34BB2FDA926F007AB0B1 /* LibrarySearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchService.swift; sourceTree = "<group>"; };
 		E71F34BE2FDA9284007AB0B1 /* UnifiedSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchService.swift; sourceTree = "<group>"; };
 		E71F34C12FDA9290007AB0B1 /* UnifiedSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchViewModel.swift; sourceTree = "<group>"; };
@@ -1272,6 +1274,7 @@
 				E71F34AE2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift */,
 				E71F34B72FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift */,
 				E71F34B92FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift */,
+				19805F4D875B49E6B89BD722 /* RealmSearchCacheFreshnessTests.swift */,
 				E71F34D62FDBDA3F007AB0B1 /* UnifiedCategoryServiceTests.swift */,
 				E71F34E12FDCF834007AB0B1 /* ReaderOptionsViewModelTests.swift */,
 				E7939151261F1A47004AB102 /* MainViewModelTests.swift */,
@@ -2120,6 +2123,7 @@
 				E7939151261F1A47004AB107 /* RecentShelfViewModelTests.swift in Sources */,
 				E7226E2D2FED56CB009D3BB3 /* MockAppContainerFactory.swift in Sources */,
 				E71F34BA2FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift in Sources */,
+				19805F4C875B49E6B89BD722 /* RealmSearchCacheFreshnessTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
