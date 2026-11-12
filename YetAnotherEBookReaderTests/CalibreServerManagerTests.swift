@@ -104,6 +104,45 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(result?.libraryMap.isEmpty == true)
     }
 
+    func testOlderProbeCannotReplaceStagingForTheSameServerID() async throws {
+        let original = TestFixtures.makeServer(baseUrl: "http://first-probe.test")
+        var updated = original
+        updated.baseUrl = "http://second-probe.test"
+        let requestStarted = expectation(description: "Original probe reached transport")
+        let lock = NSLock()
+        var originalResponse: DeferredProbeURLProtocol?
+
+        for server in [original, updated] {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [DeferredProbeURLProtocol.self]
+            let key = CalibreServerURLSessionKey(server: server, timeout: 10, qos: .default)
+            container.calibreServerService.metadataSessions[key] = URLSession(configuration: configuration)
+        }
+        DeferredProbeURLProtocol.onStart = { response in
+            if response.request.url?.host == "first-probe.test" {
+                lock.lock()
+                originalResponse = response
+                lock.unlock()
+                requestStarted.fulfill()
+            } else {
+                response.finish(defaultLibrary: "new")
+            }
+        }
+        defer { DeferredProbeURLProtocol.onStart = nil }
+        let first = CalibreProbeServerRequest(server: original, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+        let second = CalibreProbeServerRequest(server: updated, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+        let olderProbe = Task { await serverManager.probeServer(request: first) }
+        await fulfillment(of: [requestStarted], timeout: 3)
+        let heldResponse = try XCTUnwrap(lock.withLock { originalResponse })
+        let newerResult = await serverManager.probeServer(request: second)
+        XCTAssertEqual(newerResult?.defaultLibrary, "new")
+        heldResponse.finish(defaultLibrary: "old")
+        let olderResult = await olderProbe.value
+        XCTAssertNil(olderResult)
+        XCTAssertEqual(serverManager.calibreServerInfoStaging[first.id]?.server.baseUrl, updated.baseUrl)
+        XCTAssertEqual(serverManager.calibreServerInfoStaging[first.id]?.defaultLibrary, "new")
+    }
+
     func testPopulateServers() throws {
         // Create custom mock servers and save to repository
         let server1 = CalibreServer(uuid: UUID(), name: "A Server", baseUrl: "http://localhost/a", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "userA", password: "")
@@ -381,12 +420,12 @@ final class CalibreServerManagerTests: XCTestCase {
         let saved = try makeDSReaderHelperConfigurationData(servicePort: 7777)
         try serverRepository.saveDSReaderHelper(.init(port: 8080, configurationData: saved), for: server.id)
 
-        let model = ServerViewModel(container: container, server: server)
-        model.openHelperConfiguration(serverID: server.id)
-        let first = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let model = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        model.resume()
+        let first = try XCTUnwrap(model.connectDSReader())
         let firstRequest = try await loader.nextRequest()
-        model.portStr = "8081"
-        let second = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        model.setPortDraft("8081")
+        let second = try XCTUnwrap(model.connectDSReader())
         let secondRequest = try await loader.nextRequest()
         XCTAssertEqual(firstRequest.port, 8080)
         XCTAssertEqual(secondRequest.port, 8081)
@@ -405,7 +444,7 @@ final class CalibreServerManagerTests: XCTestCase {
         try firstRequest.succeed(servicePort: 8080)
         await first.value
         XCTAssertEqual(model.helperConfirmation, ticket)
-        model.applyHelperConfiguration(ticket, serverID: server.id)
+        model.applyHelperConfiguration(ticket)
         XCTAssertEqual(model.savedHelper?.port, 8081)
         XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configurationData, candidate.payload.data)
         XCTAssertNil(model.helperConfirmation)
@@ -417,20 +456,20 @@ final class CalibreServerManagerTests: XCTestCase {
         try installServerForHelperSync(server)
         let saved = try makeDSReaderHelperConfigurationData(servicePort: 8080)
         try serverRepository.saveDSReaderHelper(.init(port: 8080, configurationData: saved), for: server.id)
-        let model = ServerViewModel(container: container, server: server)
-        model.openHelperConfiguration(serverID: server.id)
+        let model = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        model.resume()
 
         for invalid in ["", "8x080", " 8080", "１０２４", "1023", "65536", "99999999999999999999999"] {
-            model.portStr = invalid
+            model.setPortDraft(invalid)
             XCTAssertNil(model.helperPort)
-            XCTAssertNil(model.connectDSReader(serverID: server.id))
+            XCTAssertNil(model.connectDSReader())
         }
         XCTAssertEqual(loader.requestCount, 0)
         XCTAssertEqual(CalibreServerDSReaderHelper.parsePort("1024"), 1024)
         XCTAssertEqual(CalibreServerDSReaderHelper.parsePort("65535"), 65535)
 
-        model.portStr = "8081"
-        let failed = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        model.setPortDraft("8081")
+        let failed = try XCTUnwrap(model.connectDSReader())
         let failedRequest = try await loader.nextRequest()
         failedRequest.fail(URLError(.timedOut))
         await failed.value
@@ -438,14 +477,14 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertNil(model.helperConfirmation)
         XCTAssertEqual(model.savedHelper?.configurationData, saved)
 
-        model.portStr = "8082"
-        let retry = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        model.setPortDraft("8082")
+        let retry = try XCTUnwrap(model.connectDSReader())
         let retryRequest = try await loader.nextRequest()
         try retryRequest.succeed(servicePort: 8182)
         await retry.value
         let ticket = try XCTUnwrap(model.helperConfirmation)
         model.discardHelperConfiguration(ticket)
-        model.applyHelperConfiguration(ticket, serverID: server.id)
+        model.applyHelperConfiguration(ticket)
         XCTAssertNil(model.helperConfirmation)
         XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.configurationData, saved)
     }
@@ -456,10 +495,10 @@ final class CalibreServerManagerTests: XCTestCase {
         let otherServer = TestFixtures.makeServer(baseUrl: "http://helper-other")
         try installServerForHelperSync(server)
         try installServerForHelperSync(otherServer)
-        let model = ServerViewModel(container: container, server: server)
-        model.openHelperConfiguration(serverID: server.id)
+        let model = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        model.resume()
 
-        let cancelled = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let cancelled = try XCTUnwrap(model.connectDSReader())
         let cancelledRequest = try await loader.nextRequest()
         model.stopHelperConfiguration()
         try cancelledRequest.succeed(servicePort: 8001)
@@ -467,31 +506,102 @@ final class CalibreServerManagerTests: XCTestCase {
         guard case .cancelled = model.helperState else { return XCTFail("Expected cancelled state") }
         XCTAssertNil(model.helperConfirmation)
 
-        let leaving = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let leaving = try XCTUnwrap(model.connectDSReader())
         let leavingRequest = try await loader.nextRequest()
-        model.closeHelperConfiguration()
-        model.openHelperConfiguration(serverID: server.id)
+        model.closeRoute()
+        model.resume()
         try leavingRequest.succeed(servicePort: 8002)
         await leaving.value
         XCTAssertNil(model.helperConfirmation)
 
-        let load = try XCTUnwrap(model.connectDSReader(serverID: server.id))
+        let load = try XCTUnwrap(model.connectDSReader())
         let request = try await loader.nextRequest()
         try request.succeed(servicePort: 8003)
         await load.value
         let oldTicket = try XCTUnwrap(model.helperConfirmation)
-        model.openHelperConfiguration(serverID: otherServer.id)
-        let otherLoad = try XCTUnwrap(model.connectDSReader(serverID: otherServer.id))
+        model.closeRoute()
+        let otherModel = DSReaderHelperConfigurationViewModel(container: container, serverID: otherServer.id)
+        otherModel.resume()
+        let otherLoad = try XCTUnwrap(otherModel.connectDSReader())
         let otherRequest = try await loader.nextRequest()
         try otherRequest.succeed(servicePort: 8004)
         await otherLoad.value
-        let otherTicket = try XCTUnwrap(model.helperConfirmation)
-        model.applyHelperConfiguration(oldTicket, serverID: server.id)
-        model.discardHelperConfiguration(oldTicket)
-        XCTAssertEqual(model.helperConfirmation, otherTicket)
-        model.applyHelperConfiguration(otherTicket, serverID: otherServer.id)
+        let otherTicket = try XCTUnwrap(otherModel.helperConfirmation)
+        otherModel.applyHelperConfiguration(oldTicket)
+        otherModel.discardHelperConfiguration(oldTicket)
+        XCTAssertEqual(otherModel.helperConfirmation, otherTicket)
+        otherModel.applyHelperConfiguration(otherTicket)
         XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
         XCTAssertEqual(serverRepository.getDSReaderHelper(for: otherServer.id)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 8004)
+    }
+
+    func testStoppingParentDetailDoesNotCancelChildHelperAndSuspensionDropsCandidate() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-child")
+        try installServerForHelperSync(server)
+        let detail = ServerDetailViewModel(container: container, serverID: server.id)
+        let helper = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        detail.startObserving(.detail)
+        helper.resume()
+        helper.setPortDraft("9090")
+        let download = try XCTUnwrap(helper.connectDSReader())
+        let request = try await loader.nextRequest()
+        detail.stopObserving(.detail)
+        try request.succeed(servicePort: 9191)
+        await download.value
+        let ticket = try XCTUnwrap(helper.helperConfirmation)
+
+        helper.suspend()
+        helper.resume()
+        XCTAssertEqual(helper.portStr, "9090")
+        XCTAssertNil(helper.helperConfirmation)
+        helper.applyHelperConfiguration(ticket)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.port, 8080)
+    }
+
+    func testVisibleHelperDismissesCandidateWhenItsLibraryScopeChanges() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-library-scope")
+        try installServerForHelperSync(server)
+        let library = CalibreLibrary(server: server, key: "visible", name: "Visible")
+        container.libraryManager.calibreLibraries[library.id] = library
+        let helper = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        helper.resume()
+        let download = try XCTUnwrap(helper.connectDSReader())
+        let request = try await loader.nextRequest()
+        try request.succeed(servicePort: 8080)
+        await download.value
+        let ticket = try XCTUnwrap(helper.helperConfirmation)
+
+        let dismissed = expectation(description: "The stale confirmation was dismissed")
+        let observation = helper.$helperConfirmation.dropFirst().first { $0 == nil }.sink { _ in dismissed.fulfill() }
+        defer { observation.cancel() }
+        container.libraryManager.hideLibrary(libraryId: library.id)
+        await fulfillment(of: [dismissed], timeout: 3)
+        helper.applyHelperConfiguration(ticket)
+        XCTAssertNil(serverRepository.getDSReaderHelper(for: server.id)?.configurationData)
+        guard case .failure(.stale) = helper.helperState else { return XCTFail("Expected a stale configuration") }
+    }
+
+    func testOpeningHelperInstructionsCancelsTheDownloadAndPreservesTheDraft() async throws {
+        let loader = installControlledHelperLoader()
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-instructions")
+        try installServerForHelperSync(server)
+        let helper = DSReaderHelperConfigurationViewModel(container: container, serverID: server.id)
+        helper.resume()
+        helper.setPortDraft("9090")
+        let download = try XCTUnwrap(helper.connectDSReader())
+        let request = try await loader.nextRequest()
+
+        // A sheet can be presented without the underlying form receiving onDisappear.
+        helper.instructionPresented = true
+        try request.succeed(servicePort: 9191)
+        await download.value
+        XCTAssertNil(helper.helperConfirmation)
+        helper.instructionPresented = false
+        XCTAssertEqual(helper.portStr, "9090")
+        XCTAssertNil(helper.helperConfirmation)
+        XCTAssertEqual(serverRepository.getDSReaderHelper(for: server.id)?.port, 8080)
     }
 
     func testHelperCredentialsPortAndDeletionInvalidateTheRequestOrCandidate() async throws {
@@ -815,5 +925,25 @@ private final class ControlledHelperLoader {
             receivedRequest = nil
         }
         return try XCTUnwrap(requests.isEmpty ? nil : requests.removeFirst())
+    }
+}
+
+
+private final class DeferredProbeURLProtocol: URLProtocol, @unchecked Sendable {
+    static var onStart: ((DeferredProbeURLProtocol) -> Void)?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { Self.onStart?(self) }
+    override func stopLoading() {}
+
+    func finish(defaultLibrary: String) {
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                             headerFields: ["Content-Type": "application/json"]) else { return }
+        let data = Data(#"{"default_library":"\#(defaultLibrary)","library_map":{"\#(defaultLibrary)":"Library"}}"#.utf8)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
     }
 }

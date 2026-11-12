@@ -913,8 +913,15 @@ final class CalibreOnboardingUITests: XCTestCase {
         waitForEnabled(connectButton)
         connectButton.tap()
         element("screen.browse.book-list")
+        waitForHittable(app.navigationBars["Fixture"].buttons.element(boundBy: 0))
         back()
-        app.tabBars.buttons["Settings"].tap()
+        let browser = app.navigationBars["Library Browser"]
+        if !browser.waitForExistence(timeout: 3) { back() }
+        waitForHittable(browser)
+        let settings = app.tabBars.buttons["Settings"]
+        settings.tap()
+        if !app.navigationBars["Settings"].waitForExistence(timeout: 3) { settings.tap() }
+        waitForHittable(app.navigationBars["Settings"])
         element(serverName).tap()
         app.buttons["DSReader Helper"].firstMatch.tap()
 
@@ -953,6 +960,36 @@ final class CalibreOnboardingUITests: XCTestCase {
         try configureFixture("hold", environmentKey: control)
         download.tap()
         try configureFixture("wait", environmentKey: control)
+        instructions.tap()
+        let closeInstructions = element("server.helper.instructions.close")
+        try configureFixture("release", environmentKey: control)
+        closeInstructions.tap()
+        XCTAssertTrue(dictionary.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(confirmation.exists)
+        XCTAssertFalse(app.buttons["Cancel Download"].exists)
+
+        app.buttons["Increase plugin service port"].tap()
+        let draft = String(originalPort + 2)
+        XCTAssertEqual(port.value as? String, draft)
+        instructions.tap()
+        element("Instructions on setting DSReader Helper plugin")
+        element("server.helper.instructions.close").tap()
+        XCTAssertEqual(port.value as? String, draft)
+
+        element("server.helper.count-pages").tap()
+        XCTAssertTrue(app.navigationBars["Count Pages Columns"].waitForExistence(timeout: 10))
+        back()
+        XCTAssertEqual(port.value as? String, draft)
+        element("server.helper.goodreads").tap()
+        XCTAssertTrue(app.navigationBars["Goodreads Sync Profiles"].waitForExistence(timeout: 10))
+        back()
+        XCTAssertEqual(port.value as? String, draft)
+        XCTAssertFalse(confirmation.exists)
+        app.buttons["Decrease plugin service port"].tap()
+
+        try configureFixture("hold", environmentKey: control)
+        download.tap()
+        try configureFixture("wait", environmentKey: control)
         app.buttons["Cancel Download"].tap()
         try configureFixture("release", environmentKey: control)
         element("Download cancelled.")
@@ -983,6 +1020,87 @@ final class CalibreOnboardingUITests: XCTestCase {
         port.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
         XCTAssertEqual(port.value as? String, String(originalPort + 1))
         waitForEnabled(download)
+    }
+
+    func testSettingsAddsEditsAndRestoresTheSameServer() throws {
+        let control = "YABR_HELPER_UI_CONTROL_URL"
+        try XCTSkipIf(ProcessInfo.processInfo.environment[control] == nil,
+                      "Requires the isolated server settings loopback fixture")
+        try configureFixture("release-summary", environmentKey: control)
+        let originalName = "SC2 Alpha"
+        let newName = "SC2 Beta"
+        element("welcome.browse").tap()
+        app.tabBars.buttons["Settings"].tap()
+        element("Connect to a new server").tap()
+        submitConnection(name: originalName, url: singleURL)
+        let add = element("server.connection.confirm")
+        waitForEnabled(add)
+        XCTAssertEqual(add.label, "Add")
+        add.tap()
+
+        element(originalName).tap()
+        XCTAssertTrue(app.navigationBars[originalName].waitForExistence(timeout: 10), app.debugDescription)
+        app.buttons["Modify Configuration"].firstMatch.tap()
+        element("server.connection.form")
+        element("server.connection.field.Name.clear").tap()
+        let name = app.textFields["Name Your Server"]
+        typeConnectionField(newName, into: name, clearID: "server.connection.field.Name.clear")
+        replaceURL("http://127.0.0.1:1")
+        element("server.connection.connect").tap()
+        waitForEnabled(element("server.connection.retry"))
+        XCTAssertFalse(element("server.connection.confirm").isEnabled)
+        element("server.connection.edit").tap()
+        XCTAssertEqual(name.value as? String, newName)
+
+        var address = try XCTUnwrap(URLComponents(string: singleURL))
+        address.host = "localhost"
+        let updatedAddress = try XCTUnwrap(address.string)
+        replaceURL(updatedAddress)
+        element("server.connection.connect").tap()
+        let update = element("server.connection.confirm")
+        waitForEnabled(update)
+        XCTAssertEqual(update.label, "Update")
+        update.tap()
+        waitForHittable(app.navigationBars[newName])
+        back()
+        waitForHittable(app.navigationBars["Settings"])
+        element(newName).tap()
+        waitForHittable(app.navigationBars[newName])
+
+        try configureFixture("hold-summary", environmentKey: control)
+        let refresh = app.buttons["Refresh Server"]
+        waitForEnabled(refresh)
+        waitForHittable(refresh)
+        refresh.tap()
+        try configureFixture("wait-summary", environmentKey: control)
+        let library = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "server.detail.library.")).firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 10), app.debugDescription)
+        library.swipeLeft()
+        let delete = app.buttons["Delete"].firstMatch
+        if delete.waitForExistence(timeout: 2) { delete.tap() }
+        let restore = element("Restore Hidden Libraries")
+        waitForEnabled(restore)
+        restore.tap()
+        XCTAssertTrue(app.navigationBars["Restore Hidden Libraries"].waitForExistence(timeout: 10), app.debugDescription)
+        element("Fixture").tap()
+        let apply = app.buttons["Restore Selected Libraries"]
+        waitForEnabled(apply)
+        apply.tap()
+        try configureFixture("release-summary", environmentKey: control)
+        XCTAssertTrue(app.navigationBars[newName].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(library.waitForExistence(timeout: 10), app.debugDescription)
+        capture("sc2-restored-library-on-edited-server")
+        back()
+        element(newName)
+        XCTAssertFalse(app.staticTexts[originalName].exists)
+
+        app.terminate()
+        app.launch()
+        element("welcome.browse").tap()
+        app.tabBars.buttons["Settings"].tap()
+        element(newName).tap()
+        XCTAssertTrue(app.navigationBars[newName].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(library.waitForExistence(timeout: 10), app.debugDescription)
     }
 
     func testConnectionRecoveryKeepsActionsVisibleAndUsesEditedConfiguration() throws {
@@ -1875,21 +1993,35 @@ final class CalibreOnboardingUITests: XCTestCase {
 
     private func connect(name: String, url: String) {
         element("welcome.calibre").tap()
+        submitConnection(name: name, url: url)
+    }
+
+    private func submitConnection(name: String, url: String) {
         element("server.connection.form")
-        let nameField = app.textFields["Name Your Server"]
-        nameField.tap()
-        nameField.typeText(name)
+        typeConnectionField(name, into: app.textFields["Name Your Server"], clearID: "server.connection.field.Name.clear")
         replaceURL(url)
         element("server.connection.connect").tap()
         element("server.connection.result")
+    }
+
+    private func typeConnectionField(_ value: String, into field: XCUIElement, clearID: String) {
+        field.tap()
+        field.typeText(value)
+        if field.value as? String != value {
+            element(clearID).tap()
+            field.tap()
+            for character in value {
+                field.typeText(String(character))
+            }
+        }
+        XCTAssertEqual(field.value as? String, value)
     }
 
     private func replaceURL(_ url: String) {
         let field = app.textFields["Internal Server Address"]
         XCTAssertTrue(field.waitForExistence(timeout: 10), app.debugDescription)
         element("server.connection.field.URL.clear").tap()
-        field.tap()
-        field.typeText(url)
+        typeConnectionField(url, into: field, clearID: "server.connection.field.URL.clear")
     }
 
     @discardableResult private func element(_ id: String) -> XCUIElement {
@@ -1901,6 +2033,11 @@ final class CalibreOnboardingUITests: XCTestCase {
     private func waitForEnabled(_ element: XCUIElement) {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed, app.debugDescription)
+    }
+
+    private func waitForHittable(_ element: XCUIElement) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, app.debugDescription)
     }
 
     private func back() {

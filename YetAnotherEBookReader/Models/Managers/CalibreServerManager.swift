@@ -18,6 +18,8 @@ class CalibreServerManager {
     private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
     private let serverBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServer]>()
     private let serverInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServerInfo]>()
+    private let helperConfigurationBroadcaster = ManagerAsyncBroadcaster<String>()
+    @MainActor private var probeIDs: [String: UUID] = [:]
     typealias HelperConfigurationLoader = (CalibreServerService, DSReaderHelperConfigurationRequest) async throws
         -> DSReaderHelperConfigurationPayload
     private let loadHelperConfiguration: HelperConfigurationLoader
@@ -164,12 +166,17 @@ class CalibreServerManager {
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         return serverRepository.getDSReaderHelper(for: server.id)
     }
+
+    func helperConfigurationUpdates() -> AsyncStream<String> {
+        helperConfigurationBroadcaster.stream()
+    }
     
     @MainActor
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper) {
         cancelHelperConfiguration(serverID: serverId)
         do {
             try serverRepository.saveDSReaderHelper(dsreaderHelper, for: serverId)
+            helperConfigurationBroadcaster.send(serverId)
         } catch {
             logger.error("Failed to save DSReaderHelper: \(error.localizedDescription)")
         }
@@ -210,14 +217,20 @@ class CalibreServerManager {
             libraryMap: sameConnection ? previousInfo?.libraryMap ?? [:] : [:],
             request: request
         )
-        self.calibreServerInfoStaging[request.id] = pendingInfo
-
-        guard let info = self.calibreServerInfoStaging[request.id] else { return nil }
-        
         guard let calibreServerService = container?.calibreServerService else { return nil }
-        let newServerInfo = await calibreServerService.probeServerReachability(serverInfo: info)
-        
-        guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return nil }
+        let probeID = UUID()
+        probeIDs[request.id] = probeID
+        calibreServerInfoStaging[request.id] = pendingInfo
+        let newServerInfo = await calibreServerService.probeServerReachability(serverInfo: pendingInfo)
+
+        guard probeIDs[request.id] == probeID else { return nil }
+        probeIDs.removeValue(forKey: request.id)
+        if Task.isCancelled {
+            // Restore a settled snapshot when a cancelled draft never replaced it.
+            calibreServerInfoStaging[request.id] = previousInfo?.probing == false ? previousInfo : nil
+            return nil
+        }
+        var serverInfo = pendingInfo
         serverInfo.probing = false
         serverInfo.errorMsg = newServerInfo.errorMsg
         serverInfo.error = newServerInfo.error
@@ -333,6 +346,11 @@ class CalibreServerManager {
     }
 
     @MainActor
+    func validateHelperConfigurationRequest(_ ticket: DSReaderHelperConfigurationTicket) throws {
+        _ = try currentHelperOperation(for: ticket)
+    }
+
+    @MainActor
     func applyHelperConfiguration(_ candidate: DSReaderHelperConfigurationCandidate) throws -> CalibreServerDSReaderHelper {
         let ticket = candidate.ticket
         defer { cancelHelperConfiguration(ticket) }
@@ -425,6 +443,7 @@ class CalibreServerManager {
             throw DSReaderHelperConfigurationError.couldNotSave
         }
         guard saved else { throw DSReaderHelperConfigurationError.stale }
+        helperConfigurationBroadcaster.send(candidate.ticket.serverID)
         return helper
     }
 }

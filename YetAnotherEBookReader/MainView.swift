@@ -173,9 +173,13 @@ struct MainView: View {
             NavigationView {
                 AddModServerView(
                     viewModel: viewModel.welcomeServerViewModel,
-                    server: .constant(nil),
-                    isActive: $viewModel.welcomeServerPresenting,
-                    browseLibrary: viewModel.browseConnectedLibrary
+                    browseAfterAdding: true,
+                    onConfirm: { confirmation in
+                        guard case .added(let library?) = confirmation else { return }
+                        viewModel.browseConnectedLibrary(library)
+                    },
+                    onFinish: { viewModel.welcomeServerPresenting = false },
+                    onCancel: { viewModel.welcomeServerPresenting = false }
                 )
                 .navigationTitle("Connect to Calibre")
             }

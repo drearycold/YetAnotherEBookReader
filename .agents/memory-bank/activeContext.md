@@ -2,10 +2,71 @@
 
 ## Current Focus
 
-**Server Settings and DSReader Helper Configuration (SC).** SC1 is implemented
-on `codex/server-configuration-sc1` from main `268f6923`. RH1–RH3 is complete
-through PR #147. The earlier PDF investigation remains under Current Branch
-Notes.
+**Server Settings and DSReader Helper Configuration (SC).** SC2 is implemented
+on `codex/server-configuration-sc2`. SC1 merged through PR #148. RH1–RH3 is
+complete through PR #147. The earlier PDF investigation remains under Current
+Branch Notes.
+
+## Server Configuration SC2 (2026-11-12)
+
+`codex/server-configuration-sc2` starts at `13a4a65c` on main, which includes
+SC1 from PR #148. Three main-actor models replace `ServerViewModel`.
+
+- `ServerConnectionEditorViewModel` owns the add or canonical server UUID
+  edit draft and its probe. Welcome and Settings have separate instances.
+  An edit observes its target's connection and reachability while open.
+  Probe library results belong to that attempt. A changed or deleted target
+  invalidates the result while retaining the draft. Retry and Edit
+  Connection retain input, and ending a route retires its probe. The view
+  returns a typed confirmation to the route owner. Settings uses its
+  existing edit-save action. The editor route leaves after the probe result
+  sheet closes on iOS 16 and later. On iOS 15 the same result controls live
+  inside the editor. This avoids the unresponsive underlying navigation
+  reproduced after nested sheets on iPhone 7. Welcome waits for its own
+  sheet dismissal to open Browse.
+- `ServerDetailViewModel` publishes an equatable snapshot for a single
+  server. Its detail and hidden-library pages each own their visibility.
+  A pushed editor or Helper page can stop the detail observer while its own
+  model remains active. Root navigation links keep the active destination
+  outside dynamic rows. Stable server and library IDs keep navigation
+  attached to the same entity when content changes. The outgoing destination
+  remains available through the pop animation. The Restore action updates
+  the library manager and the snapshot.
+- `DSReaderHelperConfigurationViewModel` owns one server's draft and SC1
+  ticket. It reads saved configuration and observes the relevant
+  manager events while visible. Pushing plugin details or opening Help clears
+  an outstanding ticket and keeps the draft. The Help sheet explicitly pauses
+  the underlying form. A full pop ends the route, so reopening starts from
+  saved settings. A live saved update
+  refreshes the plugin display and preserves an edited port. It can replace
+  an untouched port with the new saved value. The SC1 confirmation and
+  conditional Realm write still apply. The manager now rejects older
+  overlapping probes for the same server and address role.
+
+The 125 focused model, manager, repository and Helper network tests and
+both Release UI journeys passed on iPhone 17 / iOS 26.5 and iPhone 7 /
+iOS 15.5. The Settings journey adds a server, recovers from a failed
+edit probe, saves a different address and name on the same route, then
+hides a syncing library and restores it. The journey relaunches the app
+and reopens that same server. iOS 15 uses hosted controls so
+the Refresh button follows the live server snapshot and Restore follows
+the current selection.
+
+Both Release Helper journeys passed Welcome-to-Browse, a safe 401,
+port retry and validation, rejection and Update, cancellation and
+reopening. They retain a dirty draft through Help, Count Pages and
+Goodreads. A controlled response reproduced a late confirmation during
+Help before the fix. Releasing it while Help is open now returns to the
+draft without a confirmation. The tests use the loopback fixture in
+`YetAnotherEBookReaderUITests/Fixtures/helper_server.py`. Final iOS Release
+and Mac Catalyst builds, project validation and diff checks passed.
+Evidence is in `/tmp/YabrSC2`. This matrix covers the two iPhone simulators.
+The full suite, iPad, Catalyst window interaction and the real Calibre GUI
+plugin were outside this run.
+
+SC3 owns the save-result and subsequent refresh contract for connection
+edits, library hide/restore and Helper apply/retry. Keep the existing
+repository boundaries and SC1 request and fallback rules.
 
 ## Server Configuration SC1 (2026-11-11)
 
@@ -66,12 +127,6 @@ phones. It uses `YetAnotherEBookReaderUITests/Fixtures/helper_server.py`
 and an isolated app bundle ID. The real Calibre GUI plugin and Catalyst
 window interaction remain outside this matrix. Results, screenshots and
 reproduction logs are in `/tmp/YabrSC1`.
-
-SC2 should give the connection editor, server detail and Helper separate
-presentation models, stable routes and scoped observations. SC3 should
-make save outcomes and later refresh consistent across connection edits,
-library hide/restore and Helper apply/retry. Preserve the P2/P4 connection
-and browse handoff and the existing reader, persistence and network layers.
 
 ## Reading History RH3 (2026-11-11)
 
