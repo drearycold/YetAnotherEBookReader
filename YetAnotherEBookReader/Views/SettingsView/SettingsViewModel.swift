@@ -22,7 +22,8 @@ final class SettingsViewModel: ObservableObject {
             updateServerList()
         }
     }
-    @Published var selectedServer: String? = nil
+    @Published private(set) var selectedServer: String?
+    @Published private(set) var displayedServerID: String?
     @Published var addServerActive = false
     @Published var alertItem: AlertItem?
     @Published private(set) var serverInfoStaging = [String: CalibreServerInfo]()
@@ -80,6 +81,19 @@ final class SettingsViewModel: ObservableObject {
             }
             .map { $0.value }
         sortServerList()
+        if let selectedServer, !serverList.contains(where: { $0.id == selectedServer }) {
+            dismissServerDetail()
+        }
+    }
+
+    func openServerDetail(_ serverID: String) {
+        guard serverList.contains(where: { $0.id == serverID }) else { return }
+        displayedServerID = serverID
+        selectedServer = serverID
+    }
+
+    func dismissServerDetail() {
+        selectedServer = nil
     }
     
     private func sortServerList() {

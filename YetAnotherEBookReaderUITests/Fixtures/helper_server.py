@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loopback fixture for CalibreOnboardingUITests.testHelperConfigurationRetryConfirmationAndPageExit."""
+"""Loopback fixture for the server settings and Helper UI journeys."""
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +18,7 @@ class HelperFixture(BaseHTTPRequestHandler):
     base_port = 18091
     lock = threading.Lock()
     held = None
+    held_summary = None
 
     def do_GET(self):
         url = urlsplit(self.path)
@@ -48,6 +49,14 @@ class HelperFixture(BaseHTTPRequestHandler):
         elif url.path == '/ajax/library-info':
             self.json_reply({'default_library': 'Fixture', 'library_map': {'Fixture': 'Fixture'}})
         elif url.path.startswith('/ajax/search'):
+            if parse_qs(url.query).get('num') == ['1']:
+                with self.lock:
+                    held = type(self).held_summary
+                if held is not None:
+                    held.arrived.set()
+                    if not held.released.wait(30):
+                        self.reply(504)
+                        return
             self.json_reply({
                 'total_num': 0, 'sort_order': 'asc', 'num_books_without_search': 0, 'offset': 0,
                 'num': 0, 'sort': 'title', 'base_url': '', 'library_id': 'Fixture',
@@ -60,15 +69,20 @@ class HelperFixture(BaseHTTPRequestHandler):
 
     def configure(self, mode):
         cls = type(self)
+        if mode.endswith('-summary'):
+            mode = mode.removesuffix('-summary')
+            slot = 'held_summary'
+        else:
+            slot = 'held'
         with self.lock:
-            held = cls.held
+            held = getattr(cls, slot)
             if mode == 'hold':
                 if held is not None:
                     held.released.set()
-                cls.held = HeldResponse()
+                setattr(cls, slot, HeldResponse())
             elif mode == 'release' and held is not None:
                 held.released.set()
-                cls.held = None
+                setattr(cls, slot, None)
         if mode == 'wait':
             self.reply(200 if held is not None and held.arrived.wait(8) else 408)
         elif mode in ('hold', 'release'):

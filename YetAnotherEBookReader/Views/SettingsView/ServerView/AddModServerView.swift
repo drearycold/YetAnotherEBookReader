@@ -6,31 +6,65 @@
 //
 
 import SwiftUI
-import OSLog
 
 struct AddModServerView: View {
-    @Environment(\.appContainer) var container
-    @Environment(\.openURL) var openURL
-    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    @Environment(\.openURL) private var openURL
 
-    @ObservedObject var viewModel: ServerViewModel
-    @Binding var server: CalibreServer?
-    @Binding var isActive: Bool
-    var browseLibrary: ((CalibreLibrary) -> Void)? = nil
-    
-    @State private var hasLoadedForm = false
-    @State private var localLibraryImportBooksPicked = [URL]()
-    @State private var localLibraryImportPresenting = false
-    
+    @ObservedObject var viewModel: ServerConnectionEditorViewModel
+    var browseAfterAdding = false
+    var onConfirm: (ServerConnectionEditorViewModel.Confirmation) -> Void = { _ in }
+    let onFinish: () -> Void
+    var onCancel: (() -> Void)?
+    @State private var confirmed = false
+
+    private var usesResultSheet: Bool {
+        if #available(iOS 16, *) { return true }
+        return false
+    }
+
     var body: some View {
+        ZStack {
+            if viewModel.resultPresented && !usesResultSheet {
+                // iOS 15 can leave the underlying navigation unresponsive after a nested sheet closes.
+                serverCalibreInfoSheetView()
+            } else {
+                editorForm
+            }
+        }
+        .onAppear(perform: viewModel.startEditing)
+        .onDisappear {
+            if !viewModel.resultPresented { viewModel.endEditing() }
+        }
+        .sheet(isPresented: Binding(
+            get: { usesResultSheet && viewModel.resultPresented },
+            set: { viewModel.resultPresented = $0 }
+        ), onDismiss: finishResult) {
+            serverCalibreInfoSheetView()
+        }
+        .alert(item: $viewModel.alertItem) { item in
+            if item.id == "Exist" {
+                return Alert(
+                    title: Text(viewModel.isAdding ? "Add Server Error" : "Modify Server Error"),
+                    message: Text(item.msg ?? ""),
+                    dismissButton: .cancel(){
+                        viewModel.alertItem = nil
+                    }
+                )
+            }
+            return Alert(title: Text("Unknown Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
+                item.action?()
+            })
+        }
+    }
+
+    private var editorForm: some View {
         Form {
-            Section(
-                header: Text("Basic"),
-                footer: Text(viewModel.calibreServerUrlWelformed)
-                        .font(.caption).foregroundColor(.red)
-            ) {
-                textFieldView(label: "Name", title: "Name Your Server", text: $viewModel.calibreServerName, original: server?.name ?? "")
-                textFieldView(label: "URL", title: "Internal Server Address", text: $viewModel.calibreServerUrl, original: server?.baseUrl ?? "")
+            if !viewModel.editTargetAvailable {
+                Text("This server is no longer available.")
+            }
+            Section(header: Text("Basic")) {
+                textFieldView(label: "Name", title: "Name Your Server", text: $viewModel.draft.name, original: viewModel.originalServer?.name ?? "")
+                textFieldView(label: "URL", title: "Internal Server Address", text: $viewModel.draft.internalAddress, original: viewModel.originalServer?.baseUrl ?? "")
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
@@ -51,25 +85,25 @@ struct AddModServerView: View {
                     }
                 }
             ) {
-                Toggle("Internet Accessible", isOn: $viewModel.calibreServerSetPublicAddress)
-                textFieldView(label: "Address", title: "Public Server Address", text: $viewModel.calibreServerUrlPublic, original: server?.publicUrl ?? "")
+                Toggle("Internet Accessible", isOn: $viewModel.draft.usePublicAddress)
+                textFieldView(label: "Address", title: "Public Server Address", text: $viewModel.draft.publicAddress, original: viewModel.originalServer?.publicUrl ?? "")
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                .disabled(!viewModel.calibreServerSetPublicAddress)
+                .disabled(!viewModel.draft.usePublicAddress)
             }
             Section(header: Text("Authentication")) {
-                Toggle("Require", isOn: $viewModel.calibreServerNeedAuth)
+                Toggle("Require", isOn: $viewModel.draft.requiresAuthentication)
                 
                 Group {
-                    textFieldView(label: "Username", title: "Username", text: $viewModel.calibreUsername, original: server?.username ?? "")
+                    textFieldView(label: "Username", title: "Username", text: $viewModel.draft.username, original: viewModel.originalServer?.username ?? "")
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
-                    secureFieldView(label: "Password", title: "", text: $viewModel.calibrePassword, visible: $viewModel.calibrePasswordVisible, original: server?.password ?? "")
+                    secureFieldView(label: "Password", title: "", text: $viewModel.draft.password, visible: $viewModel.passwordVisible, original: viewModel.originalServer?.password ?? "")
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
-                }.disabled(!viewModel.calibreServerNeedAuth)
+                }.disabled(!viewModel.draft.requiresAuthentication)
             }
             
             Section(
@@ -78,21 +112,21 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    if let server = server, container.serverManager.isServerProbing(server: server) {
+                    if viewModel.isBusy {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
-                        Text(viewModel.calibreServerInfo.map { ServerConnectionStatus(info: $0).title } ?? "Unknown")
+                        Text(viewModel.serverInfo.map { ServerConnectionStatus(info: $0).title } ?? "Unknown")
                             .lineLimit(2)
                     }
 
-                    if let server = server, let reachable = container.serverManager.isServerReachable(server: server, isPublic: false) {
+                    if let reachable = viewModel.reachability.privateAddress {
                         Image(
                             systemName: reachable ? "flag.circle" : "flag.slash.circle"
                         ).foregroundColor(reachable ? .green : .red)
                     }
 
-                    if let server = server, let reachable = container.serverManager.isServerReachable(server: server, isPublic: true) {
+                    if let reachable = viewModel.reachability.publicAddress {
                         Image(
                             systemName: reachable ? "flag" : "flag.slash"
                         ).foregroundColor(reachable ? .green : .red)
@@ -100,53 +134,28 @@ struct AddModServerView: View {
                 },
                 footer: HStack(alignment: .center, spacing: 8) {
                     Spacer()
-                    Text("Got \(viewModel.libraryList.count) Library(s) in Server")
+                    Text("Got \(viewModel.knownLibraryNames.count) Library(s) in Server")
                 }
             ) {
-                if viewModel.libraryList.isEmpty {
+                if viewModel.knownLibraryNames.isEmpty {
                     Text("No Library")
                 } else {
-                    ForEach(viewModel.libraryList, id: \.self) { name in
+                    ForEach(viewModel.knownLibraryNames, id: \.self) { name in
                         Text(name).font(.callout)
                     }
                 }
             }
         }
         .accessibilityIdentifier("server.connection.form")
-        .onAppear {
-            guard !hasLoadedForm else { return }
-            hasLoadedForm = true
-            viewModel.resetStates(server: server)
-        }
-        .sheet(isPresented: $viewModel.serverCalibreInfoPresenting, onDismiss: {
-            viewModel.dataAction = nil
-            viewModel.disableProbeServerCancellable()
-        }, content: {
-            serverCalibreInfoSheetView()
-        })
-        .alert(item: $viewModel.alertItem) { item in
-            if item.id == "Exist" {
-                return Alert(
-                    title: Text("\(viewModel.dataAction ?? "") Server Error"),
-                    message: Text(item.msg ?? ""),
-                    dismissButton: .cancel(){
-                        viewModel.alertItem = nil
-                    }
-                )
-            }
-            return Alert(title: Text("Unknown Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
-                item.action?()
-            })
-        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
-                    viewModel.processInputAction(server: server) {}
+                    viewModel.connect()
                 }) {
                     if viewModel.isProbing {
                         ProgressView().progressViewStyle(.circular)
                     } else {
-                        if browseLibrary != nil {
+                        if browseAfterAdding {
                             Text("Connect")
                         } else {
                             Image(systemName: "square.and.arrow.down")
@@ -154,25 +163,25 @@ struct AddModServerView: View {
                     }
                 }
                 .accessibilityIdentifier("server.connection.connect")
-                .disabled(viewModel.isProbing || server.map { container.serverManager.isServerProbing(server: $0) } == true)
+                .disabled(viewModel.isBusy || !viewModel.editTargetAvailable)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
-                    if browseLibrary != nil {
-                        viewModel.disableProbeServerCancellable()
-                        isActive = false
+                    if browseAfterAdding {
+                        viewModel.endEditing()
+                        onCancel?()
                     } else {
-                        viewModel.resetStates(server: server)
+                        viewModel.resetDraft()
                     }
                 }) {
-                    if browseLibrary != nil {
+                    if browseAfterAdding {
                         Text("Cancel")
                     } else {
                         Image(systemName: "arrow.counterclockwise")
                     }
                 }
                 .accessibilityIdentifier("server.connection.cancel")
-                .disabled(browseLibrary == nil && (viewModel.isProbing || server.map { container.serverManager.isServerProbing(server: $0) } == true))
+                .disabled(!browseAfterAdding && viewModel.isBusy)
             }
         }
     }
@@ -193,73 +202,71 @@ struct AddModServerView: View {
             Section {
                 if !viewModel.isProbing && !viewModel.canConfirmServer {
                     Button("Edit Connection") {
-                        viewModel.editConnection()
+                        viewModel.dismissResult()
                     }
                     .accessibilityIdentifier("server.connection.edit")
                 }
                 if !viewModel.canConfirmServer {
                     Button("Retry") {
-                        viewModel.processInputAction(server: server) {}
+                        viewModel.connect()
                     }
                     .accessibilityIdentifier("server.connection.retry")
                     .disabled(viewModel.isProbing)
                 }
                 Button(action: {
-                    viewModel.disableProbeServerCancellable()
-                    viewModel.serverCalibreInfoPresenting = false
+                    viewModel.dismissResult()
                 }) {
                     Text("Cancel")
                 }
                 .accessibilityIdentifier("server.connection.result.cancel")
                 
                 Button(action: {
-                    if viewModel.dataAction == "Add" {
-                        viewModel.addServerConfirmed(serverBinding: $server, isActiveBinding: $isActive, browseLibrary: browseLibrary)
-                    } else if viewModel.dataAction == "Mod" {
-                        viewModel.modServerConfirmed(serverBinding: $server, isActiveBinding: $isActive)
+                    if let confirmation = viewModel.confirm(browseAfterAdding: browseAfterAdding) {
+                        onConfirm(confirmation)
+                        if usesResultSheet {
+                            confirmed = true
+                        } else {
+                            viewModel.dismissResult()
+                            onFinish()
+                            return
+                        }
                     }
-                    viewModel.serverCalibreInfoPresenting = false
+                    viewModel.dismissResult()
                 }) {
-                    if viewModel.dataAction == "Add" {
-                        Text(browseLibrary == nil ? "Add" : "Add and Browse Library")
-                    } else if viewModel.dataAction == "Mod" {
-                        Text("Update")
+                    if viewModel.isAdding {
+                        Text(browseAfterAdding ? "Add and Browse Library" : "Add")
                     } else {
-                        Text("OK")
+                        Text("Update")
                     }
                 }
                 .accessibilityIdentifier("server.connection.confirm")
-                .disabled(!viewModel.canConfirmServer || (browseLibrary != nil && viewModel.libraryToBrowse == nil))
+                .disabled(!viewModel.canConfirmServer || (browseAfterAdding && viewModel.libraryToBrowse == nil))
             }
-            
+
             if viewModel.canConfirmServer {
-                Section(header: Text(browseLibrary == nil ? "Library List" : "Library to Browse"), footer: Text(
-                    browseLibrary != nil && viewModel.librariesToAdd.count > 1
-                        ? "Choose a library to browse. All libraries will be added." : ""
-                )) {
-                    if let serverInfo = viewModel.calibreServerInfo,
-                       serverInfo.errorMsg == "Success" {
-                        ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
-                            if browseLibrary != nil && viewModel.librariesToAdd.count > 1 {
-                                let libraryID = CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id
-                                Button {
-                                    viewModel.browseLibraryID = libraryID
-                                } label: {
-                                    HStack {
-                                        libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
-                                        Image(systemName: viewModel.browseLibraryID == libraryID ? "checkmark.circle.fill" : "circle")
-                                    }
-                                    .contentShape(Rectangle())
+                let libraries = viewModel.librariesFromProbe
+                let requiresSelection = browseAfterAdding && libraries.count > 1
+                Section(
+                    header: Text(browseAfterAdding ? "Library to Browse" : "Library List"),
+                    footer: Text(requiresSelection ? "Choose a library to browse. All libraries will be added." : "")
+                ) {
+                    ForEach(libraries, id: \.key) { library in
+                        if requiresSelection {
+                            Button {
+                                viewModel.browseLibraryID = library.id
+                            } label: {
+                                HStack {
+                                    libraryInfoRow(library)
+                                    Image(systemName: viewModel.browseLibraryID == library.id ? "checkmark.circle.fill" : "circle")
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("server.connection.library.\(libraryEntry.key)")
-                                .accessibilityAddTraits(viewModel.browseLibraryID == libraryID ? .isSelected : [])
-                            } else {
-                                libraryInfoRow(serverInfo: serverInfo, key: libraryEntry.key, name: libraryEntry.value)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("server.connection.library.\(library.key)")
+                            .accessibilityAddTraits(viewModel.browseLibraryID == library.id ? .isSelected : [])
+                        } else {
+                            libraryInfoRow(library)
                         }
-                    } else {
-                        Text("Cannot Fetch Library List")
                     }
                 }
             }
@@ -267,18 +274,21 @@ struct AddModServerView: View {
         .accessibilityIdentifier("server.connection.result")
     }
 
-    private func libraryInfoRow(serverInfo: CalibreServerInfo, key: String, name: String) -> some View {
+    private func finishResult() {
+        viewModel.dismissResult()
+        guard confirmed else { return }
+        confirmed = false
+        onFinish()
+    }
+
+    private func libraryInfoRow(_ library: CalibreLibrary) -> some View {
         HStack {
-            Text(name)
+            Text(library.name)
             Spacer()
-            if let info = container.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: key, name: name).id] {
-                Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
-            } else {
-                Text("Probing")
-            }
+            Text(viewModel.libraryProbeStatus(for: library.id))
         }
     }
-    
+
     @ViewBuilder
     private func textFieldView(label: String, title: String, text: Binding<String>, original: String, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping () -> Void = {}) -> some View {
         HStack(spacing: 4) {
@@ -333,22 +343,13 @@ struct AddModServerView: View {
 
 struct AddModServerView_Previews: PreviewProvider {
     static private var container = AppContainer(mock: true)
-    
-    @State static private var server: CalibreServer? = CalibreServer(uuid: .init(), name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
-    @State static private var addServerActive = false
 
     static var previews: some View {
-        let viewModel = ServerViewModel(container: container, server: server)
         NavigationView {
-            AddModServerView(viewModel: viewModel, server: $server, isActive: $addServerActive)
-                .environment(\.appContainer, container)
-                .onAppear() {
-                    if let server = server {
-                        container.serverManager.calibreServers[server.id] = server
-                        let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
-                        container.libraryManager.calibreLibraries[library.id] = library
-                    }
-                }
-        }.navigationViewStyle(StackNavigationViewStyle())
+            AddModServerView(
+                viewModel: ServerConnectionEditorViewModel(container: container, mode: .add),
+                onFinish: {}
+            )
+        }.navigationViewStyle(.stack)
     }
 }

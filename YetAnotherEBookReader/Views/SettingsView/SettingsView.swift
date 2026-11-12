@@ -10,13 +10,13 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.appContainer) var container
     @ObservedObject var viewModel: SettingsViewModel
-    @StateObject private var addServerViewModel: ServerViewModel
+    @StateObject private var addServerEditor: ServerConnectionEditorViewModel
     @StateObject private var statisticsViewModel: ReadingStatisticsViewModel
     
     init(viewModel: SettingsViewModel) {
         self.viewModel = viewModel
         _statisticsViewModel = StateObject(wrappedValue: ReadingStatisticsViewModel(container: viewModel.container))
-        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: viewModel.container, server: nil))
+        _addServerEditor = StateObject(wrappedValue: ServerConnectionEditorViewModel(container: viewModel.container, mode: .add))
     }
     
     var body: some View {
@@ -37,9 +37,8 @@ struct SettingsView: View {
             }) {
                 NavigationLink(
                     destination: AddModServerView(
-                        viewModel: addServerViewModel,
-                        server: .constant(nil),
-                        isActive: $viewModel.addServerActive
+                        viewModel: addServerEditor,
+                        onFinish: { viewModel.addServerActive = false }
                     )
                     .navigationTitle("Add Server"),
                     isActive: $viewModel.addServerActive
@@ -47,26 +46,21 @@ struct SettingsView: View {
                     Text("Connect to a new server")
                 }
                 
-                ForEach(viewModel.serverList, id: \.self) { server in
+                ForEach(viewModel.serverList, id: \.id) { server in
                     let state = viewModel.rowState(for: server)
-                    NavigationLink (
-                        destination: ServerDetailView(
-                            container: container,
-                            server: Binding<CalibreServer>(
-                                get: {
-                                    server
-                                },
-                                set: { [server] newServer in
-                                    viewModel.updateServer(oldServer: server, newServer: newServer)
-                                }
-                            )
-                        ),
-                        tag: server.id,
-                        selection: $viewModel.selectedServer
-                    ) {
-                        serverRowBuilder(server: server, state: state)
+                    Button {
+                        viewModel.openServerDetail(server.id)
+                    } label: {
+                        HStack {
+                            serverRowBuilder(server: server, state: state)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundColor(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .isDetailLink(false)
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier(server.name == "UI Test Server" ? "settings.server.ui-test" : "settings.server.\(server.id)")
                 }
                 .onDelete(perform: { indexSet in
@@ -116,6 +110,7 @@ struct SettingsView: View {
                 NavigationLink("About DSReader", destination: AppInfoView())
             }
         }
+        .background(serverDetailLink)
         .navigationTitle("Settings")
         .accessibilityIdentifier("screen.settings")
         .toolbar {
@@ -130,9 +125,34 @@ struct SettingsView: View {
         .onAppear() {
             viewModel.updateServerList()
         }
+        .onChange(of: viewModel.addServerActive) { active in
+            if !active { addServerEditor.endEditing() }
+        }
         .onChange(of: viewModel.serverListDelete, perform: { value in
             viewModel.updateServerList()
         })
+    }
+
+    private var serverDetailLink: some View {
+        NavigationLink(
+            isActive: Binding(
+                get: { viewModel.selectedServer != nil },
+                set: { if !$0 { viewModel.dismissServerDetail() } }
+            )
+        ) {
+            if let serverID = viewModel.displayedServerID {
+                ServerDetailView(
+                    container: viewModel.container,
+                    serverID: serverID,
+                    onConnectionUpdate: viewModel.updateServer(oldServer:newServer:)
+                )
+                .id(serverID)
+            }
+        } label: {
+            EmptyView()
+        }
+        .isDetailLink(false)
+        .hidden()
     }
     
     @ViewBuilder

@@ -55,7 +55,7 @@ final class MainViewModel: ObservableObject {
     let recentShelfViewModel: RecentShelfViewModel
     let sectionShelfViewModel: SectionShelfViewModel
     let settingsViewModel: SettingsViewModel
-    let welcomeServerViewModel: ServerViewModel
+    let welcomeServerViewModel: ServerConnectionEditorViewModel
     let readerWorkspaceViewModel: ReaderWorkspaceViewModel
     
     init(container: AppContainer, sessionManager: ReadingSessionManager) {
@@ -69,7 +69,7 @@ final class MainViewModel: ObservableObject {
         )
         self.sectionShelfViewModel = SectionShelfViewModel(container: container)
         self.settingsViewModel = SettingsViewModel(container: container)
-        self.welcomeServerViewModel = ServerViewModel(container: container, server: nil)
+        self.welcomeServerViewModel = ServerConnectionEditorViewModel(container: container, mode: .add)
         
         setupSubscriptions()
     }
@@ -147,7 +147,6 @@ final class MainViewModel: ObservableObject {
     func openWelcomeConnection() {
         pendingBrowseLibraryID = nil
         browseLibraryID = nil
-        welcomeServerViewModel.resetStates(server: nil)
         welcomeServerPresenting = true
     }
 
@@ -160,7 +159,7 @@ final class MainViewModel: ObservableObject {
 
     /// Navigate only after both connection sheets have left the screen.
     func completeWelcomeConnection() {
-        welcomeServerViewModel.disableProbeServerCancellable()
+        welcomeServerViewModel.endEditing()
         guard let libraryID = pendingBrowseLibraryID else { return }
         pendingBrowseLibraryID = nil
         guard let library = container.libraryManager.calibreLibraries[libraryID],

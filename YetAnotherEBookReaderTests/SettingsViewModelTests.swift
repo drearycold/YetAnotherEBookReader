@@ -149,140 +149,285 @@ import Combine
         XCTAssertEqual(viewModel.serverList, initialServerList)
     }
 
-    func testServerViewModelProcessInputNormalizesURLAndAllowsBlankPublicURL() {
-        let viewModel = ServerViewModel(container: mockAppContainer, server: nil)
-        viewModel.calibreServerUrl = "example.com"
-        viewModel.calibreServerUrlPublic = ""
+    func testConnectionEditorNormalizesURLAndAllowsBlankPublicURL() async throws {
+        let editor = makeEditor(libraries: [:])
+        editor.startEditing()
+        editor.draft.internalAddress = "example.com"
 
-        viewModel.processInputAction(server: nil) {}
-
-        XCTAssertEqual(viewModel.calibreServerUrl, "http://example.com/")
-        XCTAssertEqual(viewModel.calibreServerUrlPublic, "")
-        XCTAssertTrue(viewModel.serverCalibreInfoPresenting)
+        let probe = try XCTUnwrap(editor.connect())
+        XCTAssertEqual(editor.draft.internalAddress, "http://example.com/")
+        XCTAssertEqual(editor.draft.publicAddress, "")
+        XCTAssertTrue(editor.resultPresented)
+        await probe.value
     }
 
-    func testFailedProbeCannotBeConfirmedAsANewServer() throws {
-        let server = TestFixtures.makeServer()
-        let connection = ServerViewModel(container: mockAppContainer, server: nil)
-        connection.dataAction = "Add"
-        connection.serverCalibreInfoPresenting = true
-        connection.calibreServerInfo = CalibreServerInfo(
-            server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
-            reachable: false, probing: false, errorMsg: "Connection failed",
-            defaultLibrary: "library", libraryMap: ["library": "Library"],
-            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
-        )
-        var savedServer: CalibreServer?
-        var active = true
-
-        connection.addServerConfirmed(
-            serverBinding: Binding(get: { savedServer }, set: { savedServer = $0 }),
-            isActiveBinding: Binding(get: { active }, set: { active = $0 })
-        )
-
+    func testFailedProbeCannotBeConfirmedAsANewServer() async throws {
+        let editor = try await stagedConnection(libraries: ["library": "Library"], reachable: false)
+        XCTAssertNil(editor.confirm())
         XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
         XCTAssertTrue(mockAppContainer.calibreLibraries.isEmpty)
-        XCTAssertNil(savedServer)
-        XCTAssertTrue(active)
+        XCTAssertTrue(editor.resultPresented)
     }
 
-    func testSingleConnectedLibrarySavesAndBrowsesThatLibrary() throws {
-        let connection = try stagedConnection(libraries: ["only": "Only Library"])
-        let expected = try XCTUnwrap(connection.librariesToAdd.first)
-        XCTAssertEqual(connection.libraryToBrowse?.id, expected.id)
-        var browsedLibrary: CalibreLibrary?
-        var active = true
-        connection.addServerConfirmed(serverBinding: .constant(nil),
-            isActiveBinding: Binding(get: { active }, set: { active = $0 }),
-            browseLibrary: { browsedLibrary = $0 })
-
-        XCTAssertFalse(active)
-        XCTAssertEqual(browsedLibrary?.id, expected.id)
+    func testSingleConnectedLibrarySavesAndBrowsesThatLibrary() async throws {
+        let editor = try await stagedConnection(libraries: ["only": "Only Library"])
+        let expected = try XCTUnwrap(editor.librariesFromProbe.first)
+        XCTAssertEqual(editor.libraryToBrowse?.id, expected.id)
+        guard case .added(let browsed)? = editor.confirm(browseAfterAdding: true) else {
+            return XCTFail("Expected a saved server")
+        }
+        XCTAssertEqual(browsed?.id, expected.id)
         XCTAssertEqual(mockAppContainer.libraryRepository.getAllLibraries().first { $0.id == expected.id }?.name, "Only Library")
         XCTAssertNotNil(mockAppContainer.serverRepository.getAllServers().first { $0.id == expected.server.id })
     }
 
-    func testMultipleLibrariesRequireAnExplicitChoiceAndSaveAllLibraries() throws {
-        let connection = try stagedConnection(libraries: ["a": "First Library", "b": "Second Library"])
-        XCTAssertNil(connection.libraryToBrowse)
-        var browsedLibrary: CalibreLibrary?
-        var active = true
-        let binding = Binding(get: { active }, set: { active = $0 })
-        connection.addServerConfirmed(serverBinding: .constant(nil), isActiveBinding: binding,
-                                      browseLibrary: { browsedLibrary = $0 })
-        XCTAssertTrue(active)
-        XCTAssertNil(browsedLibrary)
+    func testMultipleLibrariesRequireAnExplicitChoiceAndSaveAllLibraries() async throws {
+        let editor = try await stagedConnection(libraries: ["a": "First Library", "b": "Second Library"])
+        XCTAssertNil(editor.libraryToBrowse)
+        XCTAssertNil(editor.confirm(browseAfterAdding: true))
         XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
 
-        let second = try XCTUnwrap(connection.librariesToAdd.first { $0.key == "b" })
-        connection.browseLibraryID = second.id
-        connection.addServerConfirmed(serverBinding: .constant(nil), isActiveBinding: binding,
-                                      browseLibrary: { browsedLibrary = $0 })
-        XCTAssertFalse(active)
-        XCTAssertEqual(browsedLibrary?.id, second.id)
+        let second = try XCTUnwrap(editor.librariesFromProbe.first { $0.key == "b" })
+        editor.browseLibraryID = second.id
+        guard case .added(let browsed)? = editor.confirm(browseAfterAdding: true) else {
+            return XCTFail("Expected a saved server")
+        }
+        XCTAssertEqual(browsed?.id, second.id)
         XCTAssertEqual(Set(mockAppContainer.calibreLibraries.values.map(\.key)), ["a", "b"])
         XCTAssertEqual(mockAppContainer.libraryRepository.getAllLibraries().filter { $0.server.id == second.server.id }.count, 2)
     }
 
-    func testSettingsAddDoesNotRequireChoosingABrowseLibrary() throws {
-        let connection = try stagedConnection(libraries: ["a": "First", "b": "Second"])
-        var active = true
-        connection.addServerConfirmed(serverBinding: .constant(nil),
-            isActiveBinding: Binding(get: { active }, set: { active = $0 }))
-        XCTAssertFalse(active)
+    func testSettingsAddDoesNotRequireChoosingABrowseLibrary() async throws {
+        let editor = try await stagedConnection(libraries: ["a": "First", "b": "Second"])
+        guard case .added(nil)? = editor.confirm() else { return XCTFail("Expected a save with no Browse route") }
         XCTAssertEqual(mockAppContainer.calibreLibraries.count, 2)
     }
 
-    func testCancelledOrStillProbingConnectionCannotSaveOrBrowse() throws {
-        for cancelled in [false, true] {
-            let connection = try stagedConnection(libraries: ["a": "Library"])
-            if cancelled {
-                connection.disableProbeServerCancellable()
-            } else {
-                connection.isProbing = true
-            }
-            var active = true
-            var didBrowse = false
-            connection.addServerConfirmed(serverBinding: .constant(nil),
-                isActiveBinding: Binding(get: { active }, set: { active = $0 }),
-                browseLibrary: { _ in didBrowse = true })
-            XCTAssertTrue(active)
-            XCTAssertFalse(didBrowse)
-            XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
-            XCTAssertTrue(mockAppContainer.calibreLibraries.isEmpty)
-        }
-    }
-
     func testCancellingAnInFlightProbeDiscardsItsLateAnswer() async throws {
-        let connection = ServerViewModel(container: mockAppContainer, server: nil)
-        connection.calibreServerUrl = "http://127.0.0.1:1"
-        var didComplete = false
-        connection.processInputAction(server: nil) { didComplete = true }
-        connection.disableProbeServerCancellable()
-        try await Task.sleep(nanoseconds: 200_000_000)
-        XCTAssertNil(connection.calibreServerInfo)
-        XCTAssertFalse(connection.isProbing)
-        XCTAssertFalse(didComplete)
+        let started = expectation(description: "Probe suspended")
+        var result: CheckedContinuation<CalibreServerInfo?, Never>?
+        var request: CalibreProbeServerRequest?
+        let editor = ServerConnectionEditorViewModel(container: mockAppContainer, mode: .add, probeServer: { pending in
+            await withCheckedContinuation {
+                request = pending
+                result = $0
+                started.fulfill()
+            }
+        })
+        editor.startEditing()
+        editor.draft.internalAddress = "http://127.0.0.1:1"
+        let probe = try XCTUnwrap(editor.connect())
+        await fulfillment(of: [started], timeout: 3)
+        XCTAssertNil(editor.confirm(browseAfterAdding: true))
+
+        editor.endEditing()
+        editor.startEditing()
+        result?.resume(returning: makeProbeInfo(try XCTUnwrap(request), libraries: ["a": "Library"]))
+        await probe.value
+
+        XCTAssertNil(editor.serverInfo)
+        XCTAssertFalse(editor.isProbing)
+        XCTAssertNil(editor.confirm(browseAfterAdding: true))
         XCTAssertTrue(mockAppContainer.calibreServers.isEmpty)
     }
 
-    func testReopeningConnectionClearsPreviousResultAndLibraryChoice() throws {
-        let connection = try stagedConnection(libraries: ["a": "First", "b": "Second"])
-        connection.browseLibraryID = connection.librariesToAdd.last?.id
-        connection.resetStates(server: nil)
-        XCTAssertFalse(connection.serverCalibreInfoPresenting)
-        XCTAssertNil(connection.calibreServerInfo)
-        XCTAssertNil(connection.libraryToBrowse)
-        XCTAssertNil(connection.browseLibraryID)
-        XCTAssertNil(connection.dataAction)
-        XCTAssertTrue(connection.calibreServerUrl.isEmpty)
+    func testReopeningConnectionClearsPreviousResultAndLibraryChoice() async throws {
+        let editor = try await stagedConnection(libraries: ["a": "First", "b": "Second"])
+        editor.browseLibraryID = editor.librariesFromProbe.last?.id
+        editor.endEditing()
+        editor.startEditing()
+        XCTAssertFalse(editor.resultPresented)
+        XCTAssertNil(editor.serverInfo)
+        XCTAssertNil(editor.libraryToBrowse)
+        XCTAssertNil(editor.browseLibraryID)
+        XCTAssertTrue(editor.draft.internalAddress.isEmpty)
+    }
+
+    func testConnectionEntrypointsKeepIndependentDraftsAndIgnoreUnrelatedUpdates() async throws {
+        let welcome = makeEditor(libraries: [:])
+        let settings = makeEditor(libraries: [:])
+        XCTAssertNil(welcome.connect())
+        welcome.startEditing()
+        settings.startEditing()
+        welcome.draft.name = "Welcome draft"
+        settings.draft.name = "Settings draft"
+        let unrelated = TestFixtures.makeServer()
+        mockAppContainer.calibreServers[unrelated.id] = unrelated
+        welcome.startEditing()
+        XCTAssertEqual(welcome.draft.name, "Welcome draft")
+        XCTAssertEqual(settings.draft.name, "Settings draft")
+        welcome.endEditing()
+        welcome.startEditing()
+        XCTAssertTrue(welcome.draft.name.isEmpty)
+        XCTAssertEqual(settings.draft.name, "Settings draft")
+    }
+
+    func testEditRouteRejectsAnOldProbeWhenTheSavedCredentialsChange() async throws {
+        var server = TestFixtures.makeServer(baseUrl: "http://server-one:8080")
+        server.password = "initial"
+        mockAppContainer.calibreServers[server.id] = server
+        let editor = makeEditor(libraries: ["a": "Library"], mode: .edit(serverID: server.id))
+        editor.startEditing()
+        editor.draft.password = "draft"
+        let probe = try XCTUnwrap(editor.connect())
+        await probe.value
+        let other = TestFixtures.makeServer(baseUrl: "http://server-two:8080")
+        mockAppContainer.calibreServers[other.id] = other
+        XCTAssertTrue(editor.canConfirmServer)
+        guard case .edited(let original, let updated)? = editor.confirm() else { return XCTFail("Expected an edit") }
+        XCTAssertEqual(original.id, server.id)
+        XCTAssertEqual(updated.id, server.id)
+        XCTAssertEqual(updated.password, "draft")
+
+        server.password = "external change"
+        mockAppContainer.calibreServers[server.id] = server
+        XCTAssertNil(editor.confirm())
+        let receivedChange = await waitUntil { editor.connectionStatus.title == "Server Configuration Changed" }
+        XCTAssertTrue(receivedChange)
+        XCTAssertEqual(editor.draft.password, "draft")
+
+        mockAppContainer.calibreServers.removeValue(forKey: server.id)
+        let removed = await waitUntil { !editor.editTargetAvailable }
+        XCTAssertTrue(removed)
+        XCTAssertNil(editor.connect())
+        XCTAssertNil(editor.confirm())
+    }
+
+    func testServerDetailObservesOnlyItsServerAndTheVisibleOwner() async throws {
+        var server = TestFixtures.makeServer(name: "First server")
+        let other = TestFixtures.makeServer(name: "Other server")
+        let library = CalibreLibrary(server: server, key: "same-key", name: "Library")
+        let otherLibrary = CalibreLibrary(server: other, key: "same-key", name: "Library")
+        mockAppContainer.calibreServers = [server.id: server, other.id: other]
+        mockAppContainer.calibreLibraries = [library.id: library, otherLibrary.id: otherLibrary]
+        let manager = mockAppContainer.libraryManager
+        let detail = ServerDetailViewModel(container: mockAppContainer, serverID: server.id)
+        XCTAssertNil(detail.snapshot.name)
+
+        detail.startObserving(.detail)
+        detail.startObserving(.detail)
+        XCTAssertEqual(detail.snapshot.visible.map(\.id), [library.id])
+        XCTAssertNil(detail.library(for: otherLibrary.id))
+        var snapshots = [ServerDetailViewModel.Snapshot]()
+        let subscription = detail.$snapshot.dropFirst().sink { snapshots.append($0) }
+        defer { subscription.cancel() }
+        manager.librarySyncStatus[otherLibrary.id] = .init(library: otherLibrary, isSync: true)
+        manager.calibreLibraries[library.id]?.discoverable = false
+        let rowUpdated = await waitUntil { detail.snapshot.visible.first?.discoverable == false }
+        XCTAssertTrue(rowUpdated)
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertFalse(detail.snapshot.syncing)
+
+        detail.startObserving(.hiddenLibraries)
+        detail.stopObserving(.detail)
+        manager.hideLibrary(libraryId: library.id)
+        let hiddenObserved = await waitUntil { detail.snapshot.hidden.first?.id == library.id }
+        XCTAssertTrue(hiddenObserved)
+        detail.restoreLibraries([otherLibrary.id, library.id])
+        XCTAssertEqual(detail.snapshot.visible.map(\.id), [library.id])
+        XCTAssertTrue(detail.snapshot.hidden.isEmpty)
+
+        detail.stopObserving(.hiddenLibraries)
+        server.name = "Renamed while stopped"
+        mockAppContainer.calibreServers[server.id] = server
+        XCTAssertEqual(detail.snapshot.name, "First server")
+        detail.startObserving(.detail)
+        XCTAssertEqual(detail.snapshot.name, "Renamed while stopped")
+        mockAppContainer.calibreServers.removeValue(forKey: server.id)
+        let deletedObserved = await waitUntil { detail.snapshot.name == nil }
+        XCTAssertTrue(deletedObserved)
+        XCTAssertTrue(detail.snapshot.visible.isEmpty)
+        XCTAssertTrue(detail.snapshot.hidden.isEmpty)
+    }
+
+    func testSettingsKeepsTheSelectedServerIDThroughAnEditAndDismissesOnRemoval() {
+        var server = TestFixtures.makeServer(baseUrl: "http://original:8080")
+        mockAppContainer.calibreServers[server.id] = server
+        viewModel.updateServerList()
+        viewModel.openServerDetail(server.id)
+        XCTAssertEqual(viewModel.selectedServer, server.id)
+        XCTAssertEqual(viewModel.displayedServerID, server.id)
+
+        server.baseUrl = "http://edited:8080"
+        server.name = "Edited"
+        mockAppContainer.calibreServers[server.id] = server
+        viewModel.updateServerList()
+        XCTAssertEqual(viewModel.selectedServer, server.id)
+        XCTAssertEqual(viewModel.displayedServerID, server.id)
+
+        mockAppContainer.calibreServers.removeValue(forKey: server.id)
+        viewModel.updateServerList()
+        XCTAssertNil(viewModel.selectedServer)
+        XCTAssertEqual(viewModel.displayedServerID, server.id)
+    }
+
+    func testObserversReleaseWithTheirModels() {
+        let server = TestFixtures.makeServer()
+        mockAppContainer.calibreServers[server.id] = server
+        weak var detailReference: ServerDetailViewModel?
+        weak var helperReference: DSReaderHelperConfigurationViewModel?
+        weak var editorReference: ServerConnectionEditorViewModel?
+        do {
+            let detail = ServerDetailViewModel(container: mockAppContainer, serverID: server.id)
+            let helper = DSReaderHelperConfigurationViewModel(container: mockAppContainer, serverID: server.id)
+            let editor = makeEditor(libraries: [:], mode: .edit(serverID: server.id))
+            detailReference = detail
+            helperReference = helper
+            editorReference = editor
+            detail.startObserving(.detail)
+            helper.resume()
+            editor.startEditing()
+        }
+        XCTAssertNil(detailReference)
+        XCTAssertNil(helperReference)
+        XCTAssertNil(editorReference)
+    }
+
+    func testHelperKeepsDirtyDraftThroughChildPagesAndSavedUpdates() async throws {
+        let server = TestFixtures.makeServer(baseUrl: "http://helper-draft:8080")
+        let other = TestFixtures.makeServer(baseUrl: "http://other-helper:8080")
+        let manager = mockAppContainer.serverManager
+        try mockAppContainer.serverRepository.saveServer(server)
+        try mockAppContainer.serverRepository.saveServer(other)
+        mockAppContainer.calibreServers = [server.id: server, other.id: other]
+        manager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: .init(port: 8081))
+        let helper = DSReaderHelperConfigurationViewModel(container: mockAppContainer, serverID: server.id)
+        XCTAssertNil(helper.savedHelper)
+        XCTAssertNil(helper.connectDSReader())
+        helper.resume()
+        helper.setPortDraft("9000")
+        helper.resume()
+        XCTAssertEqual(helper.portStr, "9000")
+
+        manager.updateServerDSReaderHelper(serverId: other.id, dsreaderHelper: .init(port: 9080))
+        manager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: .init(port: 8082))
+        let changed = await waitUntil { helper.savedHelper?.port == 8082 }
+        XCTAssertTrue(changed)
+        XCTAssertEqual(helper.portStr, "9000")
+
+        helper.suspend()
+        manager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: .init(port: 8083))
+        XCTAssertEqual(helper.savedHelper?.port, 8082)
+        helper.resume()
+        XCTAssertEqual(helper.savedHelper?.port, 8083)
+        XCTAssertEqual(helper.portStr, "9000")
+        helper.closeRoute()
+        helper.resume()
+        XCTAssertEqual(helper.portStr, "8083")
+
+        mockAppContainer.calibreServers[server.id]?.removed = true
+        let removed = await waitUntil { !helper.serverAvailable }
+        XCTAssertTrue(removed)
+        XCTAssertFalse(helper.canDownload)
+        XCTAssertNil(helper.savedHelper)
     }
 
     func testConnectionFailurePresentationNeverIncludesServerBodiesAndRetainsHTTPStatus() throws {
-        let connection = try stagedConnection(libraries: [:])
+        let request = CalibreProbeServerRequest(server: TestFixtures.makeServer(), isPublic: false,
+                                               updateLibrary: false, autoUpdateOnly: true)
         let body = Data(("<html><style>" + String(repeating: "CSS server error", count: 10000)).utf8)
         for status in [400, 401, 403, 404, 429, 500, 503] {
-            var info = try XCTUnwrap(connection.calibreServerInfo)
+            var info = try XCTUnwrap(makeProbeInfo(request, libraries: [:]))
             info.reachable = false
             info.errorMsg = String(decoding: body, as: UTF8.self)
             info.error = status == 401 || status == 403 ? .authFailed : .httpStatus(status, body)
@@ -297,8 +442,9 @@ import Combine
     }
 
     func testConnectionMessagesDistinguishKnownCausesWithoutGuessingAuthentication() throws {
-        let connection = try stagedConnection(libraries: [:])
-        var info = try XCTUnwrap(connection.calibreServerInfo)
+        let request = CalibreProbeServerRequest(server: TestFixtures.makeServer(), isPublic: false,
+                                               updateLibrary: false, autoUpdateOnly: true)
+        var info = try XCTUnwrap(makeProbeInfo(request, libraries: [:]))
         info.reachable = false
         let cases: [(CalibreAPIError, String)] = [
             (.transport(URLError(.cannotConnectToHost)), "address, port and network"),
@@ -325,40 +471,60 @@ import Combine
         XCTAssertFalse(ServerConnectionStatus(info: info).message?.contains("cancelled") == true)
     }
 
-    func testEditConnectionPreservesAllInputAndCannotSaveAnOldSuccess() throws {
-        let connection = try stagedConnection(libraries: ["a": "Library"])
-        connection.calibreServerName = "My Calibre"
-        connection.calibreServerUrl = "http://localhost:8080/"
-        connection.calibreServerUrlPublic = "https://example.com/"
-        connection.calibreServerSetPublicAddress = true
-        connection.calibreServerNeedAuth = true
-        connection.calibreUsername = "user"
-        connection.calibrePassword = "password"
-        connection.editConnection()
-        XCTAssertEqual(connection.calibreServerName, "My Calibre")
-        XCTAssertEqual(connection.calibreServerUrl, "http://localhost:8080/")
-        XCTAssertEqual(connection.calibreServerUrlPublic, "https://example.com/")
-        XCTAssertTrue(connection.calibreServerSetPublicAddress)
-        XCTAssertTrue(connection.calibreServerNeedAuth)
-        XCTAssertEqual(connection.calibreUsername, "user")
-        XCTAssertEqual(connection.calibrePassword, "password")
-        XCTAssertFalse(connection.serverCalibreInfoPresenting)
-        XCTAssertNil(connection.calibreServerInfo)
-        XCTAssertNil(connection.dataAction)
-        XCTAssertFalse(connection.canConfirmServer)
+    func testEditConnectionPreservesAllInputAndCannotSaveAnOldSuccess() async throws {
+        let editor = try await stagedConnection(libraries: ["a": "Library"])
+        editor.draft.name = "My Calibre"
+        editor.draft.internalAddress = "http://localhost:8080/"
+        editor.draft.publicAddress = "https://example.com/"
+        editor.draft.usePublicAddress = true
+        editor.draft.requiresAuthentication = true
+        editor.draft.username = "user"
+        editor.draft.password = "password"
+        editor.dismissResult()
+        XCTAssertEqual(editor.draft.name, "My Calibre")
+        XCTAssertEqual(editor.draft.internalAddress, "http://localhost:8080/")
+        XCTAssertEqual(editor.draft.publicAddress, "https://example.com/")
+        XCTAssertTrue(editor.draft.usePublicAddress)
+        XCTAssertTrue(editor.draft.requiresAuthentication)
+        XCTAssertEqual(editor.draft.username, "user")
+        XCTAssertEqual(editor.draft.password, "password")
+        XCTAssertFalse(editor.resultPresented)
+        XCTAssertNil(editor.serverInfo)
+        XCTAssertFalse(editor.canConfirmServer)
     }
 
-    private func stagedConnection(libraries: [String: String]) throws -> ServerViewModel {
-        let server = TestFixtures.makeServer(baseUrl: "http://127.0.0.1:1")
-        let connection = ServerViewModel(container: mockAppContainer, server: nil)
-        connection.dataAction = "Add"
-        connection.serverCalibreInfoPresenting = true
-        connection.calibreServerInfo = CalibreServerInfo(
-            server: server, isPublic: false, url: try XCTUnwrap(URL(string: server.baseUrl)),
-            reachable: true, probing: false, errorMsg: "Success", defaultLibrary: "a", libraryMap: libraries,
-            request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true)
+    private func stagedConnection(
+        libraries: [String: String], reachable: Bool = true
+    ) async throws -> ServerConnectionEditorViewModel {
+        let editor = makeEditor(libraries: libraries, reachable: reachable)
+        editor.startEditing()
+        editor.draft.internalAddress = "http://127.0.0.1:1"
+        let task = try XCTUnwrap(editor.connect())
+        await task.value
+        return editor
+    }
+
+    private func makeEditor(
+        libraries: [String: String], reachable: Bool = true,
+        mode: ServerConnectionEditorViewModel.Mode = .add
+    ) -> ServerConnectionEditorViewModel {
+        ServerConnectionEditorViewModel(
+            container: mockAppContainer,
+            mode: mode,
+            probeServer: { [weak self] in self?.makeProbeInfo($0, libraries: libraries, reachable: reachable) },
+            probeLibrary: { .init(library: $0.library, probeUrl: URL(fileURLWithPath: "/")) }
         )
-        return connection
+    }
+
+    private func makeProbeInfo(
+        _ request: CalibreProbeServerRequest, libraries: [String: String], reachable: Bool = true
+    ) -> CalibreServerInfo? {
+        guard let url = URL(string: request.server.baseUrl) else { return nil }
+        return CalibreServerInfo(
+            server: request.server, isPublic: false, url: url, reachable: reachable,
+            probing: false, errorMsg: reachable ? "Success" : "Connection failed",
+            defaultLibrary: "a", libraryMap: libraries, request: request
+        )
     }
 
     private func waitUntil(

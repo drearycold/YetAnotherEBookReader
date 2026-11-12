@@ -10,11 +10,7 @@ import SwiftUI
 struct ServerOptionsDSReaderHelper: View {
     @Environment(\.openURL) var openURL
 
-    @ObservedObject var viewModel: ServerViewModel
-    @Binding var server: CalibreServer
-    
-    @Binding var updater: Int
-    
+    @ObservedObject var viewModel: DSReaderHelperConfigurationViewModel
     var body: some View {
         let configuration = viewModel.savedHelper?.configuration
         let validPorts = CalibreServerDSReaderHelper.validPorts
@@ -23,14 +19,14 @@ struct ServerOptionsDSReaderHelper: View {
                 HStack {
                     Text("Plugin Service Port")
                     Spacer()
-                    TextField("Plugin Service Port", text: $viewModel.portStr)
+                    TextField("Plugin Service Port", text: Binding(get: { viewModel.portStr }, set: viewModel.setPortDraft))
                         .frame(idealWidth: 80, maxWidth: 80)
                         .multilineTextAlignment(.center)
                         .keyboardType(.numberPad)
                         .accessibilityIdentifier("server.helper.port")
 
                     Button {
-                        if let port = viewModel.helperPort { viewModel.portStr = String(port - 1) }
+                        if let port = viewModel.helperPort { viewModel.setPortDraft(String(port - 1)) }
                     } label: {
                         Image(systemName: "minus")
                     }
@@ -39,7 +35,7 @@ struct ServerOptionsDSReaderHelper: View {
                     .disabled((viewModel.helperPort ?? validPorts.lowerBound) <= validPorts.lowerBound)
 
                     Button {
-                        if let port = viewModel.helperPort { viewModel.portStr = String(port + 1) }
+                        if let port = viewModel.helperPort { viewModel.setPortDraft(String(port + 1)) }
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -102,6 +98,8 @@ struct ServerOptionsDSReaderHelper: View {
                         }
                     }
                 }
+                .isDetailLink(false)
+                .accessibilityIdentifier("server.helper.count-pages")
 
                 NavigationLink(
                     destination: List{
@@ -128,6 +126,8 @@ struct ServerOptionsDSReaderHelper: View {
                     }
 
                 }
+                .isDetailLink(false)
+                .accessibilityIdentifier("server.helper.goodreads")
 
                 HStack {
                     Text("Dictionary Viewer")
@@ -150,33 +150,37 @@ struct ServerOptionsDSReaderHelper: View {
         .toolbar {
             // iOS 15 exposes only one item at this placement.
             ToolbarItem(placement: .navigationBarTrailing) {
-                HelperConfigurationToolbar(viewModel: viewModel, serverID: server.id)
+                HelperConfigurationToolbar(viewModel: viewModel)
             }
         }
-        .onAppear { viewModel.openHelperConfiguration(serverID: server.id) }
-        .onDisappear(perform: viewModel.closeHelperConfiguration)
-        .onChange(of: DSReaderHelperConnection(server)) { _ in
-            viewModel.openHelperConfiguration(serverID: server.id)
-        }
-        .onChange(of: updater) { _ in
-            viewModel.openHelperConfiguration(serverID: server.id)
-        }
+        .onAppear(perform: viewModel.resume)
+        .onDisappear(perform: viewModel.suspend)
         .alert(item: $viewModel.helperConfirmation) { ticket in
             Alert(
                 title: Text("Use DSReader Helper Config?"),
                 message: Text("Update the saved plugin settings with the downloaded configuration?"),
                 primaryButton: .default(Text("Update")) {
-                    viewModel.applyHelperConfiguration(ticket, serverID: server.id)
+                    viewModel.applyHelperConfiguration(ticket)
                 },
                 secondaryButton: .cancel {
                     viewModel.discardHelperConfiguration(ticket)
                 }
             )
         }
-        .sheet(isPresented: $viewModel.dsreaderHelperInstructionPresenting, content: {
-            instructions()
-                .padding()
-        })
+        .sheet(isPresented: $viewModel.instructionPresented) {
+            NavigationView {
+                instructions()
+                    .padding()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { viewModel.instructionPresented = false }
+                                .accessibilityIdentifier("server.helper.instructions.close")
+                        }
+                    }
+            }
+            .navigationViewStyle(.stack)
+        }
     }
     
     @ViewBuilder
@@ -239,22 +243,21 @@ struct ServerOptionsDSReaderHelper: View {
 }
 
 private struct HelperConfigurationToolbar: View {
-    @ObservedObject var viewModel: ServerViewModel
-    let serverID: String
+    @ObservedObject var viewModel: DSReaderHelperConfigurationViewModel
 
     var body: some View {
         HStack(spacing: 16) {
             Button {
-                viewModel.connectDSReader(serverID: serverID)
+                viewModel.connectDSReader()
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
             .accessibilityLabel("Download Helper Configuration")
             .accessibilityIdentifier("server.helper.download")
-            .disabled(viewModel.helperPort == nil)
+            .disabled(!viewModel.canDownload)
 
             Button {
-                viewModel.dsreaderHelperInstructionPresenting = true
+                viewModel.instructionPresented = true
             } label: {
                 Image(systemName: "questionmark.circle")
             }
@@ -264,15 +267,17 @@ private struct HelperConfigurationToolbar: View {
 }
 
 struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
-    static private var container = AppContainer()
+    static private var container = AppContainer(mock: true)
+    static private let server = CalibreServer(
+        uuid: UUID(), name: "Preview Server", baseUrl: "http://localhost:8080",
+        hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""
+    )
 
-    @State static private var server = CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-    @State static private var updater = 0
     static var previews: some View {
-        let viewModel = ServerViewModel(container: container, server: server)
-        NavigationView {
-            ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater)
+        container.serverManager.calibreServers[server.id] = server
+        return NavigationView {
+            ServerOptionsDSReaderHelper(viewModel: .init(container: container, serverID: server.id))
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .navigationViewStyle(.stack)
     }
 }

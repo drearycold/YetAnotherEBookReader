@@ -9,224 +9,249 @@ import SwiftUI
 
 struct ServerDetailView: View {
     private let container: AppContainer
+    private let onConnectionUpdate: (CalibreServer, CalibreServer) -> Void
 
-    @Binding var server: CalibreServer
-    @StateObject private var viewModel: ServerViewModel
-    
-    @State private var modServerActive = false
-    @State private var dshelperActive = false
-    @State private var updater = 0
-    
-    init(container: AppContainer, server: Binding<CalibreServer>) {
+    @StateObject private var viewModel: ServerDetailViewModel
+    @StateObject private var editor: ServerConnectionEditorViewModel
+    @StateObject private var helper: DSReaderHelperConfigurationViewModel
+    private enum Route {
+        case editor, helper, hiddenLibraries
+        case library(String)
+    }
+
+    @State private var activeRoute: Route?
+    @State private var displayedRoute: Route?
+
+    init(
+        container: AppContainer, serverID: String,
+        onConnectionUpdate: @escaping (CalibreServer, CalibreServer) -> Void
+    ) {
         self.container = container
-        self._server = server
-        self._viewModel = StateObject(wrappedValue: ServerViewModel(container: container, server: server.wrappedValue))
+        self.onConnectionUpdate = onConnectionUpdate
+        _viewModel = StateObject(wrappedValue: .init(container: container, serverID: serverID))
+        _editor = StateObject(wrappedValue: .init(container: container, mode: .edit(serverID: serverID)))
+        _helper = StateObject(wrappedValue: .init(container: container, serverID: serverID))
     }
-    
+
     var body: some View {
+        let snapshot = viewModel.snapshot
         Form {
-            Section(header: Text("Options")) {
-                NavigationLink(
-                    destination: AddModServerView(
-                        viewModel: viewModel,
-                        server: Binding<CalibreServer?>(
-                            get: { server },
-                            set: { if let val = $0 { server = val } }
-                        ),
-                        isActive: $modServerActive
-                    )
-                        .navigationTitle("Modify: \(server.name)"),
-                    isActive: $modServerActive,
-                    label: {
-                        Text("Modify Configuration")
-                    }
-                )
-                .isDetailLink(false)
-                
-                NavigationLink(
-                    destination: ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater),
-                    isActive: $dshelperActive,
-                    label: {
-                        Text("DSReader Helper")
-                    }
-                )
-                .isDetailLink(false)
+            if snapshot.name == nil {
+                Text("This server is no longer available.")
             }
-            
-            Section(header: librarySectionHeader()) {
-                ForEach(viewModel.libraryList.compactMap { container.libraryManager.calibreLibraries[$0] }, id: \.self) { library in
-                    NavigationLink(
-                        destination: libraryEntryDestination(library: library),
-                        tag: library.id,
-                        selection: $viewModel.selectedLibrary) {
-                        libraryRowBuilder(library: library)
-                    }
-                }.onDelete(perform: { indexSet in
-                    viewModel.deleteLibrary(at: indexSet)
-                })
+            Section(header: Text("Options")) {
+                routeButton(.editor) { Text("Modify Configuration") }
+                    .disabled(snapshot.name == nil)
+                routeButton(.helper) { Text("DSReader Helper") }
+                    .disabled(snapshot.name == nil)
             }
 
-            NavigationLink(
-                destination: LazyView(libraryRestoreHiddenView()),
-                isActive: $viewModel.libraryRestoreListActive,
-                label: {
-                    Text("Restore Hidden Libraries")
+            Section(header: librarySectionHeader) {
+                ForEach(snapshot.visible) { row in
+                    routeButton(.library(row.id)) { libraryRow(row) }
+                        .accessibilityIdentifier("server.detail.library.\(row.id)")
                 }
-            ).disabled(viewModel.hiddenLibraryList.isEmpty)
+                .onDelete(perform: viewModel.removeLibraries)
+            }
+
+            routeButton(.hiddenLibraries) { Text("Restore Hidden Libraries") }
+                .disabled(snapshot.hidden.isEmpty)
         }
-        .navigationTitle(server.name)
-        .onAppear() {
-            viewModel.updateLibraryList()
-        }
+        .background(routeLink)
+        .navigationTitle(snapshot.name ?? "Server")
+        .onAppear { viewModel.startObserving(.detail) }
+        .onDisappear { viewModel.stopObserving(.detail) }
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(action: {
-                    viewModel.probeReachability(server: server)
-                }) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                }.disabled(viewModel.syncingLibrary)
+            ToolbarItem(placement: .navigationBarTrailing) {
+                ServerDetailRefreshButton(viewModel: viewModel)
             }
         }
     }
 
-    @ViewBuilder
-    private func librarySectionHeader() -> some View {
+    private func routeButton<Label: View>(_ route: Route, @ViewBuilder label: () -> Label) -> some View {
+        Button {
+            displayedRoute = route
+            activeRoute = route
+        } label: {
+            HStack {
+                label().frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var routeLink: some View {
+        NavigationLink(
+            isActive: Binding(get: { activeRoute != nil }, set: { if !$0 { dismissRoute() } })
+        ) {
+            switch displayedRoute {
+            case .editor:
+                AddModServerView(viewModel: editor, onConfirm: confirmEdit, onFinish: dismissRoute)
+                    .navigationTitle("Modify: \(viewModel.snapshot.name ?? "")")
+            case .helper:
+                ServerOptionsDSReaderHelper(viewModel: helper)
+            case .library(let id):
+                libraryDestination(id: id).id(id)
+            case .hiddenLibraries:
+                HiddenServerLibrariesView(viewModel: viewModel, onRestore: dismissRoute)
+            case nil:
+                EmptyView()
+            }
+        } label: {
+            EmptyView()
+        }
+        .isDetailLink(false)
+        .hidden()
+    }
+
+    private func dismissRoute() {
+        switch activeRoute {
+        case .editor: editor.endEditing()
+        case .helper: helper.closeRoute()
+        case .library, .hiddenLibraries, nil: break
+        }
+        activeRoute = nil
+    }
+
+    private func confirmEdit(_ confirmation: ServerConnectionEditorViewModel.Confirmation) {
+        guard case .edited(let original, let updated) = confirmation else { return }
+        onConnectionUpdate(original, updated)
+    }
+
+    private var librarySectionHeader: some View {
         HStack {
             Text("Libraries")
             Spacer()
-            if viewModel.librarySyncStatus.filter({
-                $0.value.library.server.id == server.id
-            }).allSatisfy({ $1.isSync == false }) == false {
-                ProgressView()
-            }
+            if viewModel.snapshot.syncing { ProgressView() }
         }
     }
-    
-    @ViewBuilder
-    private func libraryEntryDestination(library: CalibreLibrary) -> some View {
-        LazyView(
-            LibraryDetailView(
-                container: container,
-                library: library
-            ).navigationTitle(library.name)
-        )
-    }
-    
-    @ViewBuilder
-    private func libraryRestoreHiddenView() -> some View {
-        List(selection: $viewModel.libraryRestoreListSelection) {
-            ForEach(
-                viewModel.hiddenLibraryList,
-                id: \.id
-            ) { library in
-                Text(library.name)
-                    .tag(library.id)
-            }
-        }
-        .navigationTitle(Text("Restore Hidden Libraries"))
-        .environment(\.editMode, .constant(.active))
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(action:{
-                    viewModel.restoreSelectedLibraries(updater: $updater)
-                }) {
-                    Image(systemName: "checkmark.circle")
-                }.disabled(viewModel.libraryRestoreListSelection.isEmpty)
-            }
-        }
-        .onAppear {
-            viewModel.libraryRestoreListSelection.removeAll()
-        }
-    }
-    
-    @ViewBuilder
-    private func libraryRowBuilder(library: CalibreLibrary) -> some View {
-        HStack(spacing: 8) {
-            if library.discoverable {
-                Image(systemName: "eye.fill")
-                    .foregroundColor(.green)
-            } else {
-                Image(systemName: "eye.slash.fill")
-                    .foregroundColor(.gray)
-            }
-                
-            Text(library.name)
-            
-            Spacer()
-            VStack(alignment: .trailing) {
-                if let status = viewModel.librarySyncStatus[library.id] {
-                    if status.isSync {
-                        if let msg = status.msg {
-                            Text("processing\n\(msg)")
-                        } else {
-                            Text("processing ...")
-                        }
-                    } else if status.isError {
-                        Text(status.msg ?? "Status Unknown")
-                    } else {
-                        // Success state or finished syncing
-                        if let cnt = status.cnt {
-                            Text("\(cnt) books")
-                        } else if let msg = status.msg {
-                            Text(msg)
-                        }
 
-                        // Deleted, or out of a restricted user's reach: calibre answers both alike.
-                        if status.del.count > 0 {
-                            Text("\(status.del.count) books unavailable on server")
+    @ViewBuilder
+    private func libraryDestination(id: String) -> some View {
+        if let library = viewModel.library(for: id) {
+            LibraryDetailView(container: container, library: library)
+                .navigationTitle(library.name)
+        } else {
+            Text("This library is no longer available.")
+        }
+    }
+
+    private func libraryRow(_ row: ServerDetailViewModel.LibraryRow) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: row.discoverable ? "eye.fill" : "eye.slash.fill")
+                .foregroundColor(row.discoverable ? .green : .gray)
+            Text(row.name)
+            Spacer()
+
+            VStack(alignment: .trailing) {
+                if let status = row.status {
+                    if status.syncing {
+                        Text(status.message.map { "processing\n\($0)" } ?? "processing ...")
+                    } else if status.failed {
+                        Text(status.message ?? "Status Unknown")
+                    } else {
+                        if let count = status.count {
+                            Text("\(count) books")
+                        } else if let message = status.message {
+                            Text(message)
+                        }
+                        if status.unavailableCount > 0 {
+                            Text("\(status.unavailableCount) books unavailable on server")
                                 .foregroundColor(.orange)
                         }
                     }
                 } else {
                     Text("Insufficient Info")
                 }
-            }.font(.caption2)
+            }
+            .font(.caption2)
+
             ZStack {
-                if viewModel.librarySyncStatus[library.id]?.isSync ?? false {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                } else {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .hidden()
-                }
-
-                if let status = viewModel.librarySyncStatus[library.id],
-                   status.isSync == false,
-                   status.isError == false,
-                   status.msg == "Success" {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                        .hidden()
-                }
-
-                if viewModel.librarySyncStatus[library.id]?.isSync == false,
-                   viewModel.librarySyncStatus[library.id]?.isError == true {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.red)
-                } else {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.red)
-                        .hidden()
+                ProgressView()
+                    .opacity(row.status?.syncing == true ? 1 : 0)
+                if let status = row.status, !status.syncing {
+                    if status.failed {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                    } else if status.message == "Success" {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    }
                 }
             }
         }
     }
 }
 
-struct ServerDetailView_Previews: PreviewProvider {
-    static private var container = AppContainer(mock: true)
+// Hosted controls observe the live model because iOS 15 retains initial ToolbarContent values.
+private struct ServerDetailRefreshButton: View {
+    @ObservedObject var viewModel: ServerDetailViewModel
 
-    @State static private var server = container.serverManager.calibreServers.values.first ?? .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default")
-    
-    static var previews: some View {
-        NavigationView {
-            ServerDetailView(container: container, server: $server)
-                .environment(\.appContainer, container)
+    var body: some View {
+        Button(action: viewModel.probeReachability) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .accessibilityLabel("Refresh Server")
+        .disabled(viewModel.snapshot.name == nil || viewModel.snapshot.probing)
+    }
+}
+
+private struct HiddenServerLibrariesView: View {
+    @ObservedObject var viewModel: ServerDetailViewModel
+    let onRestore: () -> Void
+
+    var body: some View {
+        List(selection: $viewModel.restoreSelection) {
+            ForEach(viewModel.snapshot.hidden) { row in
+                Text(row.name).tag(row.id)
+            }
+        }
+        .navigationTitle("Restore Hidden Libraries")
+        .environment(\.editMode, .constant(.active))
+        .onAppear {
+            viewModel.restoreSelection.removeAll()
+            viewModel.startObserving(.hiddenLibraries)
+        }
+        .onDisappear { viewModel.stopObserving(.hiddenLibraries) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                RestoreServerLibrariesButton(viewModel: viewModel, onRestore: onRestore)
+            }
+        }
+    }
+}
+
+private struct RestoreServerLibrariesButton: View {
+    @ObservedObject var viewModel: ServerDetailViewModel
+    let onRestore: () -> Void
+
+    var body: some View {
+        Button {
+            viewModel.restoreLibraries(viewModel.restoreSelection)
+            onRestore()
+        } label: {
+            Image(systemName: "checkmark.circle")
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Restore Selected Libraries")
+        .disabled(viewModel.restoreSelection.isEmpty)
+    }
+}
+
+struct ServerDetailView_Previews: PreviewProvider {
+    static private let container = AppContainer(mock: true)
+
+    static var previews: some View {
+        let serverID = container.serverManager.calibreServers.values.first?.id ?? CalibreServer.LocalServerUUID.uuidString
+        NavigationView {
+            ServerDetailView(container: container, serverID: serverID, onConnectionUpdate: { _, _ in })
+        }
+        .navigationViewStyle(.stack)
     }
 }
