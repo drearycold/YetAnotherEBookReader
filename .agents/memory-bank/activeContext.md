@@ -2,9 +2,9 @@
 
 ## Current Focus
 
-**Search and Category Cache Consistency (CC).** CC2 is implemented and
-verified on `codex/cache-consistency-cc2` from main `b72b5f18`, which includes
-CC1 through PR #151. CC3 is next. The earlier PDF investigation remains
+**Search and Category Cache Consistency (CC).** CC3 is implemented on
+`codex/cache-consistency-cc3` from main `353d1cf7`, which includes CC1 and
+CC2 through PRs #151 and #152. The earlier PDF investigation remains
 under Current Branch Notes.
 
 ## Cache Consistency CC1 (2026-11-12)
@@ -127,22 +127,75 @@ Logs are `/tmp/YabrCC2/scope-restart-focused.log` and
 `/tmp/YabrCC2/scope-restart-repeated.log`. The full suite and native
 Browse results above were recorded before this follow-up.
 
-## Cache Consistency Follow-up
+## Cache Consistency CC3 (2026-11-13)
 
-CC3 should verify invalidation and observation across interleaved
-library and book changes, pagination, import and deletion, offline
-switching, and native Browse. CC2 binds a page or observer to its
-configuration and scope. A database switch stops delivery from the
-retired observer, and the next reload registers on the new database.
-Exercise changes in active library membership that do not themselves
-modify cache rows, and native import and offline switching.
+CC3 starts from main `353d1cf7` after PR #152. CC1 still refreshes each
+independent read on its current thread. CC2 still captures a database
+epoch and library scope, validates them at commit, and limits in-flight
+search replacement to one request per library. Schema 151 and package
+pins are unchanged.
 
-Keep the V2 actors, value snapshots and repository boundaries, including
-criteria isolation, limit expansion, cache generation checks, empty
-library IDs meaning all active libraries, early cache display and
-any-source fallback on network failure. The two June unified-search
-analysis files describe the removed V1 pipeline. The old unresolved
-actor-runtime trap has no established connection to the stale read.
+Browse now observes active library scope, database configuration changes
+and relevant book rows while visible. All Books keeps the empty scope
+sentinel and resolves the current active libraries. Explicit library
+selection stays explicit after hiding or removal. A database replacement
+drops old results and rebinds observers. Scope refreshes wait for the
+current search's CC2 replacement and only run if its scope still differs.
+Reachability changes refresh the visible search while retaining cache.
+Local row changes rebuild the current search. Remote row changes reread
+the current cached books without starting a network request.
+
+Category observers receive relevant item field changes through Realm
+key paths. Scope and database changes rebind observers. In-scope item
+changes reread the requested prefix, and Load More replaces the displayed
+prefix from one read so it cannot append a page from a different version.
+Changing the query or leaving the page cancels its old observation and
+page requests. Removing the last local file removes its Browse row.
+
+The baseline tests reproduced two missing refreshes, covering search,
+category items and summaries after hiding a library without modifying
+the cached rows. The iPhone 17 focused suite passed 294 tests. The
+final full suite recorded 1,168 tests, with one opt-in PDF benchmark
+skipped, two existing expected PDFKit failures and zero unexpected
+failures. All 21 contracts passed against isolated Calibre 9.11.
+The iOS Simulator Release and Mac Catalyst builds passed.
+
+The isolated Release app passed the HTTP 503 cache fallback and
+reconnect journey on iPhone 17 and iPhone 7. The fixture changed the
+server response through a loopback control endpoint, leaving the host
+network and user servers alone. Browse search, sort, book detail and
+category filters passed on iPhone 17 and iPhone 7. The iOS 15 UI test
+waits for the pushed book list to disappear before tapping Back again.
+Category filters also passed on iPad mini at its standard width and text
+size. Category paging and metadata reordering were exercised
+through service and view-model fixtures. The iPhone 17 and iPhone 7
+isolated import builds started at an empty local Browse page, selected an
+original EPUB through the real Files picker, displayed the imported book,
+deleted it from Recent, and returned to the empty local library. A compile-time
+fixture only sets the picker directory. Native renaming and native large-category
+pagination were outside the matrix.
+
+Logs, result bundles and screenshots are in `/tmp/YabrCC3`.
+
+### CC3 review follow-up
+
+The original root-category book list cleared its search subscription on
+disappear. Reappearing with the same filter skipped the search entirely.
+On iPhone 17, returning from Book Detail left book 41 visible, but Refresh
+sent no search request and book 42 never appeared. The UI and HTTP evidence
+are in `category-return-red-ios26.log` and `category-return-red-http.log`.
+
+A category list now resumes its search independently of changing filters.
+A duplicate appearance for the same active key reuses its subscription.
+The list still cancels observation on disappearance. The controlled
+integration test verifies repeated appear/disappear, expansion from 100
+to 102 books, forced refresh back at offset 0, and Realm observation after
+resuming. The existing canceled-criteria test verifies late-response
+isolation. The 131 focused tests passed. The isolated Release journey
+passed on iPhone 17 and iPhone 7, including refresh after Book Detail and
+refresh after reopening the same item. Results are under
+`/tmp/YabrCC3/category-return-*`. The full suite above preceded the review
+follow-up.
 
 ## Server Configuration SC3 (2026-11-12)
 

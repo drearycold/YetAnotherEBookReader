@@ -348,9 +348,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
             "YetAnotherEBookReader/Models/Repositories/RealmSearchCacheStore.swift"
         ))
 
-        XCTAssertTrue(source.contains("hasher.combine(object.generation)"))
-        XCTAssertTrue(source.contains("hasher.combine(object.totalNumber)"))
-        XCTAssertTrue(source.contains("hasher.combine(object.items.count)"))
+        XCTAssertTrue(source.contains("keyPaths: [\"generation\", \"totalNumber\", \"items\""))
+        XCTAssertTrue(source.contains("\"items.name\", \"items.count\", \"items.averageRating\", \"items.url\""))
         XCTAssertFalse(source.contains("for item in object.items"))
         XCTAssertFalse(source.contains("hasher.combine(item.name)"))
     }

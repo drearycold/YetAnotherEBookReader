@@ -300,7 +300,10 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
 
         let allBooks = realm.objects(CalibreBookRealm.self)
             .filter(libraryPredicate)
-            .sorted(byKeyPath: criteria.sortCriteria.by.sortKeyPath, ascending: criteria.sortCriteria.ascending)
+            .sorted(by: [
+                SortDescriptor(keyPath: criteria.sortCriteria.by.sortKeyPath, ascending: criteria.sortCriteria.ascending),
+                SortDescriptor(keyPath: "idInLib", ascending: criteria.sortCriteria.ascending),
+            ])
         let filteredBooks = predicates.isEmpty
             ? allBooks
             : allBooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
@@ -662,12 +665,34 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         )
     }
 
+    func observeBookChanges(in libraries: [CalibreLibrary]) -> AsyncStream<Void> {
+        guard !libraries.isEmpty, let cache = try? snapshot(), let realm = try? cache.openRealmForRead(),
+              !realm.configuration.readOnly, !realm.isInWriteTransaction else {
+            return AsyncStream { $0.finish() }
+        }
+        let byServer = Dictionary(grouping: libraries, by: { $0.server.id })
+        let scope = NSCompoundPredicate(orPredicateWithSubpredicates: byServer.map { server, libraries in
+            NSPredicate(format: "serverUUID == %@ AND libraryName IN %@", server, libraries.map(\.name))
+        })
+        let books = realm.objects(CalibreBookRealm.self).filter(scope)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let token = books.observe(on: DispatchQueue.main) { changes in
+                guard (try? cache.checkDatabase()) != nil else { continuation.finish(); return }
+                if case .update = changes { continuation.yield(()) }
+            }
+            continuation.onTermination = { _ in token.invalidate() }
+        }
+    }
+
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
         guard let cache = try? snapshot(), let realm = try? cache.openRealmForRead() else {
             return AsyncStream { continuation in
                 continuation.yield([])
                 continuation.finish()
             }
+        }
+        guard !realm.configuration.readOnly, !realm.isInWriteTransaction else {
+            return AsyncStream { $0.finish() }
         }
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
@@ -693,7 +718,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
 
     func observeCategoryCacheUpdates(categoryName: String, libraryIds: Set<String>?) -> AsyncStream<Void> {
-        guard let cache = try? snapshot(), let realm = try? cache.openRealmForRead() else {
+        guard let cache = try? snapshot(), let realm = try? cache.openRealmForRead(),
+              !realm.configuration.readOnly, !realm.isInWriteTransaction else {
             return AsyncStream { continuation in
                 continuation.finish()
             }
@@ -705,30 +731,17 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             objects = objects.filter("libraryId IN %@", Array(libraryIds))
         }
 
-        return AsyncStream { continuation in
-            var lastFingerprint: [Int]?
-            let makeFingerprint: (Results<CalibreLibraryCategoryObject>) -> [Int] = { objects in
-                objects.map { object in
-                    var hasher = Hasher()
-                    hasher.combine(object.libraryId)
-                    hasher.combine(object.categoryName)
-                    hasher.combine(object.generation)
-                    hasher.combine(object.totalNumber)
-                    hasher.combine(object.items.count)
-                    return hasher.finalize()
-                }.sorted()
-            }
-
-            let token = objects.observe(on: DispatchQueue.main) { changes in
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let token = objects.observe(
+                keyPaths: ["generation", "totalNumber", "items", "items.name", "items.count", "items.averageRating", "items.url"],
+                on: DispatchQueue.main
+            ) { changes in
                 do { try cache.checkDatabase() }
                 catch { continuation.finish(); return }
                 switch changes {
-                case .initial(let objects):
-                    lastFingerprint = makeFingerprint(objects)
-                case .update(let objects, _, _, _):
-                    let fingerprint = makeFingerprint(objects)
-                    guard fingerprint != lastFingerprint else { return }
-                    lastFingerprint = fingerprint
+                case .initial:
+                    break
+                case .update:
                     continuation.yield(())
                 case .error:
                     break

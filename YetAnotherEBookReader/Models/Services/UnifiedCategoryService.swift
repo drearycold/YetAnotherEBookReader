@@ -61,9 +61,7 @@ actor UnifiedCategoryService {
         categoryName: String, searchString: String, query: Query, offset: Int, limit: Int
     ) async throws -> UnifiedCategoryPageResult {
         let current = await activeLibraries(for: query.requestedLibraryIds)
-        guard current.count == query.libraries.count, query.libraries.allSatisfy({ id, library in
-            current[id].map { $0.hasSameCacheScope(as: library) } == true
-        }) else { throw CacheContextError.superseded }
+        guard sameBrowseScope(current, query.libraries) else { throw CacheContextError.superseded }
         return try readPage(categoryName: categoryName, searchString: searchString, query: query,
                             offset: offset, limit: limit)
     }
@@ -88,9 +86,6 @@ actor UnifiedCategoryService {
     }
 
     private func activeLibraries(for libraryIds: Set<String>) async -> [String: CalibreLibrary] {
-        let libraries = await libraryProvider.getLibraries()
-        return libraries.filter { id, library in
-            !library.hidden && !library.server.removed && (libraryIds.isEmpty || libraryIds.contains(id))
-        }
+        activeBrowseLibraries(await libraryProvider.getLibraries(), in: libraryIds)
     }
 }

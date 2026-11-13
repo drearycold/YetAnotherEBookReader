@@ -11,8 +11,10 @@ final class ManagerAsyncBroadcaster<Element> {
     private let lock = NSLock()
     private var continuations = [UUID: AsyncStream<Element>.Continuation]()
 
-    func stream() -> AsyncStream<Element> {
-        makeStream(initialValue: nil, bufferingPolicy: .unbounded)
+    func stream(
+        bufferingPolicy: AsyncStream<Element>.Continuation.BufferingPolicy = .unbounded
+    ) -> AsyncStream<Element> {
+        makeStream(initialValue: nil, bufferingPolicy: bufferingPolicy)
     }
 
     func stream(

@@ -21,6 +21,11 @@ struct BookImportPicker: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.epub, .pdf, .cbz], asCopy: true)
+        #if CC3_UI_TEST_FIXTURE
+        if ProcessInfo.processInfo.environment["YABR_CC3_LOCAL_FILE"] == "1" {
+            picker.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        }
+        #endif
         picker.allowsMultipleSelection = allowsMultipleSelection
         picker.delegate = context.coordinator
         return picker
