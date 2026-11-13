@@ -918,28 +918,28 @@ final class CalibreOnboardingUITests: XCTestCase {
         element("Local Library").tap()
         element("browse.local.import").tap()
         func chooseFixture(_ folder: String) {
+            let icon = CGVector(dx: 0.5, dy: 0.25)
             let selected = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", folder)).firstMatch
             if !selected.waitForExistence(timeout: 3) {
                 let location = app.cells["DOC.sidebar.item.On My iPhone"].firstMatch
                 if location.exists { location.tap() }
                 let appFolder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "D.S.Reader")).firstMatch
-                if appFolder.waitForExistence(timeout: 2) { appFolder.tap() }
+                if appFolder.waitForExistence(timeout: 2) { appFolder.coordinate(withNormalizedOffset: icon).tap() }
                 let incoming = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Incoming")).firstMatch
-                if incoming.waitForExistence(timeout: 5) { incoming.tap() }
+                if incoming.waitForExistence(timeout: 5) { incoming.coordinate(withNormalizedOffset: icon).tap() }
             }
             XCTAssertTrue(selected.waitForExistence(timeout: 10), app.debugDescription)
-            selected.tap()
+            // Tap the icon above the filename. In the iOS 15 grid, tapping the name can start inline rename.
+            selected.coordinate(withNormalizedOffset: icon).tap()
             let file = app.cells.matching(
                 NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS[c] %@", "FI1 Sample", ".epub")
             ).firstMatch
             XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
-            file.tap()
+            file.coordinate(withNormalizedOffset: icon).tap()
         }
         func dismissImport() {
             XCTAssertTrue(app.staticTexts["Imported, read now?"].waitForExistence(timeout: 15), app.debugDescription)
-            let cancel = app.buttons["Cancel"].firstMatch
-            if cancel.exists { cancel.tap() }
-            else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
+            element("Cancel").tap()
         }
         func openLocalPicker() {
             if !browse.isSelected { browse.tap() }
@@ -959,20 +959,20 @@ final class CalibreOnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["browse.book.\(bookId)"].exists)
         capture("fi1-overwrite-failed")
         element("Retry").tap()
+        dismissImport()
         let replacement = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND NOT identifier CONTAINS %@ AND label CONTAINS %@",
             "shelf.book.", String(bookId), "FI1 Sample"
         )).firstMatch
         XCTAssertTrue(replacement.waitForExistence(timeout: 15), app.debugDescription)
-        if app.staticTexts["Imported, read now?"].exists { dismissImport() }
         openLocalPicker()
         chooseFixture("As New")
         element("As a new book").tap()
+        dismissImport()
         let savedAsNew = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "shelf.book.", "FI1 Sample (1)"
         )).firstMatch
         XCTAssertTrue(savedAsNew.waitForExistence(timeout: 15), app.debugDescription)
-        if app.staticTexts["Imported, read now?"].exists { dismissImport() }
         browse.tap()
         if !browse.isSelected { browse.tap() }
         if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }

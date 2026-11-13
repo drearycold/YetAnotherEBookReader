@@ -42,7 +42,7 @@ final class MainViewModel: ObservableObject {
     @Published var browseLibraryID: String?
     @Published var bookImportPickerPresenting = false
     @Published private(set) var bookImportURLs: [URL] = []
-    @Published var bookImportActionSheetPresenting = false
+    @Published var bookImportResultPresenting = false
     @Published var bookImportInfo: BookImportInfo?
     @Published var readerPresentations: [ReaderPresentation] = []
     @Published var activeReaderPresentation: ReaderPresentation?
@@ -221,7 +221,6 @@ final class MainViewModel: ObservableObject {
     }
     
     func handleImportedBook(_ info: BookImportInfo) {
-        bookImportActionSheetPresenting = false
         if info.error == nil {
             activeTab = 0
             if let localLibrary = container.libraryManager.localLibrary,
@@ -231,7 +230,7 @@ final class MainViewModel: ObservableObject {
             }
         }
 
-        bookImportActionSheetPresenting = true
+        bookImportResultPresenting = true
     }
 
     func importBookAsNew(url: URL) {

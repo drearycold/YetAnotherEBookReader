@@ -37,7 +37,7 @@ import Combine
         XCTAssertFalse(viewModel.initialTermsAgreementPresenting)
         XCTAssertFalse(viewModel.privacyWebViewPresenting)
         XCTAssertFalse(viewModel.termsWebViewPresenting)
-        XCTAssertFalse(viewModel.bookImportActionSheetPresenting)
+        XCTAssertFalse(viewModel.bookImportResultPresenting)
         XCTAssertNil(viewModel.bookImportInfo)
         XCTAssertFalse(viewModel.consentRequestTriggered)
         XCTAssertNil(viewModel.urlToOpen)
@@ -181,7 +181,7 @@ import Combine
             XCTAssertEqual(viewModel.activeTab, tab)
             XCTAssertEqual(mockAppContainer.bookManager.booksInShelf, books)
             XCTAssertNil(viewModel.bookImportInfo)
-            XCTAssertFalse(viewModel.bookImportActionSheetPresenting)
+            XCTAssertFalse(viewModel.bookImportResultPresenting)
         }
     }
 
@@ -213,7 +213,7 @@ import Combine
         viewModel.handleImportedBook(result)
         viewModel.openImportedBook()
         XCTAssertEqual(viewModel.activeTab, 2)
-        XCTAssertTrue(viewModel.bookImportActionSheetPresenting)
+        XCTAssertTrue(viewModel.bookImportResultPresenting)
         XCTAssertNil(viewModel.activeReaderPresentation)
         await fulfillment(of: [published], timeout: 0.25)
     }
@@ -255,7 +255,7 @@ import Combine
             viewModel.bookImportPickerPresenting = false
             viewModel.completeBookImportPicker()
         }
-        let imported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        let imported = await waitUntil { self.viewModel.bookImportResultPresenting }
         XCTAssertTrue(imported)
         XCTAssertNil(viewModel.bookImportInfo?.error)
         XCTAssertTrue(viewModel.bookImportURLs.isEmpty)
@@ -274,9 +274,9 @@ import Combine
         let savedPositions = mockAppContainer.readingPositionRepository.getPositions(for: book)
 
         // System Files/onOpenURL uses this same entry point, including identical-file detection.
-        viewModel.bookImportActionSheetPresenting = false
+        viewModel.bookImportResultPresenting = false
         viewModel.importBook(url: source)
-        let reimported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        let reimported = await waitUntil { self.viewModel.bookImportResultPresenting }
         XCTAssertTrue(reimported)
         XCTAssertNil(viewModel.bookImportInfo?.error)
         XCTAssertEqual(viewModel.bookImportInfo?.bookId, bookId)

@@ -83,12 +83,14 @@ remove failures. The focused suite passed 300 tests. The final iPhone
 PDFKit failures, with zero unexpected failures. The 21 real Calibre
 contract tests were skipped. iOS Simulator Release and Mac Catalyst
 builds passed after the local library Import button moved into the
-safe area. On iPhone 17, native Files import, overwrite failure with
-the old book still visible in Browse, Retry and As a new book passed.
-On iPhone 7 with iOS 15.5, import, overwrite failure and Retry reached
-the expected shelf state. After selecting the third EPUB in Files,
-the test timed out waiting for As a new book. That path is unverified
-on iOS 15.5.
+safe area. On iPhone 7, the first native run showed that a
+new conflict result could arrive while SwiftUI still considered the
+previous import action sheet presented. The import result now uses a
+sheet with an onDismiss callback. Overwrite, Retry, As a new book and
+Read run after the sheet closes. The complete native Files journey
+passed on iPhone 7 (iOS 15.5) and iPhone 17, including visible success
+after Retry and As a new book and two books in Browse. The fixture
+taps Files icons to avoid inline rename on iOS 15.5.
 
 Logs and result bundles are in `/tmp/YabrFI1`.
 
