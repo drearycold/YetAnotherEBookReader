@@ -25,6 +25,8 @@ final class MainViewModel: ObservableObject {
     private let container: AppContainer
     private let sessionManager: ReadingSessionManager
     private var bookImportTask: Task<Void, Never>?
+    private var bookImportIntent: UUID?
+    private var pendingImportResult: BookImportInfo?
     private var readerPresentationTask: Task<Void, Never>?
     private var readerPresentationListTask: Task<Void, Never>?
     private var newerPositionTask: Task<Void, Never>?
@@ -42,6 +44,7 @@ final class MainViewModel: ObservableObject {
     @Published var browseLibraryID: String?
     @Published var bookImportPickerPresenting = false
     @Published private(set) var bookImportURLs: [URL] = []
+    @Published private(set) var bookImportBusy = false
     @Published var bookImportResultPresenting = false
     @Published var bookImportInfo: BookImportInfo?
     @Published var readerPresentations: [ReaderPresentation] = []
@@ -84,16 +87,6 @@ final class MainViewModel: ObservableObject {
     }
     
     private func setupSubscriptions() {
-        bookImportTask?.cancel()
-        let bookImportEvents = container.bookImportEvents()
-        bookImportTask = Task { @MainActor [weak self] in
-            for await bookImportInfo in bookImportEvents {
-                guard !Task.isCancelled, let self else { return }
-                self.bookImportInfo = bookImportInfo
-                self.handleImportedBook(bookImportInfo)
-            }
-        }
-
         readerPresentationTask?.cancel()
         let readerPresentationSnapshots = sessionManager.activeReaderPresentationSnapshots()
         readerPresentationTask = Task { @MainActor [weak self] in
@@ -173,6 +166,7 @@ final class MainViewModel: ObservableObject {
     }
 
     func presentBookImportPicker() {
+        guard !bookImportBusy, !bookImportResultPresenting else { return }
         bookImportPickerDismissed = false
         bookImportURLs = []
         bookImportPickerPresenting = true
@@ -188,6 +182,7 @@ final class MainViewModel: ObservableObject {
     func completeBookImportPicker() {
         bookImportPickerDismissed = true
         importPickedBookIfReady()
+        presentPendingImportResult()
     }
 
     private func importPickedBookIfReady() {
@@ -197,10 +192,26 @@ final class MainViewModel: ObservableObject {
     }
 
     func importBook(url: URL) {
-        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
-        container.publishBookImport(result)
+        startImport(LocalBookImportRequest(url: url))
     }
-    
+
+    private func startImport(_ request: LocalBookImportRequest) {
+        bookImportIntent = request.id
+        pendingImportResult = nil
+        bookImportTask?.cancel()
+        bookImportBusy = true
+        let manager = container.bookManager
+        bookImportTask = Task { @MainActor [weak self] in
+            let result = await manager.importBook(request)
+            guard let self, self.bookImportIntent == result.request.id else { return }
+            self.bookImportBusy = false
+            self.bookImportTask = nil
+            guard !Task.isCancelled, result.error != .cancelled else { return }
+            self.pendingImportResult = result
+            self.presentPendingImportResult()
+        }
+    }
+
     func onAppear() {
         let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
         if !termsAccepted {
@@ -220,34 +231,37 @@ final class MainViewModel: ObservableObject {
         exit(1)
     }
     
-    func handleImportedBook(_ info: BookImportInfo) {
-        if info.error == nil {
-            activeTab = 0
-            if let localLibrary = container.libraryManager.localLibrary,
-               let bookId = info.bookId,
-               let book = container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-                container.publishCalibreUpdate(.book(book))
-            }
-        }
+    func completeBookImportResult() {
+        presentPendingImportResult()
+    }
 
+    private func presentPendingImportResult() {
+        guard !bookImportResultPresenting, !bookImportPickerPresenting,
+              let result = pendingImportResult, result.request.id == bookImportIntent else { return }
+        pendingImportResult = nil
+        guard container.bookManager.isCurrentImportResult(result) else { return }
+        bookImportInfo = result
+        handleImportedBook(result)
+    }
+
+    func handleImportedBook(_ info: BookImportInfo) {
+        if info.error == nil { activeTab = 0 }
         bookImportResultPresenting = true
     }
 
-    func importBookAsNew(url: URL) {
-        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true)
-        container.publishBookImport(result)
+    func importBookAsNew(_ info: BookImportInfo) {
+        guard info.request.id == bookImportIntent, container.bookManager.isCurrentImportResult(info) else { return }
+        startImport(LocalBookImportRequest(url: info.url, doMove: info.request.doMove, asNew: true))
     }
 
-    func importBookOverwrite(url: URL) {
-        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false)
-        container.publishBookImport(result)
+    func importBookOverwrite(_ info: BookImportInfo) {
+        guard info.request.id == bookImportIntent, container.bookManager.isCurrentImportResult(info) else { return }
+        startImport(LocalBookImportRequest(url: info.url, doMove: info.request.doMove, overwrite: true))
     }
 
     func openImportedBook() {
-        guard let info = bookImportInfo, info.error == nil, let bookId = info.bookId,
-              let localLibrary = container.libraryManager.localLibrary else { return }
-        let book = CalibreBook(id: bookId, library: localLibrary)
-        guard let importedBook = container.bookManager.booksInShelf[book.inShelfId] ?? container.bookRepository.getBook(id: book.inShelfId) else { return }
+        guard let info = bookImportInfo, info.request.id == bookImportIntent,
+              let importedBook = container.bookManager.importedBook(for: info) else { return }
         let readerInfo = sessionManager.prepareBookReading(book: importedBook)
         guard readerInfo.missing == false else { return }
         container.openReader(
@@ -259,13 +273,9 @@ final class MainViewModel: ObservableObject {
     }
 
     func retryImport(_ info: BookImportInfo) {
-        if info.overwrite {
-            importBookOverwrite(url: info.url)
-        } else if info.asNew {
-            importBookAsNew(url: info.url)
-        } else {
-            importBook(url: info.url)
-        }
+        guard info.request.id == bookImportIntent, container.bookManager.isCurrentImportResult(info) else { return }
+        startImport(LocalBookImportRequest(url: info.url, doMove: info.request.doMove,
+                                         overwrite: info.overwrite, asNew: info.asNew))
     }
 
     func reportImportError() {

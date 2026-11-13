@@ -8,7 +8,7 @@
 import Foundation
 import CoreText
 
-enum Format: String, CaseIterable, Identifiable, Codable {
+enum Format: String, CaseIterable, Identifiable, Codable, Sendable {
     case UNKNOWN
     
     case EPUB

@@ -6,53 +6,13 @@
 //
 
 import Foundation
-import Darwin
 import OSLog
-import CryptoSwift
-
-#if canImport(R2Shared)
-import R2Shared
-import R2Streamer
-#endif
 
 class CalibreBookManager {
-    struct FileOperations {
-        var copy: (URL, URL) throws -> Void = { try FileManager.default.copyItem(at: $0, to: $1) }
-        var move: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
-        var replace: (URL, URL) throws -> Void = { staged, destination in
-            // The staging directory is on the destination volume. POSIX rename either
-            // installs the staged file or leaves the existing destination in place.
-            guard rename(staged.path, destination.path) == 0 else {
-                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-            }
-        }
-        var remove: (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }
-
-        static func live() -> FileOperations {
-            #if FI1_UI_TEST_FIXTURE
-            var files = FileOperations()
-            if ProcessInfo.processInfo.environment["YABR_FI1_FAIL_OVERWRITE"] == "1",
-               UITestingConfiguration.skipsConsentPrompts() {
-                let replace = files.replace
-                var failOnce = true
-                files.replace = { source, destination in
-                    if failOnce, source.lastPathComponent == "incoming" {
-                        failOnce = false
-                        throw CocoaError(.fileWriteNoPermission)
-                    }
-                    try replace(source, destination)
-                }
-            }
-            return files
-            #else
-            return FileOperations()
-            #endif
-        }
-    }
-
-    private let files: FileOperations
+    private let files: LocalBookFileOperations
     private let localDirectory: URL?
-    private let fileCommitLock = NSRecursiveLock()
+    private let localImports: LocalBookImportCoordinator
+    private let localCoverCache: BookCoverCaching?
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreBookManager")
 
     weak var container: AppContainerProtocol?
@@ -126,13 +86,16 @@ class CalibreBookManager {
         bookRepository: BookRepositoryProtocol? = nil,
         readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,
         annotationRepository: AnnotationRepositoryProtocol? = nil,
-        files: FileOperations = .live(),
-        localDirectory: URL? = nil
+        files: LocalBookFileOperations = .live(),
+        localDirectory: URL? = nil,
+        localImports: LocalBookImportCoordinator? = nil,
+        localCoverCache: BookCoverCaching? = nil
     ) {
         self.container = container
         self.databaseService = databaseService
         self.files = files
         self.localDirectory = localDirectory
+        self.localCoverCache = localCoverCache ?? container?.coverCache
 
         if let repo = bookRepository {
             self.bookRepository = repo
@@ -159,6 +122,8 @@ class CalibreBookManager {
             self.annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
         }
 
+        self.localImports = localImports ?? LocalBookImportCoordinator(repository: self.bookRepository, files: files,
+                                                       loadMetadata: LocalPublicationMetadata.load)
         self.metadataSyncWorker = BookMetadataSyncWorker(
             readingPositionRepository: self.readingPositionRepository,
             annotationRepository: self.annotationRepository
@@ -404,16 +369,18 @@ class CalibreBookManager {
     // MARK: - Cache Management
 
     @discardableResult
-    func clearCache(inShelfId: String) -> BookFileRemovalResult {
-        guard let book = booksInShelf[inShelfId] else {
-            return .committed()
+    @MainActor
+    func clearCache(inShelfId: String) async -> BookFileRemovalResult {
+        guard let book = booksInShelf[inShelfId] else { return .committed() }
+        if book.library.server.isLocal {
+            guard let scope = localImportScope(), scope.library.id == book.library.id else { return .storageFailed }
+            return await localImports.remove(bookID: inShelfId, scope: scope, publish: localFilePublisher,
+                                             coverCache: localCoverCache)
         }
 
-        let cachedFormats = book.formats.filter { $1.cached }
         var outcome = BookFileRemovalResult.committed()
-        for (key, _) in cachedFormats {
-            guard let format = Format(rawValue: key) else { continue }
-            guard let currentBook = booksInShelf[inShelfId] else { continue }
+        for (key, info) in book.formats where info.cached {
+            guard let format = Format(rawValue: key), let currentBook = booksInShelf[inShelfId] else { continue }
             let result = clearCache(book: currentBook, format: format)
             if !result.succeeded { return result }
             if result.cleanupPending { outcome = result }
@@ -451,82 +418,53 @@ class CalibreBookManager {
 
     @discardableResult
     func clearCache(book: CalibreBook, format: Format) -> BookFileRemovalResult {
-        fileCommitLock.withLock {
-            let current = bookRepository.getBook(id: book.inShelfId) ?? book
-            guard let url = savedFileURL(book: current, format: format) else { return .fileFailed }
-            if current.library.server.isLocal { return removeLocalFile(url, book: current, format: format) }
-
-            guard removeCachedFile(book: current, format: format) else { return .fileFailed }
-            let updated = clearingFormat(format, from: current)
-            updateBook(book: updated)
-            if updated.inShelf, !updated.formats.values.contains(where: \.cached) {
-                removeFromShelf(inShelfId: updated.inShelfId)
-            }
-            return .committed()
-        }
-    }
-
-    private func clearingFormat(_ format: Format, from book: CalibreBook) -> CalibreBook {
-        var updated = book
-        updated.formats[format.rawValue]?.cacheMTime = .distantPast
-        updated.formats[format.rawValue]?.cacheSize = 0
-        updated.formats[format.rawValue]?.cached = false
-        updated.formats[format.rawValue]?.selected = nil
-        updated.lastUpdated = Date()
-        return updated
-    }
-
-    private func removeLocalFile(_ url: URL, book: CalibreBook, format: Format) -> BookFileRemovalResult {
-        var workspace: URL?
-        var backup: URL?
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                let folder = try makeFileWorkspace(near: url)
-                workspace = folder
-                let saved = folder.appendingPathComponent("previous")
-                try files.copy(url, saved)
-                backup = saved
-                try files.remove(url)
-            }
-        } catch {
-            if !FileManager.default.fileExists(atPath: url.path), let backup,
-               !restoreBackup(backup, to: url) {
-                return .recoveryRequired(workspace?.lastPathComponent)
-            }
-            _ = cleanFileWorkspace(workspace)
-            logger.error("Could not remove the local book file: \(error.localizedDescription)")
+        let current = bookRepository.getBook(id: book.inShelfId) ?? book
+        guard !current.library.server.isLocal, removeCachedFile(book: current, format: format) else {
             return .fileFailed
         }
-
-        var updated = clearingFormat(format, from: book)
-        let deleted = !updated.formats.values.contains(where: \.cached)
-        if deleted { updated.inShelf = false }
-        do {
-            try bookRepository.commitBookFiles(saving: deleted ? [] : [updated],
-                                               deleting: deleted ? [book.inShelfId] : [])
-        } catch {
-            if let backup, !restoreBackup(backup, to: url) { return .recoveryRequired(workspace?.lastPathComponent) }
-            _ = cleanFileWorkspace(workspace)
-            return .storageFailed
+        let updated = current.clearingCachedFormat(format)
+        updateBook(book: updated)
+        if updated.inShelf, !updated.formats.values.contains(where: \.cached) {
+            removeFromShelf(inShelfId: updated.inShelfId)
         }
-        if deleted { publishRemovedLocalBook(book) }
-        else { publishSavedBook(updated) }
-        return .committed(cleanupPending: !cleanFileWorkspace(workspace))
+        return .committed()
     }
 
-    private func publishRemovedLocalBook(_ book: CalibreBook) {
-        if readingBook?.inShelfId == book.inShelfId { readingBook?.inShelf = false }
-        booksInShelf.removeValue(forKey: book.inShelfId)
-        Task { @MainActor in container?.publishCalibreUpdate(.deleted(book.inShelfId)) }
+    @MainActor
+    private var localFilePublisher: LocalBookImportCoordinator.Publish {
+        { [weak self] changes in self?.publishLocalFileChanges(changes) }
+    }
+
+    @MainActor
+    private func publishLocalFileChanges(_ changes: LocalBookImportCoordinator.Changes) {
+        guard !changes.removedIDs.isEmpty || !changes.savedBooks.isEmpty else { return }
+        databaseService.refreshMainRealm()
+        for id in changes.removedIDs {
+            guard bookRepository.getBook(id: id)?.inShelf != true else { continue }
+            if let url = booksInShelf[id]?.coverURL { localCoverCache?.removeCover(for: url) }
+            if readingBook?.inShelfId == id { readingBook?.inShelf = false }
+            booksInShelf.removeValue(forKey: id)
+            container?.publishCalibreUpdate(.deleted(id))
+        }
+        for snapshot in changes.savedBooks {
+            guard let book = bookRepository.getBook(id: snapshot.inShelfId) else { continue }
+            publishSavedBook(book)
+            container?.publishCalibreUpdate(.book(book))
+        }
     }
 
     /// The repository has already deleted these books. Cache cleanup must not save them again.
     @MainActor
     func discardShelfBooks(in libraryIDs: Set<String>) {
         let books = booksInShelf.values.filter { libraryIDs.contains($0.library.id) }
+        var localPaths = Set<URL>()
         for book in books {
+            if book.library.server.isLocal, let cover = book.coverURL { localCoverCache?.removeCover(for: cover) }
             for (key, info) in book.formats where info.cached {
-                if let format = Format(rawValue: key), !removeCachedFile(book: book, format: format) {
+                guard let format = Format(rawValue: key) else { continue }
+                if book.library.server.isLocal {
+                    if let url = savedFileURL(book: book, format: format) { localPaths.insert(url) }
+                } else if !removeCachedFile(book: book, format: format) {
                     logger.error("File cleanup is pending after a committed library removal")
                 }
             }
@@ -534,6 +472,7 @@ class CalibreBookManager {
             booksInShelf.removeValue(forKey: book.inShelfId)
             container?.publishCalibreUpdate(.deleted(book.inShelfId))
         }
+        localImports.cleanupRemovedLibraryFiles(localPaths)
     }
 
     private func removeCachedFile(book: CalibreBook, format: Format) -> Bool {
@@ -571,241 +510,79 @@ class CalibreBookManager {
         return nil
     }
 
-    // MARK: - Local File Imports
+    // MARK: - Local Files
 
-    func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool) -> BookImportInfo {
-        fileCommitLock.withLock {
-            importLocalFile(url, doMove: doMove, overwrite: doOverwrite, asNew: asNew)
-        }
+    @MainActor
+    func importBook(_ request: LocalBookImportRequest) async -> BookImportInfo {
+        var result = BookImportInfo(request: request)
+        guard request.url.isFileURL else { return result.with(error: .protocolUnsupported) }
+        guard !request.overwrite || !request.asNew else { return result.with(error: .invalidArg) }
+        guard let scope = localImportScope() else { return result.with(error: .libraryAbsent) }
+        return await localImports.run(request, scope: scope, publish: localFilePublisher,
+                                      coverCache: localCoverCache)
     }
 
-    private func importLocalFile(_ source: URL, doMove: Bool, overwrite: Bool, asNew: Bool) -> BookImportInfo {
-        var result = BookImportInfo(url: source, overwrite: overwrite, asNew: asNew)
-        guard source.isFileURL else { return result.with(error: .protocolUnsupported) }
-        guard !overwrite || !asNew else { return result.with(error: .invalidArg) }
-        guard let library = container?.libraryManager.localLibrary,
-              let base = container?.serverManager.documentServer?.localBaseUrl else {
-            return result.with(error: .libraryAbsent)
-        }
-        guard let format = Format(rawValue: source.pathExtension.uppercased()), format != .UNKNOWN else {
-            return result.with(error: .formatUnsupported)
-        }
-
-        let accessed = source.startAccessingSecurityScopedResource()
-        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
-
-        let directory = localDirectory ?? base.appendingPathComponent(library.key, isDirectory: true)
-        let name = source.deletingPathExtension().lastPathComponent
-        var destination = directory.appendingPathComponent(name).appendingPathExtension(format.ext)
-        let sourcePath = source.resolvingSymlinksInPath().standardizedFileURL
-        let destinationPath = destination.resolvingSymlinksInPath().standardizedFileURL
-        let sourceIdentity = try? source.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-        let destinationIdentity = try? destination.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-        let sameFile = sourcePath == destinationPath || sourceIdentity?.isEqual(destinationIdentity) == true
-        if sameFile, sourcePath.deletingLastPathComponent() == destinationPath.deletingLastPathComponent() {
-            destination = source
-        }
-        guard let sourceId = calcLocalFileBookId(for: source) else { return result.with(error: .idCalcFail) }
-        result.bookId = sourceId
-        if let book = bookRepository.getBook(library: library, bookId: sourceId),
-           book.inShelf, book.formats[format.rawValue]?.cached == true,
-           let existing = savedFileURL(book: book, format: format),
-           FileManager.default.fileExists(atPath: existing.path) {
-            return result
-        }
-
-        if !sameFile, FileManager.default.fileExists(atPath: destination.path) {
-            if asNew {
-                guard let available = (1..<100).lazy.map({
-                    directory.appendingPathComponent("\(name) (\($0))").appendingPathExtension(format.ext)
-                }).first(where: { !FileManager.default.fileExists(atPath: $0.path) }) else {
-                    return result.with(error: .tooManyFiles)
-                }
-                destination = available
-            } else if !overwrite {
-                return result.with(error: .destConflict)
-            }
-        }
-
-        var workspace: URL?
-        var keepBackup = false
-        var backup: URL?
-        var installed = false
-        do {
-            let input: URL
-            if sameFile {
-                input = source
-            } else {
-                let folder = try makeFileWorkspace(near: destination)
-                workspace = folder
-                let stage = folder.appendingPathComponent("incoming")
-                // Keep the original available until both the destination and Realm have committed.
-                try files.copy(source, stage)
-                input = stage
-            }
-
-            guard let bookId = calcLocalFileBookId(for: input) else { throw ImportError.idCalcFail }
-            result.bookId = bookId
-            let preparedBook = try localBook(file: input, destination: destination, format: format,
-                                             library: library, bookId: bookId)
-            let previous = try bookRepository.localBooks(library: library, filename: destination.lastPathComponent,
-                                                          format: format).filter { $0.id != bookId }
-            if let workspace {
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    guard overwrite else { throw ImportError.destConflict }
-                    let saved = workspace.appendingPathComponent("previous")
-                    try files.copy(destination, saved)
-                    backup = saved
-                    try files.replace(input, destination)
-                } else {
-                    try files.move(input, destination)
-                }
-                installed = true
-            }
-
-            let cleared = previous.map { clearingFormat(format, from: $0) }
-            let removed = cleared.filter { !$0.formats.values.contains(where: \.cached) }
-            let retained = cleared.filter { $0.formats.values.contains(where: \.cached) }
-            do {
-                try bookRepository.commitBookFiles(saving: [preparedBook] + retained,
-                                                   deleting: Set(removed.map(\.inShelfId)))
-            } catch {
-                if installed {
-                    if let backup {
-                        keepBackup = !restoreBackup(backup, to: destination)
-                    } else {
-                        do {
-                            guard let workspace else { throw ImportError.recoveryRequired }
-                            try files.move(destination, workspace.appendingPathComponent("uncommitted"))
-                        }
-                        catch { keepBackup = true }
-                    }
-                }
-                throw keepBackup ? ImportError.recoveryRequired : ImportError.loadMetaFail
-            }
-
-            for book in removed { publishRemovedLocalBook(book) }
-            for book in retained { publishSavedBook(book) }
-            publishSavedBook(preparedBook)
-            if doMove && !sameFile {
-                do { try files.remove(source) }
-                catch {
-                    logger.error("Imported the book, but could not remove its original: \(error.localizedDescription)")
-                    result.cleanupPending = true
-                }
-            }
-            let cleaned = cleanFileWorkspace(workspace)
-            result.cleanupPending = result.cleanupPending || !cleaned
-            enrichLocalBook(preparedBook, at: destination)
-            return result
-        } catch {
-            logger.error("Could not commit the local import: \(error.localizedDescription)")
-            if keepBackup {
-                result.recoveryFolder = backup == nil ? nil : workspace?.lastPathComponent
-            } else {
-                result.cleanupPending = !cleanFileWorkspace(workspace)
-            }
-            if (error as? ImportError) != .destConflict { result.bookId = nil }
-            return result.with(error: error as? ImportError ?? .fileOpFail)
-        }
+    @MainActor
+    func scanLocalBooks() async {
+        guard let scope = localImportScope() else { return }
+        await localImports.scan(scope: scope, publish: localFilePublisher, coverCache: localCoverCache)
     }
 
-    private func makeFileWorkspace(near destination: URL) throws -> URL {
-        let folder = destination.deletingLastPathComponent()
-            .appendingPathComponent(".dsreader-file-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
-        return folder
+    @MainActor
+    func removeLocalFile(book: CalibreBook, format: Format) async -> BookFileRemovalResult {
+        guard let scope = localImportScope(), scope.library.id == book.library.id else { return .storageFailed }
+        return await localImports.remove(bookID: book.inShelfId, format: format, scope: scope, publish: localFilePublisher,
+                                         coverCache: localCoverCache)
     }
 
-    private func restoreBackup(_ backup: URL, to destination: URL) -> Bool {
-        do {
-            try files.replace(backup, destination)
-            return true
-        } catch {
-            logger.error("Could not restore local book file. Recovery copy: \(backup.lastPathComponent, privacy: .public) in \(backup.deletingLastPathComponent().lastPathComponent, privacy: .public)")
-            return false
-        }
+    @MainActor
+    func isCurrentImportResult(_ info: BookImportInfo) -> Bool {
+        guard let databaseID = info.databaseID else { return true }
+        guard let scope = localImportScope() else { return false }
+        return scope.databaseID == databaseID && scope.library.id == info.libraryID
     }
 
-    private func cleanFileWorkspace(_ workspace: URL?) -> Bool {
-        guard let workspace else { return true }
-        do {
-            try files.remove(workspace)
-            return true
-        } catch {
-            logger.error("Could not clean local file workspace: \(workspace.lastPathComponent, privacy: .public)")
-            return false
-        }
-    }
-
-    func calcLocalFileBookId(for fileURL: URL) -> Int32? {
-        guard let digest = sha256new(for: fileURL) else { return nil }
-
-        let bookId = Int32(bigEndian: digest.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
-        return bookId
-    }
-
-    func loadLocalLibraryBookMetadata(fileURL: URL, in library: CalibreLibrary, on server: CalibreServer, knownBookId: Int32? = nil) -> Int32? {
-        fileCommitLock.withLock {
-            guard let format = Format(rawValue: fileURL.pathExtension.uppercased()), format != .UNKNOWN,
-                  let bookId = knownBookId ?? calcLocalFileBookId(for: fileURL) else { return nil }
-            do {
-                let book = try localBook(file: fileURL, destination: fileURL, format: format, library: library, bookId: bookId)
-                try bookRepository.commitBookFiles(saving: [book], deleting: [])
-                publishSavedBook(book)
-                enrichLocalBook(book, at: fileURL)
-                return bookId
-            } catch {
-                logger.error("Could not save local book metadata: \(error.localizedDescription)")
-                return nil
-            }
-        }
-    }
-
-    private func localBook(file: URL, destination: URL, format: Format, library: CalibreLibrary, bookId: Int32) throws -> CalibreBook {
-        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-        guard attributes[.type] as? FileAttributeType == .typeRegular,
-              let size = (attributes[.size] as? NSNumber)?.uint64Value, size > 0,
-              let modified = attributes[.modificationDate] as? Date else { throw ImportError.loadMetaFail }
-        var book = bookRepository.getBook(library: library, bookId: bookId) ?? CalibreBook(id: bookId, library: library)
-        book.title = destination.deletingPathExtension().lastPathComponent
-        book.lastModified = Date()
-        book.lastSynced = book.lastModified
-        book.timestamp = max(book.timestamp, modified)
-        book.formats[format.rawValue] = FormatInfo(filename: destination.lastPathComponent,
-                                                  serverSize: size, serverMTime: modified, cached: true,
-                                                  cacheSize: size, cacheMTime: modified)
-        book.inShelf = true
+    @MainActor
+    func importedBook(for info: BookImportInfo) -> CalibreBook? {
+        databaseService.refreshMainRealm()
+        guard info.error == nil, let id = info.bookId, let scope = localImportScope(),
+              scope.databaseID == info.databaseID, scope.library.id == info.libraryID,
+              let format = Format(rawValue: info.url.pathExtension.uppercased()),
+              let book = bookRepository.getBook(library: scope.library, bookId: id), book.inShelf,
+              book.formats[format.rawValue]?.cached == true,
+              let file = savedFileURL(book: book, format: format),
+              FileManager.default.isReadableFile(atPath: file.path)
+        else { return nil }
         return book
     }
 
-    private func enrichLocalBook(_ book: CalibreBook, at fileURL: URL) {
-        #if canImport(R2Shared)
-        let streamer = Streamer()
-        streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { [weak self] result in
-            guard let self, let publication = try? result.get() else { return }
-            let title = publication.metadata.title
-            let cover = publication.cover?.pngData()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.fileCommitLock.withLock {
-                    guard FileManager.default.fileExists(atPath: fileURL.path),
-                          var current = self.bookRepository.getBook(id: book.inShelfId),
-                          current.lastSynced == book.lastSynced else { return }
-                    current.title = title
-                    do {
-                        try self.bookRepository.commitBookFiles(saving: [current], deleting: [])
-                        self.publishSavedBook(current)
-                        if let cover, let url = current.coverURL {
-                            self.container?.coverCache.storeCoverData(cover, for: url)
-                        }
-                    } catch {
-                        self.logger.error("Could not save publication enrichment: \(error.localizedDescription)")
-                    }
-                }
-            }
-        }
-        #endif
+    @MainActor
+    private func localImportScope() -> LocalBookImportCoordinator.Scope? {
+        guard let container, let library = container.libraryManager.localLibrary,
+              let current = container.libraryManager.calibreLibraries[library.id],
+              !current.hidden, current.server.isLocal,
+              let server = container.serverManager.documentServer, server.id == current.server.id, !server.removed,
+              container.serverManager.calibreServers[server.id]?.removed == false,
+              let base = server.localBaseUrl, let database = databaseService.cacheConfigurationSnapshot,
+              let lifetime = try? container.calibreServerService.cacheLifetime(for: current)
+        else { return nil }
+
+        let directory = localDirectory ?? base.appendingPathComponent(current.key, isDirectory: true)
+        let storage = LocalBookStorageScope(library: current, database: database, lifetime: lifetime)
+        return LocalBookImportCoordinator.Scope(storage: storage, directory: directory,
+                                               databaseChanges: { [databaseService] in databaseService.cacheConfigurationChanges() },
+                                               libraryChanges: { [weak container] in
+            container?.libraryManager.librarySnapshots(bufferingPolicy: .bufferingNewest(1)) ?? AsyncStream { $0.finish() }
+        }, serverChanges: { [weak container] in
+            container?.serverManager.serverSnapshots() ?? AsyncStream { $0.finish() }
+        }, isCurrent: { [weak container, weak databaseService] in
+            guard let container, databaseService?.cacheConfigurationSnapshot?.id == database.id,
+                  (try? lifetime.checkCurrent()) != nil,
+                  container.libraryManager.localLibrary?.id == current.id,
+                  let server = container.serverManager.documentServer, server.id == current.server.id, !server.removed,
+                  container.serverManager.calibreServers[server.id]?.removed == false else { return false }
+            return true
+        })
     }
 
     // MARK: - Reading Prep & Navigation

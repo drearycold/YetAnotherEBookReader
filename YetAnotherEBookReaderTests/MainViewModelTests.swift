@@ -65,7 +65,7 @@ import Combine
     }
     
     func testReportImportError() throws {
-        viewModel.bookImportInfo = BookImportInfo(url: URL(fileURLWithPath: "/tmp/foo.epub"), error: .destConflict)
+        viewModel.bookImportInfo = BookImportInfo(request: LocalBookImportRequest(url: URL(fileURLWithPath: "/tmp/foo.epub")), error: .destConflict)
         viewModel.reportImportError()
         XCTAssertNotNil(viewModel.urlToOpen)
         XCTAssertTrue(viewModel.urlToOpen?.absoluteString.contains("destConflict") == true)
@@ -194,7 +194,7 @@ import Combine
         let book = try XCTUnwrap(mockAppContainer.bookManager.booksInShelf.values.first {
             $0.library.id == library.id
         })
-        let result = BookImportInfo(url: URL(fileURLWithPath: "/tmp/failed.epub"),
+        let result = BookImportInfo(request: LocalBookImportRequest(url: URL(fileURLWithPath: "/tmp/failed.epub")),
                                     bookId: book.id, error: .loadMetaFail)
         let published = expectation(description: "A failed import cannot publish the book")
         published.isInverted = true
@@ -216,6 +216,28 @@ import Combine
         XCTAssertTrue(viewModel.bookImportResultPresenting)
         XCTAssertNil(viewModel.activeReaderPresentation)
         await fulfillment(of: [published], timeout: 0.25)
+    }
+
+    func testNewIntentWaitsForTheVisibleResultToCloseAndIgnoresAnOlderRetry() async throws {
+        let older = URL(fileURLWithPath: "/tmp/older.unknown")
+        let newer = URL(fileURLWithPath: "/tmp/newer.unknown")
+        viewModel.importBook(url: older)
+        let presented = await waitUntil { self.viewModel.bookImportResultPresenting }
+        XCTAssertTrue(presented)
+        let olderResult = try XCTUnwrap(viewModel.bookImportInfo)
+
+        viewModel.importBook(url: newer)
+        let finished = await waitUntil { !self.viewModel.bookImportBusy }
+        XCTAssertTrue(finished)
+        XCTAssertEqual(viewModel.bookImportInfo?.url, older)
+        viewModel.retryImport(olderResult)
+        XCTAssertFalse(viewModel.bookImportBusy)
+
+        viewModel.bookImportResultPresenting = false
+        viewModel.completeBookImportResult()
+        XCTAssertEqual(viewModel.bookImportInfo?.url, newer)
+        XCTAssertNotEqual(viewModel.bookImportInfo?.request.id, olderResult.request.id)
+        XCTAssertTrue(viewModel.bookImportResultPresenting)
     }
 
     func testPickerCanDismissBeforeItsSelectionCallback() async throws {

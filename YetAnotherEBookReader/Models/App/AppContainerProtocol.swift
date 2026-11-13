@@ -97,11 +97,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
 
     @MainActor
-    func publishBookImport(_ info: BookImportInfo)
-
-    func bookImportEvents() -> AsyncStream<BookImportInfo>
-
-    @MainActor
     func publishDismissAll(_ reason: String)
 
     func dismissAllEvents() -> AsyncStream<String>

@@ -47,7 +47,7 @@ struct RecentShelfView: View {
                             viewModel.refreshBookFormats(bookId: book.id)
                         },
                         onDelete: {
-                            viewModel.deleteBook(bookId: book.id)
+                            Task { await viewModel.deleteBook(bookId: book.id) }
                         },
                         onGoodreads: {
                             viewModel.goodreadsAction(bookId: book.id)
@@ -275,9 +275,7 @@ struct RecentShelfView: View {
                         title: Text("Delete Books?"),
                         message: Text("Will delete \(bookIds.count) books from reading shelf, are you sure?"),
                         primaryButton: .destructive(Text("Delete")) {
-                            withAnimation {
-                                viewModel.deleteSelectedBooks()
-                            }
+                            Task { await viewModel.deleteBooks(bookIds: bookIds) }
                         },
                         secondaryButton: .cancel()
                     )

@@ -633,7 +633,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         }
     }
 
-    func testPopulateLocalLibraryBooksWithFiles() throws {
+    func testPopulateLocalLibraryBooksWithFiles() async throws {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
             XCTFail("Failed to get document directory")
             return
@@ -644,12 +644,15 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let testBookFile = localLibraryURL.appendingPathComponent("TestBook.epub")
         try? "EPUB Content".write(to: testBookFile, atomically: true, encoding: .utf8)
         
+        let completion = expectation(description: "Local scan completed")
         var completionCount = 0
         var completionWasOnMainThread = false
         libraryManager.populateLocalLibraryBooks {
             completionCount += 1
             completionWasOnMainThread = Thread.isMainThread
+            completion.fulfill()
         }
+        await fulfillment(of: [completion], timeout: 5)
 
         XCTAssertNotNil(libraryManager.localLibrary)
         XCTAssertEqual(libraryManager.localLibrary?.name, "Local Library")

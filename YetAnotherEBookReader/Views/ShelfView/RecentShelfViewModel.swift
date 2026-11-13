@@ -130,10 +130,10 @@ final class RecentShelfViewModel: ObservableObject {
         container.serverManager.probeServersReachability(with: [], updateLibrary: true)
     }
 
-    func deleteBooks(bookIds: Set<String>) {
+    func deleteBooks(bookIds: Set<String>) async {
         var removed = Set<String>()
         for id in bookIds {
-            let result = container.bookManager.clearCache(inShelfId: id)
+            let result = await container.bookManager.clearCache(inShelfId: id)
             if result.succeeded { removed.insert(id) }
             if !result.succeeded || result.cleanupPending { activeAlert = .fileRemoval(result) }
         }
@@ -144,8 +144,8 @@ final class RecentShelfViewModel: ObservableObject {
         if !removed.isEmpty { container.publishCalibreUpdate(.shelf) }
     }
 
-    func deleteBook(bookId: String) {
-        let result = container.bookManager.clearCache(inShelfId: bookId)
+    func deleteBook(bookId: String) async {
+        let result = await container.bookManager.clearCache(inShelfId: bookId)
         if !result.succeeded || result.cleanupPending { activeAlert = .fileRemoval(result) }
     }
 
@@ -217,13 +217,6 @@ final class RecentShelfViewModel: ObservableObject {
     
     func clearSelection() {
         selectionState.selectedBookIds.removeAll()
-    }
-    
-    func deleteSelectedBooks() {
-        let targets = selectionState.selectedBookIds
-        deleteBooks(bookIds: targets)
-        selectionState.selectedBookIds.removeAll()
-        selectionState.isEditing = false
     }
     
     func triggerDownload(book: CalibreBook, format: Format) {

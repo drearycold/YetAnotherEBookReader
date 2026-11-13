@@ -8,6 +8,12 @@
 import Foundation
 import RealmSwift
 
+struct LocalBookStorageScope: Sendable {
+    let library: CalibreLibrary
+    let database: DatabaseService.CacheConfiguration
+    let lifetime: CacheLibraryLifetime
+}
+
 protocol BookRepositoryProtocol {
     func primaryKey(for book: CalibreBook) -> String
     func primaryKey(library: CalibreLibrary, bookId: Int32) -> String
@@ -16,8 +22,13 @@ protocol BookRepositoryProtocol {
     func observeBook(id: String) -> AsyncStream<CalibreBook?>
     func saveBook(_ book: CalibreBook)
     func deleteBook(id: String)
-    func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws
-    func localBooks(library: CalibreLibrary, filename: String, format: Format) throws -> [CalibreBook]
+    func localFileBook(scope: LocalBookStorageScope, id: String) throws -> CalibreBook?
+    func localFileBooks(scope: LocalBookStorageScope) throws -> [CalibreBook]
+    func localFileOwners(scope: LocalBookStorageScope, filename: String, format: Format) throws -> [CalibreBook]
+    func commitLocalBookFiles(scope: LocalBookStorageScope, saving books: [CalibreBook], deleting ids: Set<String>,
+                              cancelled: () -> Bool) throws
+    func mergeLocalPublication(scope: LocalBookStorageScope, id: String, format: Format, filename: String,
+                               version: Date, fallbackTitle: String?, title: String?, cancelled: () -> Bool) throws -> CalibreBook?
     func getAllBooksInShelf() -> [CalibreBook]
     func bookExists(id: String) -> Bool
     func persistMetadataEntries(
@@ -30,6 +41,28 @@ protocol BookRepositoryProtocol {
     #if DEBUG
     func resetBooks(serverUUID: String, libraryName: String)
     #endif
+}
+
+extension BookRepositoryProtocol {
+    func localFileBook(scope: LocalBookStorageScope, id: String) throws -> CalibreBook? { getBook(id: id) }
+
+    func localFileBooks(scope: LocalBookStorageScope) throws -> [CalibreBook] {
+        getAllBooksInShelf().filter { $0.library.id == scope.library.id }
+    }
+
+    func localFileOwners(scope: LocalBookStorageScope, filename: String, format: Format) throws -> [CalibreBook] {
+        try localFileBooks(scope: scope).filter { $0.formats[format.rawValue]?.filename == filename }
+    }
+
+    func commitLocalBookFiles(scope: LocalBookStorageScope, saving books: [CalibreBook], deleting ids: Set<String>,
+                              cancelled: () -> Bool) throws {
+        throw ImportError.loadMetaFail
+    }
+
+    func mergeLocalPublication(scope: LocalBookStorageScope, id: String, format: Format, filename: String,
+                               version: Date, fallbackTitle: String?, title: String?, cancelled: () -> Bool) throws -> CalibreBook? {
+        throw ImportError.loadMetaFail
+    }
 }
 
 protocol LibraryResolver: AnyObject {
@@ -136,30 +169,88 @@ class RealmBookRepository: BookRepositoryProtocol {
         }
     }
 
-    func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws {
-        guard let realm = getRealm(), !realm.configuration.readOnly, !realm.isInWriteTransaction else {
-            throw ImportError.loadMetaFail
-        }
-        let records = books.map { $0.makeRealmObject() }
-        try realm.write {
-            for id in ids {
-                if let book = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id) {
-                    realm.delete(book)
-                }
-            }
-            realm.add(records, update: .modified)
+    private func openLocalRealm(_ scope: LocalBookStorageScope) throws -> Realm {
+        guard (try? scope.lifetime.checkCurrent()) != nil else { throw ImportError.cancelled }
+        guard databaseService.cacheConfigurationSnapshot?.id == scope.database.id else { throw ImportError.cancelled }
+        let realm = try Realm(configuration: scope.database.configuration)
+        if !realm.isInWriteTransaction && !realm.configuration.readOnly { realm.refresh() }
+        try checkLocalLibrary(scope, in: realm)
+        return realm
+    }
+
+    private func checkLocalLibrary(_ scope: LocalBookStorageScope, in realm: Realm) throws {
+        guard (try? scope.lifetime.checkCurrent()) != nil else { throw ImportError.cancelled }
+        let library = scope.library
+        guard let row = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id),
+              !row.hidden, (row.key ?? row.name) == library.key,
+              let server = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.id),
+              !server.removed, server.baseUrl == library.server.baseUrl else { throw ImportError.cancelled }
+    }
+
+    private func localFileRows(_ scope: LocalBookStorageScope, in realm: Realm) -> Results<CalibreBookRealm> {
+        realm.objects(CalibreBookRealm.self)
+            .filter("serverUUID == %@ AND libraryName == %@", scope.library.server.id, scope.library.name)
+    }
+
+    func localFileBook(scope: LocalBookStorageScope, id: String) throws -> CalibreBook? {
+        let realm = try openLocalRealm(scope)
+        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id)?.toDomain(library: scope.library)
+    }
+
+    func localFileBooks(scope: LocalBookStorageScope) throws -> [CalibreBook] {
+        let realm = try openLocalRealm(scope)
+        return localFileRows(scope, in: realm).map { $0.toDomain(library: scope.library) }
+    }
+
+    func localFileOwners(scope: LocalBookStorageScope, filename: String, format: Format) throws -> [CalibreBook] {
+        let realm = try openLocalRealm(scope)
+        return localFileRows(scope, in: realm).compactMap {
+            let book = $0.toDomain(library: scope.library)
+            return book.formats[format.rawValue]?.filename == filename ? book : nil
         }
     }
 
-    func localBooks(library: CalibreLibrary, filename: String, format: Format) throws -> [CalibreBook] {
-        guard let realm = getRealm() else { throw ImportError.loadMetaFail }
-        if !realm.isInWriteTransaction && !realm.configuration.readOnly { realm.refresh() }
-        return realm.objects(CalibreBookRealm.self)
-            .filter("serverUUID == %@ AND libraryName == %@", library.server.id, library.name)
-            .compactMap {
-                guard $0.formats()[format.rawValue]?.filename == filename else { return nil }
-                return $0.toDomain(library: library)
+    func commitLocalBookFiles(scope: LocalBookStorageScope, saving books: [CalibreBook], deleting ids: Set<String>,
+                              cancelled: () -> Bool) throws {
+        let realm = try openLocalRealm(scope)
+        try writeLocalFiles(scope: scope, realm: realm, cancelled: cancelled) {
+            for id in ids {
+                if let book = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id) { realm.delete(book) }
             }
+            realm.add(books.map { $0.makeRealmObject() }, update: .modified)
+        }
+    }
+
+    func mergeLocalPublication(scope: LocalBookStorageScope, id: String, format: Format, filename: String,
+                               version: Date, fallbackTitle: String?, title: String?, cancelled: () -> Bool) throws -> CalibreBook? {
+        let realm = try openLocalRealm(scope)
+        return try writeLocalFiles(scope: scope, realm: realm, cancelled: cancelled) {
+            guard let row = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id),
+                  row.inShelf, row.lastSynced == version else { return nil }
+            let book = row.toDomain(library: scope.library)
+            guard let info = book.formats[format.rawValue], info.cached, info.filename == filename else { return nil }
+            if let title, row.title == fallbackTitle { row.title = title }
+            return row.toDomain(library: scope.library)
+        }
+    }
+
+    private func writeLocalFiles<T>(scope: LocalBookStorageScope, realm: Realm,
+                                    cancelled: () -> Bool, _ body: () throws -> T) throws -> T {
+        guard !realm.configuration.readOnly, !realm.isInWriteTransaction else { throw ImportError.loadMetaFail }
+        realm.beginWrite()
+        do {
+            return try databaseService.withCurrentConfiguration(scope.database.id) {
+                try checkLocalLibrary(scope, in: realm)
+                guard !cancelled() else { throw ImportError.cancelled }
+                let value = try body()
+                guard !cancelled() else { throw ImportError.cancelled }
+                try realm.commitWrite()
+                return value
+            }
+        } catch {
+            if realm.isInWriteTransaction { realm.cancelWrite() }
+            throw error
+        }
     }
 
     func getAllBooksInShelf() -> [CalibreBook] {

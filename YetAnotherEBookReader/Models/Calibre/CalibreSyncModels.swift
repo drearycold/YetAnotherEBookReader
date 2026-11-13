@@ -11,7 +11,7 @@ import Foundation
 /// A custom column's definition, keyed by its label in `CalibreLibrary.customColumnInfos`.
 /// `CalibreLibraryManager.syncLibrary` reads it from `ajax/books` (`init(userMetadata:)`); Realm keeps
 /// it encoded with these keys, which are those of calibre's `cdb` interface that read it before.
-struct CalibreCustomColumnInfo: Codable, Hashable {
+struct CalibreCustomColumnInfo: Codable, Hashable, Sendable {
     var label: String
     var name: String
     var datatype: String
@@ -53,7 +53,7 @@ extension CalibreCustomColumnInfo {
 /// How calibre shows a column. calibre stores only what was set: a column made with
 /// `calibredb add_custom_column` has `"display": {}`, so every field is optional, and one of an
 /// unexpected type is dropped rather than failing the column.
-struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
+struct CalibreCustomColumnDisplayInfo: Codable, Hashable, Sendable {
     var description: String = ""
     
     //type text

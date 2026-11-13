@@ -123,7 +123,7 @@ func sha256new(for fileURL: URL) -> Data? {
     //return digest.map { String(format: "%02hhx", $0) }.joined()
 }
 
-enum ImportError: String, CaseIterable, Hashable, Identifiable, Error {
+enum ImportError: String, CaseIterable, Hashable, Identifiable, Error, Sendable {
     case protocolUnsupported
     case libraryAbsent
     case securityFail
@@ -135,22 +135,39 @@ enum ImportError: String, CaseIterable, Hashable, Identifiable, Error {
     case invalidArg
     case tooManyFiles
     case formatUnsupported
+    case cancelled
     
     var id: String {
         return self.rawValue
     }
 }
 
-struct BookImportInfo {
+func localBookID(_ url: URL) -> Int32? {
+    guard let digest = sha256new(for: url) else { return nil }
+    return Int32(bigEndian: digest.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
+}
+
+struct LocalBookImportRequest: Sendable {
+    let id = UUID()
     let url: URL
+    var doMove = false
+    var overwrite = false
+    var asNew = false
+}
+
+struct BookImportInfo: Sendable {
+    let request: LocalBookImportRequest
+    var url: URL { request.url }
+    var overwrite: Bool { request.overwrite }
+    var asNew: Bool { request.asNew }
     var bookId: Int32?
     var error: ImportError?
     var cleanupPending = false
     var recoveryFolder: String?
-    var overwrite = false
-    var asNew = false
-    
-    mutating func with(error: ImportError) -> BookImportInfo{
+    var databaseID: UUID?
+    var libraryID: String?
+
+    mutating func with(error: ImportError) -> BookImportInfo {
         self.error = error
         return self
     }

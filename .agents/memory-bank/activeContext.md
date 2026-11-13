@@ -2,10 +2,10 @@
 
 ## Current Focus
 
-**Local File Import and Removal Consistency (FI).** FI1 is implemented on
-`codex/local-file-consistency-fi1` from main `37a40c08`, after CC3 merged in
-PR #153. FI2 and FI3 remain follow-up work. The earlier PDF investigation
-remains under Current Branch Notes.
+**Local File Import and Removal Consistency (FI).** FI2 is implemented on
+`codex/local-file-consistency-fi2` from main `d55f3778`, which merged FI1
+in PR #154. FI3 is the remaining verification workstream. The earlier
+PDF investigation remains under Current Branch Notes.
 
 ## Next Refactoring Direction: Local File Operations (2026-11-13)
 
@@ -93,6 +93,95 @@ after Retry and As a new book and two books in Browse. The fixture
 taps Files icons to avoid inline rename on iOS 15.5.
 
 Logs and result bundles are in `/tmp/YabrFI1`.
+
+## Local File Consistency FI2 (2026-11-13)
+
+FI2 starts from main `d55f3778`, the merge of PR #154. The composition
+root supplies `LocalBookImportCoordinator` and the Readium metadata
+loader to `CalibreBookManager`. The manager resolves the current local
+library and publishes committed shelf and Browse changes. Hashing,
+staging, installation, local removal and startup reconciliation run on
+one serial file worker. The next operation waits for the previous
+operation's main-actor publication. Startup rereads the current
+database and leaves an already indexed file's metadata and version
+alone. Unit-test containers initialize the local library but only
+scan the simulator's Documents directory when requested by a test.
+
+Every import attempt has a UUID, including retries, and pins the
+database epoch, library scope, source and requested conflict choice.
+The worker computes the book ID and destination. Matching readable
+content is a duplicate and does not create another publication task.
+A new destination version supersedes work for that path or book.
+File and Realm writes retain FI1's staged replacement and in-process
+compensation. Cancellation before commit cleans staging or restores
+the previous file. Cancellation after commit preserves success and
+finishes cleanup. Security-scoped access covers the worker's source
+I/O and post-commit source removal. Committed library removal queues
+file cleanup without saving any book record.
+
+Readium parsing starts after commit on a separate task. A late parser
+result must match the current operation, file identity and committed
+record version. The repository opens the pinned Realm on the worker
+and checks scope again inside the write. It changes the title only if
+the current title is still the filename fallback. It leaves the
+current formats, cache, shelf and preferences intact. The same
+ownership checks guard cover publication. Removing a book or retiring
+its database or library cancels parsing. Optional metadata failures
+leave the base import usable. Import UI is scoped to the latest
+intent. The result sheet still waits for onDismiss before executing
+Read, Retry or a conflict choice. Read checks the current file and
+opens into the originating workspace.
+
+The baseline startup scan test failed two assertions because it
+replaced a committed title and advanced the record version. The
+focused run passed 281 tests. The full iPhone 17 unit run recorded 1,192 tests
+with 1,168 passed, two existing expected PDFKit failures, 22 skips and
+zero unexpected failures. A subsequent 61-test run passed with the
+new import-intent regression and the asynchronous cleanup assertion.
+The real Calibre contracts and opt-in PDF benchmark were skipped.
+The normal iOS Simulator Release build and
+Mac Catalyst build passed. The isolated native EPUB flow passed on
+iPhone 7 (iOS 15.5) and iPhone 17 (iOS 26.5). It checked Files import,
+overwrite failure with the old book still in Browse, Retry, As a
+new book, opening reader content from the result sheet, and closing
+the reader to a Browse list with two books.
+
+FI3 remains the broader EPUB, PDF and CBZ matrix, restart behavior,
+and additional native conflict and removal journeys. Logs and result
+bundles are in `/tmp/YabrFI2`.
+
+### FI2 startup file identity follow-up
+
+The review fixture imports two distinct EPUBs into a temporary local
+directory and isolated Realm, then swaps the filenames before a fresh
+coordinator scans the library. Before the fix, both cached paths were
+readable and each indexed record pointed at the other EPUB's bytes.
+Moving a book and placing another EPUB at its old path could also
+replace the original title and format selection. The baseline output is
+`/tmp/YabrFI2/scan-identity-red.log`.
+
+Startup now inventories file content IDs before committing any
+bindings. It retains a recorded filename when the scan verifies the
+matching content and otherwise chooses the first matching relative
+filename in lexical order. It commits changed bindings together so a
+swap cannot discard a record that is still present elsewhere. The
+canonical IDs, titles, format selection, bookmarks and reading
+positions follow the content. Duplicate copies keep a valid existing
+binding. A different book at an absent book's old filename displaces
+the stale record even after the old book left the shelf. A partial
+directory walk leaves the existing index alone, and an unreadable or
+changing candidate does not count as missing. Private staging
+directories remain excluded.
+
+The fixtures cover both assignments of content IDs to the swapped
+filenames, idempotent rescans, a rename, replacement at the old path,
+duplicate copies, private staging, and late parser title and cover
+results. The final 170-test run passed, including import, startup
+scan, Realm, Browse, downloads and removal regressions. Mac Catalyst
+built successfully. Logs are `scan-identity-complete.log` and
+`scan-identity-catalyst.log` in `/tmp/YabrFI2`. The filename swap used
+the production scan on the simulator with isolated files and Realm.
+A native Files swap and full app restart were outside this run.
 
 ## Cache Consistency CC1 (2026-11-12)
 

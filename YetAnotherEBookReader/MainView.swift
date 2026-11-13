@@ -196,8 +196,18 @@ struct MainView: View {
             let action = importResultAction
             importResultAction = nil
             action?()
+            viewModel.completeBookImportResult()
         }) {
             importResultSheet
+        }
+        .overlay(alignment: .top) {
+            if viewModel.bookImportBusy {
+                ProgressView("Importing")
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.top, 8)
+                    .allowsHitTesting(false)
+            }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
@@ -252,10 +262,10 @@ struct MainView: View {
         } else if let info = viewModel.bookImportInfo, info.error == .destConflict {
             importResultMessage("Importing", "A book with the same filename already exists.")
             Button("As a new book") {
-                closeImportResult { viewModel.importBookAsNew(url: info.url) }
+                closeImportResult { viewModel.importBookAsNew(info) }
             }
             Button("Overwrite", role: .destructive) {
-                closeImportResult { viewModel.importBookOverwrite(url: info.url) }
+                closeImportResult { viewModel.importBookOverwrite(info) }
             }
             Button("Cancel", role: .cancel) { closeImportResult() }
         } else if let info = viewModel.bookImportInfo, info.error == .fileOpFail || info.error == .loadMetaFail {

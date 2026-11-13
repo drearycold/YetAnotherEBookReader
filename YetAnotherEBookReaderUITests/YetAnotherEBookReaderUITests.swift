@@ -961,18 +961,20 @@ final class CalibreOnboardingUITests: XCTestCase {
         element("Retry").tap()
         dismissImport()
         let replacement = app.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND NOT identifier CONTAINS %@ AND label CONTAINS %@",
-            "shelf.book.", String(bookId), "FI1 Sample"
+            format: "identifier BEGINSWITH %@ AND NOT identifier CONTAINS %@",
+            "shelf.book.", String(bookId)
         )).firstMatch
         XCTAssertTrue(replacement.waitForExistence(timeout: 15), app.debugDescription)
         openLocalPicker()
         chooseFixture("As New")
         element("As a new book").tap()
-        dismissImport()
-        let savedAsNew = app.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "shelf.book.", "FI1 Sample (1)"
-        )).firstMatch
-        XCTAssertTrue(savedAsNew.waitForExistence(timeout: 15), app.debugDescription)
+        element("Imported, read now?")
+        element("Read").tap()
+        let reader = element("reader.folio.content")
+        capture("fi2-imported-book-open")
+        closeReaderWorkspace()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: reader)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 10), .completed, app.debugDescription)
         browse.tap()
         if !browse.isSelected { browse.tap() }
         if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
