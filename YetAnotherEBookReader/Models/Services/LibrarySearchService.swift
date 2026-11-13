@@ -9,7 +9,16 @@ import Foundation
 
 actor LibrarySearchService {
     /// Called with the books an `ajax/books` answer had null (`missing`) or an entry for (`present`).
-    typealias MetadataAnswersHandler = @Sendable (_ library: CalibreLibrary, _ missing: Set<Int32>, _ present: Set<Int32>) async -> Void
+    typealias MetadataAnswersHandler = @Sendable (
+        _ library: CalibreLibrary, _ missing: Set<Int32>, _ present: Set<Int32>, _ cache: SearchCacheRepository
+    ) async -> Void
+
+    struct Request: Sendable {
+        let library: CalibreLibrary
+        let cache: SearchCacheRepository
+        let url: URL?
+        let source: String
+    }
 
     private let service: CalibreServerService
     private let repository: SearchCacheRepository
@@ -21,16 +30,23 @@ actor LibrarySearchService {
         self.onMetadataAnswers = onMetadataAnswers
     }
 
+    private func targetURL(for library: CalibreLibrary) -> URL? {
+        if library.server.isLocal { return URL(fileURLWithPath: "/realm") }
+        return service.getServerUrlByReachability(server: library.server) ?? URL(string: library.server.baseUrl)
+    }
+
     func getTargetSource(for library: CalibreLibrary) -> String {
-        if library.server.isLocal {
-            return URL(fileURLWithPath: "/realm").absoluteString
-        } else {
-            if let reachableUrl = service.getServerUrlByReachability(server: library.server) {
-                return reachableUrl.absoluteString.replacingOccurrences(of: ".", with: "_")
-            } else {
-                return library.server.baseUrl.replacingOccurrences(of: ".", with: "_")
-            }
-        }
+        (targetURL(for: library)?.absoluteString ?? library.server.baseUrl).replacingOccurrences(of: ".", with: "_")
+    }
+
+    func prepareRequest(library: CalibreLibrary, cache: SearchCacheRepository? = nil) throws -> Request {
+        try Task.checkCancellation()
+        let database = try (cache ?? repository.snapshot())
+        let lifetime = try service.cacheLifetime(for: library)
+        let scope = try database.scoped(to: library, lifetime: lifetime)
+        let url = targetURL(for: library)
+        let source = (url?.absoluteString ?? library.server.baseUrl).replacingOccurrences(of: ".", with: "_")
+        return Request(library: library, cache: scope, url: url, source: source)
     }
 
     func searchAndFetchMetadata(
@@ -40,16 +56,24 @@ actor LibrarySearchService {
         force: Bool,
         forceMetadataRefresh: Bool = false
     ) async throws -> LibraryCachedResult {
-        // Check cache first
-        let cacheResult = try? repository.fetchLibraryCachedResult(
-            libraryId: library.id,
+        let request = try prepareRequest(library: library)
+        return try await searchAndFetchMetadata(request: request, criteria: criteria, limit: limit,
+                                                force: force, forceMetadataRefresh: forceMetadataRefresh)
+    }
+
+    func searchAndFetchMetadata(
+        request: Request, criteria: SearchCriteria, limit: Int, force: Bool, forceMetadataRefresh: Bool
+    ) async throws -> LibraryCachedResult {
+        let library = request.library
+        let cache = request.cache
+        let targetSource = request.source
+        let cacheResult = try cache.fetchLibraryCachedResult(
+            library: library,
             search: criteria.searchString,
             sortBy: criteria.sortCriteria.by,
             sortAsc: criteria.sortCriteria.ascending,
             filters: criteria.filterCriteriaCategory
         )
-
-        let targetSource = getTargetSource(for: library)
         let sourceObj = cacheResult?.sources[targetSource]
 
         let isStaleGeneration = sourceObj.map { $0.generation < library.lastModified } ?? false
@@ -77,10 +101,11 @@ actor LibrarySearchService {
                 return cached
             }
 
-            _ = try await refreshMetadata(library: library, bookIds: refreshIDs)
+            _ = try await refreshMetadata(request: request, bookIds: refreshIDs,
+                                          retainingExisting: Set(booksById.keys))
 
-            if let updatedCachedResult = try repository.fetchLibraryCachedResult(
-                libraryId: library.id,
+            if let updatedCachedResult = try cache.fetchLibraryCachedResult(
+                library: library,
                 search: criteria.searchString,
                 sortBy: criteria.sortCriteria.by,
                 sortAsc: criteria.sortCriteria.ascending,
@@ -94,9 +119,8 @@ actor LibrarySearchService {
 
         var offset = shouldRebuildCache ? 0 : (sourceObj?.bookIds.count ?? 0)
         var searchResult = try await fetchSearchResult(
-            library: library,
+            request: request,
             criteria: criteria,
-            targetSource: targetSource,
             num: max(limit - offset, 0),
             offset: offset
         )
@@ -107,9 +131,8 @@ actor LibrarySearchService {
            shouldRebuildAfterIncrementalFetch(source: sourceObj, searchResult: searchResult) {
             offset = 0
             searchResult = try await fetchSearchResult(
-                library: library,
+                request: request,
                 criteria: criteria,
-                targetSource: targetSource,
                 num: limit,
                 offset: offset
             )
@@ -134,7 +157,7 @@ actor LibrarySearchService {
         let newlyFetchedBookIds = searchResult.book_ids.uniquedPreservingOrder()
 
         var booksById = cachedBooksById
-        let existingBooks = try repository.fetchBooks(library: library, bookIds: currentBookIds)
+        let existingBooks = try cache.fetchBooks(library: library, bookIds: currentBookIds)
         booksById.merge(existingBooks) { _, new in new }
 
         if forceMetadataRefresh {
@@ -149,7 +172,8 @@ actor LibrarySearchService {
 
         var metadataComplete = true
         if !toFetchIDs.isEmpty {
-            let refreshed = try await refreshMetadata(library: library, bookIds: toFetchIDs)
+            let refreshed = try await refreshMetadata(request: request, bookIds: toFetchIDs,
+                                                       retainingExisting: Set(existingBooks.keys))
             for (bookId, book) in refreshed.books {
                 booksById[bookId] = book
             }
@@ -169,18 +193,19 @@ actor LibrarySearchService {
             books: currentBooks
         )
 
-        try repository.saveLibrarySourceResult(
+        try cache.saveLibrarySourceResult(
             libraryId: library.id,
             search: criteria.searchString,
             sortBy: criteria.sortCriteria.by,
             sortAsc: criteria.sortCriteria.ascending,
             filters: criteria.filterCriteriaCategory,
             sourceUrl: targetSource,
-            result: updatedSourceResult
+            result: updatedSourceResult,
+            expecting: .previous(sourceObj?.sourceState)
         )
 
-        if let updatedCachedResult = try repository.fetchLibraryCachedResult(
-            libraryId: library.id,
+        if let updatedCachedResult = try cache.fetchLibraryCachedResult(
+            library: library,
             search: criteria.searchString,
             sortBy: criteria.sortCriteria.by,
             sortAsc: criteria.sortCriteria.ascending,
@@ -193,12 +218,14 @@ actor LibrarySearchService {
     }
 
     private func fetchSearchResult(
-        library: CalibreLibrary,
+        request: Request,
         criteria: SearchCriteria,
-        targetSource: String,
         num: Int,
         offset: Int
     ) async throws -> CalibreLibraryBooksResult.SearchResult {
+        try request.cache.checkCurrent()
+        let library = request.library
+        let targetSource = request.source
         var parameters = [String: (generation: Date, num: Int, offset: Int)]()
         parameters[targetSource] = (generation: library.lastModified, num: num, offset: offset)
 
@@ -229,7 +256,7 @@ actor LibrarySearchService {
                 throw SearchError.network(calibreError)
             }
         } else if task.booksListUrl.isFileURL {
-            finalTask = try performLocalSearch(task: task)
+            finalTask = try performLocalSearch(task: task, cache: request.cache)
         }
 
         try Task.checkCancellation()
@@ -262,17 +289,23 @@ actor LibrarySearchService {
     /// Reads the books' metadata from calibre, in batches (`booksMetadataBatchSize`). `complete` is
     /// false when a request failed, so the caller doesn't take the books for up to date.
     private func refreshMetadata(
-        library: CalibreLibrary,
-        bookIds: [Int32]
+        request: Request,
+        bookIds: [Int32],
+        retainingExisting: Set<Int32>
     ) async throws -> (books: [Int32: CalibreBook], complete: Bool) {
         guard !bookIds.isEmpty else { return ([:], true) }
+        let library = request.library
+        let cache = request.cache
 
         var complete = true
         for batch in bookIds.chunks(size: CalibreServerService.booksMetadataBatchSize) {
+            try Task.checkCancellation()
+            try cache.checkCurrent()
             guard let metadataTask = service.buildBooksMetadataTask(
                 library: library,
                 books: batch.map { CalibreBook(id: $0, library: library) },
-                getAnnotations: false
+                getAnnotations: false,
+                serverURL: request.url
             ) else {
                 complete = false
                 continue
@@ -290,10 +323,11 @@ actor LibrarySearchService {
                 }
                 continue
             }
-            try repository.writeMetadataEntries(
+            try cache.writeMetadataEntries(
                 library: library,
                 entries: entries,
-                json: completedTask.booksMetadataJSON
+                json: completedTask.booksMetadataJSON,
+                retainingExisting: retainingExisting
             )
 
             if let onMetadataAnswers {
@@ -307,15 +341,15 @@ actor LibrarySearchService {
                         present.insert(bookId)
                     }
                 }
-                await onMetadataAnswers(library, missing, present)
+                await onMetadataAnswers(library, missing, present, cache)
             }
         }
 
-        return (try repository.fetchBooks(library: library, bookIds: bookIds), complete)
+        return (try cache.fetchBooks(library: library, bookIds: bookIds), complete)
     }
 
-    private func performLocalSearch(task: CalibreLibrarySearchTask) throws -> CalibreLibrarySearchTask {
-        let result = try repository.searchLocalLibrary(
+    private func performLocalSearch(task: CalibreLibrarySearchTask, cache: SearchCacheRepository) throws -> CalibreLibrarySearchTask {
+        let result = try cache.searchLocalLibrary(
             library: task.library,
             criteria: task.searchCriteria,
             offset: task.offset,

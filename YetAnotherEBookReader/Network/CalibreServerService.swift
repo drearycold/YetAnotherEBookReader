@@ -31,6 +31,7 @@ final class CalibreServerService {
     private let configLock = NSRecursiveLock()
     private var _localDeviceName = ""
     private var _localCalibreLibraries = [String: CalibreLibrary]()
+    private var cacheLibraryLifetimes: [String: (library: CalibreLibrary, lifetime: CacheLibraryLifetime)] = [:]
     private var _localCalibreServerInfoStaging = [String: CalibreServerInfo]()
     
     init(logger: CalibreActivityLogger, config: AppContainerProtocol, database: DatabaseService) {
@@ -99,7 +100,27 @@ final class CalibreServerService {
     func updateCalibreLibraries(_ libraries: [String: CalibreLibrary]) {
         configLock.lock()
         defer { configLock.unlock() }
+        for (id, tracked) in cacheLibraryLifetimes
+        where libraries[id].map({ tracked.library.hasSameCacheScope(as: $0) }) != true {
+            tracked.lifetime.invalidate()
+            cacheLibraryLifetimes.removeValue(forKey: id)
+        }
         self._localCalibreLibraries = libraries
+    }
+
+    func cacheLifetime(for library: CalibreLibrary) throws -> CacheLibraryLifetime? {
+        try configLock.withLock {
+            guard let current = _localCalibreLibraries[library.id] else { return nil }
+            guard !current.hidden, !current.server.removed, current.hasSameCacheScope(as: library)
+            else { throw CacheContextError.superseded }
+            if let tracked = cacheLibraryLifetimes[library.id] {
+                if tracked.library.hasSameCacheScope(as: library) { return tracked.lifetime }
+                tracked.lifetime.invalidate()
+            }
+            let lifetime = CacheLibraryLifetime()
+            cacheLibraryLifetimes[library.id] = (library, lifetime)
+            return lifetime
+        }
     }
     
     func updateDeviceName(_ deviceName: String) {

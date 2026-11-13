@@ -104,7 +104,12 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
     func testLocalLibrarySearchSeesABookAddedAfterAnEmptySearch() async throws {
         let documentLibrary = try XCTUnwrap(container.libraryManager.localLibrary)
         let local = CalibreLibrary(server: documentLibrary.server, key: UUID().uuidString, name: UUID().uuidString)
+        try container.libraryRepository.saveLibrary(local)
         container.libraryManager.calibreLibraries[local.id] = local
+        defer {
+            try? container.libraryRepository.deleteLibrary(serverUUID: local.server.id, name: local.name)
+            container.libraryManager.calibreLibraries.removeValue(forKey: local.id)
+        }
         let criteria = SearchCriteria(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
         let empty = try await container.librarySearchService.searchAndFetchMetadata(
             library: local, criteria: criteria, limit: 100, force: false

@@ -7,14 +7,19 @@
 
 import Foundation
 import RealmSwift
-import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
+    // Only immutable scope and the database's locked configuration cross threads.
     private let customConfig: Realm.Configuration?
     private let databaseService: DatabaseService
-    private weak var librarySnapshotProvider: CalibreLibrarySnapshotProviding?
+    private let pinnedDatabase: DatabaseService.CacheConfiguration?
+    private let libraryScope: LibraryScope?
 
-    var defaultLog = Logger()
+    private struct LibraryScope {
+        let library: CalibreLibrary
+        let rowId: UInt64
+        let lifetime: CacheLibraryLifetime?
+    }
 
     private struct CategoryItemCursor {
         let libraryId: String
@@ -27,26 +32,100 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         }
     }
 
-    init(
-        config: Realm.Configuration? = nil,
-        databaseService: DatabaseService,
-        librarySnapshotProvider: CalibreLibrarySnapshotProviding
-    ) {
+    init(config: Realm.Configuration? = nil, databaseService: DatabaseService) {
         self.customConfig = config
         self.databaseService = databaseService
-        self.librarySnapshotProvider = librarySnapshotProvider
+        self.pinnedDatabase = nil
+        self.libraryScope = nil
     }
 
     convenience init(config: Realm.Configuration? = nil, container: AppContainerProtocol) {
-        self.init(
-            config: config,
-            databaseService: container.databaseService,
-            librarySnapshotProvider: container
-        )
+        self.init(config: config, databaseService: container.databaseService)
     }
-    
+
+    private init(
+        databaseService: DatabaseService, customConfig: Realm.Configuration?,
+        pinnedDatabase: DatabaseService.CacheConfiguration?, libraryScope: LibraryScope?
+    ) {
+        self.databaseService = databaseService
+        self.customConfig = customConfig
+        self.pinnedDatabase = pinnedDatabase
+        self.libraryScope = libraryScope
+    }
+
+    func snapshot() throws -> RealmSearchCacheStore {
+        if customConfig != nil || pinnedDatabase != nil {
+            try checkDatabase()
+            return self
+        }
+        guard let configuration = databaseService.cacheConfigurationSnapshot else {
+            throw CacheContextError.databaseUnavailable
+        }
+        return RealmSearchCacheStore(databaseService: databaseService, customConfig: nil,
+                                     pinnedDatabase: configuration, libraryScope: nil)
+    }
+
+    func scoped(to library: CalibreLibrary, lifetime: CacheLibraryLifetime?) throws -> RealmSearchCacheStore {
+        if let libraryScope {
+            guard libraryScope.library.hasSameCacheScope(as: library) else { throw CacheContextError.superseded }
+            try checkCurrent()
+            return self
+        }
+        let cache = try snapshot()
+        let realm = try cache.openRealmForRead()
+        guard let row = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) else {
+            throw CacheContextError.superseded
+        }
+        let scoped = RealmSearchCacheStore(
+            databaseService: databaseService, customConfig: customConfig, pinnedDatabase: cache.pinnedDatabase,
+            libraryScope: LibraryScope(library: library, rowId: row.id, lifetime: lifetime)
+        )
+        try scoped.checkLibrary(in: realm)
+        return scoped
+    }
+
+    func checkCurrent() throws {
+        if libraryScope != nil { _ = try openRealmForRead() }
+        else { try checkDatabase() }
+    }
+
+    private func checkDatabase() throws {
+        if customConfig != nil { return }
+        let current = databaseService.cacheConfigurationSnapshot
+        if let pinnedDatabase {
+            guard current?.id == pinnedDatabase.id else { throw CacheContextError.superseded }
+        } else if current == nil {
+            throw CacheContextError.databaseUnavailable
+        }
+    }
+
+    private func checkLibrary(in realm: Realm) throws {
+        guard let scope = libraryScope else { return }
+        try scope.lifetime?.checkCurrent()
+        let library = scope.library
+        guard !library.hidden, !library.server.removed else { throw CacheContextError.superseded }
+        guard let row = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id),
+              row.id == scope.rowId, !row.hidden, (row.key ?? row.name) == library.key,
+              row.lastModified == library.lastModified,
+              let server = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.id),
+              server.baseUrl != nil,
+              DSReaderHelperConnection(server.toDomain()) == DSReaderHelperConnection(library.server)
+        else { throw CacheContextError.superseded }
+    }
+
+    private func checkScope(libraryId: String) throws {
+        if let libraryScope, libraryScope.library.id != libraryId { throw CacheContextError.superseded }
+    }
+
+    private func scopedLibrary(_ library: CalibreLibrary) throws -> CalibreLibrary {
+        try checkScope(libraryId: library.id)
+        return libraryScope?.library ?? library
+    }
+
     private func openRealm() throws -> Realm {
-        var conf = customConfig ?? databaseService.realmConf ?? Realm.Configuration()
+        try checkDatabase()
+        guard var conf = customConfig ?? pinnedDatabase?.configuration ?? databaseService.cacheConfigurationSnapshot?.configuration
+        else { throw CacheContextError.databaseUnavailable }
         // Strip closures to prevent EXC_BAD_ACCESS in swift_retain when copying on concurrent queues
         conf.migrationBlock = nil
         conf.shouldCompactOnLaunch = nil
@@ -60,7 +139,18 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         if !realm.isInWriteTransaction && !realm.configuration.readOnly {
             realm.refresh()
         }
+        try checkDatabase()
+        try checkLibrary(in: realm)
         return realm
+    }
+
+    private func writeIfChanged(in realm: Realm, _ changes: () throws -> Bool) throws {
+        realm.beginWrite()
+        defer { if realm.isInWriteTransaction { realm.cancelWrite() } }
+        try Task.checkCancellation()
+        try checkDatabase()
+        try checkLibrary(in: realm)
+        if try changes() { try realm.commitWrite() }
     }
 
     private func mapCategorySummaries<S: Sequence>(objects: S) -> [CategoryCacheSummary] where S.Element == CalibreLibraryCategoryObject {
@@ -84,30 +174,32 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
     
     func fetchLibraryCachedResult(
-        libraryId: String,
+        library: CalibreLibrary,
         search: String,
         sortBy: SortCriteria,
         sortAsc: Bool,
         filters: [String: Set<String>]
     ) throws -> LibraryCachedResult? {
+        let library = try scopedLibrary(library)
         let realm = try openRealmForRead()
-        
-        let matchingObj = realm.objects(CalibreLibrarySearchObject.self)
-            .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
-            .filter { $0.sortBy == sortBy }
-            .first { cacheObj in
-                let objFilters = cacheObj.filters.reduce(into: [String: Set<String>]()) { partial, filter in
-                    if let values = filter.value?.values {
-                        partial[filter.key] = Set(values)
-                    }
-                }
-                return objFilters == filters
-            }
-            
-        guard let obj = matchingObj else { return nil }
-        return mapToLibraryCachedResult(obj, realm: realm)
+        let result = findSearch(in: realm, libraryId: library.id, search: search, sortBy: sortBy,
+                                sortAsc: sortAsc, filters: filters)
+        return result.map { mapToLibraryCachedResult($0, library: library, realm: realm) }
     }
-    
+
+    private func findSearch(
+        in realm: Realm, libraryId: String, search: String, sortBy: SortCriteria,
+        sortAsc: Bool, filters: [String: Set<String>]
+    ) -> CalibreLibrarySearchObject? {
+        realm.objects(CalibreLibrarySearchObject.self)
+            .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
+            .first { cache in
+                cache.sortBy == sortBy && cache.filters.reduce(into: [String: Set<String>]()) { values, entry in
+                    if let stored = entry.value?.values { values[entry.key] = Set(stored) }
+                } == filters
+            }
+    }
+
     func saveLibrarySourceResult(
         libraryId: String,
         search: String,
@@ -115,92 +207,59 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         sortAsc: Bool,
         filters: [String: Set<String>],
         sourceUrl: String,
-        result: LibrarySourceSearchResult
+        result: LibrarySourceSearchResult,
+        expecting: CacheWriteExpectation<SearchSourceState>
     ) throws {
+        try checkScope(libraryId: libraryId)
         let realm = try openRealm()
+        let sourceState = result.sourceState
+        // Scoped searches already persisted metadata. Their detached books can outlive a deletion.
+        let seedBooks = libraryScope == nil ? result.books.map { $0.makeRealmObject() } : []
+        try writeIfChanged(in: realm) {
+            let existing = findSearch(in: realm, libraryId: libraryId, search: search, sortBy: sortBy,
+                                      sortAsc: sortAsc, filters: filters)
+            let existingSource = existing?.sources[sourceUrl] ?? nil
+            let current = existingSource.map {
+                SearchSourceState(generation: $0.generation, totalNumber: $0.totalNumber, bookIds: Array($0.bookIds))
+            }
+            let sourceChanged = current != sourceState
+            if sourceChanged, case .previous(let expected) = expecting, current != expected {
+                throw CacheContextError.superseded
+            }
 
-        let existingSearchObject = realm.objects(CalibreLibrarySearchObject.self)
-            .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
-            .filter { $0.sortBy == sortBy }
-            .first { cacheObj in
-                let objFilters = cacheObj.filters.reduce(into: [String: Set<String>]()) { partial, filter in
-                    if let values = filter.value?.values {
-                        partial[filter.key] = Set(values)
-                    }
+            var insertedBook = false
+            for book in seedBooks {
+                guard let key = book.primaryKey,
+                      realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key) == nil else { continue }
+                realm.add(book)
+                insertedBook = true
+            }
+            guard sourceChanged else { return insertedBook }
+
+            let parent: CalibreLibrarySearchObject
+            if let existing {
+                parent = existing
+            } else {
+                parent = CalibreLibrarySearchObject()
+                parent.libraryId = libraryId
+                parent.search = search
+                parent.sortBy = sortBy
+                parent.sortAsc = sortAsc
+                for (key, values) in filters {
+                    let stored = CalibreLibrarySearchFilterValues()
+                    stored.values.insert(objectsIn: values)
+                    parent.filters[key] = stored
                 }
-                return objFilters == filters
+                realm.add(parent)
             }
 
-        let missingBooks = result.books.filter { book in
-            let primaryKey = CalibreBookRealm.PrimaryKey(
-                serverUUID: book.library.server.uuid.uuidString,
-                libraryName: book.library.name,
-                id: book.id.description
-            )
-            return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) == nil
-        }
-        let sourceUnchanged: Bool
-        if let existingSource = existingSearchObject?.sources[sourceUrl] ?? nil {
-            sourceUnchanged = existingSource.generation == result.generation
-                && existingSource.totalNumber == result.totalNumber
-                && Array(existingSource.bookIds) == result.bookIds
-        } else {
-            sourceUnchanged = false
-        }
-
-        if sourceUnchanged && missingBooks.isEmpty {
-            return
-        }
-
-        try realm.write {
-            for book in missingBooks {
-                let primaryKey = CalibreBookRealm.PrimaryKey(
-                    serverUUID: book.library.server.uuid.uuidString,
-                    libraryName: book.library.name,
-                    id: book.id.description
-                )
-                if realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) == nil {
-                    realm.add(book.makeRealmObject())
-                }
-            }
-
-            guard !sourceUnchanged else { return }
-
-            // Find or create CalibreLibrarySearchObject
-            var searchObj = existingSearchObject
-                
-            if searchObj == nil {
-                let newObj = CalibreLibrarySearchObject()
-                newObj.libraryId = libraryId
-                newObj.search = search
-                newObj.sortBy = sortBy
-                newObj.sortAsc = sortAsc
-                filters.forEach { key, values in
-                    let filterValues = CalibreLibrarySearchFilterValues()
-                    filterValues.values.insert(objectsIn: values)
-                    newObj.filters[key] = filterValues
-                }
-                realm.add(newObj)
-                searchObj = newObj
-            }
-            
-            guard let parentObj = searchObj else { return }
-            
-            // Find or create CalibreLibrarySearchValueObject for the sourceUrl
-            var sourceObjOpt = parentObj.sources[sourceUrl]
-            if sourceObjOpt == nil {
-                let newSource = CalibreLibrarySearchValueObject()
-                realm.add(newSource)
-                parentObj.sources[sourceUrl] = newSource
-                sourceObjOpt = newSource
-            }
-            
-            guard let sObjOpt = sourceObjOpt, let sObj = sObjOpt else { return }
-            sObj.generation = result.generation
-            sObj.totalNumber = result.totalNumber
-            
-            sObj.bookIds.removeAll()
-            sObj.bookIds.append(objectsIn: result.bookIds)
+            let source = existingSource ?? CalibreLibrarySearchValueObject()
+            if existingSource == nil { parent.sources[sourceUrl] = source }
+            source.generation = result.generation
+            source.totalNumber = result.totalNumber
+            source.bookIds.removeAll()
+            source.bookIds.append(objectsIn: result.bookIds)
+            return true
         }
     }
 
@@ -208,6 +267,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         library: CalibreLibrary,
         bookIds: [Int32]
     ) throws -> [Int32: CalibreBook] {
+        let library = try scopedLibrary(library)
         let realm = try openRealmForRead()
         let serverUUID = library.server.uuid.uuidString
 
@@ -230,6 +290,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         offset: Int,
         limit: Int
     ) throws -> LocalLibrarySearchResult {
+        let library = try scopedLibrary(library)
         let realm = try openRealmForRead()
         let libraryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
@@ -262,36 +323,42 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     func writeMetadataEntries(
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
-        json: NSDictionary?
+        json: NSDictionary?,
+        retainingExisting: Set<Int32>
     ) throws {
+        let library = try scopedLibrary(library)
         let realm = try openRealm()
-        let serverUUID = library.server.uuid.uuidString
+        let serverUUID = library.server.id
+        let values = entries.compactMap { key, entry -> (Int32, CalibreBookMetadataValue)? in
+            guard let entry, let id = Int32(key) else { return nil }
+            return (id, CalibreBookMetadataValue(entry: entry, root: json?[key] as? NSDictionary ?? NSDictionary()))
+        }
 
-        try realm.write {
-            entries.forEach { key, entry in
-                guard let entry = entry else { return }
-                guard let bookId = Int32(key) else { return }
-                let primaryKey = CalibreBookRealm.PrimaryKey(
-                    serverUUID: serverUUID,
-                    libraryName: library.name,
-                    id: bookId.description
-                )
-
-                let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? CalibreBookRealm()
-                if bookRealm.realm == nil {
-                    bookRealm.primaryKey = primaryKey
-                    bookRealm.serverUUID = serverUUID
-                    bookRealm.libraryName = library.name
-                    bookRealm.idInLib = bookId
-                    realm.add(bookRealm)
+        try writeIfChanged(in: realm) {
+            var changed = false
+            for (id, metadata) in values {
+                let key = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: id.description)
+                let existing = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key)
+                if existing == nil, retainingExisting.contains(id) { continue }
+                if libraryScope != nil, let existing, let modified = metadata.lastModified,
+                   existing.lastModified > modified {
+                    continue
                 }
-
-                let bookRoot = json?[key] as? NSDictionary ?? NSDictionary()
-                bookRealm.applyMetadataEntry(entry, root: bookRoot)
+                let book = existing ?? CalibreBookRealm()
+                if existing == nil {
+                    book.primaryKey = key
+                    book.serverUUID = serverUUID
+                    book.libraryName = library.name
+                    book.idInLib = id
+                    realm.add(book)
+                }
+                book.applyMetadataValue(metadata)
+                changed = true
             }
+            return changed
         }
     }
-    
+
     // MARK: - Mapping Helpers
 
     private func makeLocalSearchPredicates(criteria: SearchCriteria) -> [NSPredicate] {
@@ -348,9 +415,10 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         }
     }
     
-    private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
+    private func mapToLibraryCachedResult(
+        _ searchObj: CalibreLibrarySearchObject, library: CalibreLibrary, realm: Realm
+    ) -> LibraryCachedResult {
         let libraryId = searchObj.libraryId
-        let library = librarySnapshotProvider?.calibreLibraries[libraryId]
         
         var sources: [String: LibrarySourceSearchResult] = [:]
         for sourceEntry in searchObj.sources {
@@ -358,16 +426,15 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             let url = sourceEntry.key
             
             let books = Array(sourceObj.bookIds.compactMap { bookId -> CalibreBook? in
-                guard let lib = library else { return nil }
                 let pk = CalibreBookRealm.PrimaryKey(
-                    serverUUID: lib.server.uuid.uuidString,
-                    libraryName: lib.name,
+                    serverUUID: library.server.uuid.uuidString,
+                    libraryName: library.name,
                     id: bookId.description
                 )
                 guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) else {
                     return nil
                 }
-                return bookRealm.toDomain(library: lib)
+                return bookRealm.toDomain(library: library)
             })
             
             sources[url] = LibrarySourceSearchResult(
@@ -396,6 +463,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         libraryId: String,
         categoryName: String
     ) throws -> LibraryCategoryResult? {
+        try checkScope(libraryId: libraryId)
         let realm = try openRealmForRead()
         
         guard let obj = realm.objects(CalibreLibraryCategoryObject.self)
@@ -403,6 +471,10 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             .first
         else { return nil }
         
+        return mapCategoryResult(obj)
+    }
+
+    private func mapCategoryResult(_ obj: CalibreLibraryCategoryObject) -> LibraryCategoryResult {
         let items = obj.items.map { itemObj in
             LibraryCategoryItem(
                 name: itemObj.name,
@@ -424,14 +496,22 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     func saveLibraryCategoryResult(
         libraryId: String,
         categoryName: String,
-        result: LibraryCategoryResult
+        result: LibraryCategoryResult,
+        expecting: CacheWriteExpectation<LibraryCategoryResult>
     ) throws {
+        try checkScope(libraryId: libraryId)
         let realm = try openRealm()
         
-        try realm.write {
+        try writeIfChanged(in: realm) {
             var cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
                 .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
                 .first
+
+            if case .previous(let expected) = expecting {
+                let current = cacheObj.map(mapCategoryResult)
+                if current == result { return false }
+                guard current == expected else { throw CacheContextError.superseded }
+            }
                 
             if cacheObj == nil {
                 let newObj = CalibreLibraryCategoryObject()
@@ -441,7 +521,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 cacheObj = newObj
             }
             
-            guard let obj = cacheObj else { return }
+            guard let obj = cacheObj else { return false }
             obj.generation = result.generation
             obj.totalNumber = result.totalNumber
             
@@ -465,6 +545,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 }
                 obj.items.append(itemObj)
             }
+            return true
         }
     }
     
@@ -582,7 +663,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
 
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
-        guard let realm = try? openRealmForRead() else {
+        guard let cache = try? snapshot(), let realm = try? cache.openRealmForRead() else {
             return AsyncStream { continuation in
                 continuation.yield([])
                 continuation.finish()
@@ -590,16 +671,14 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         }
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
-        return AsyncStream { [weak self] continuation in
+        return AsyncStream { continuation in
             var lastSummaries: [CategoryCacheSummary]?
-            let token = objects.observe(on: DispatchQueue.main) { [weak self] changes in
-                guard let self else {
-                    continuation.yield([])
-                    return
-                }
+            let token = objects.observe(on: DispatchQueue.main) { changes in
+                do { try cache.checkDatabase() }
+                catch { continuation.finish(); return }
                 switch changes {
                 case .initial(let objects), .update(let objects, _, _, _):
-                    let summaries = self.mapCategorySummaries(objects: objects)
+                    let summaries = cache.mapCategorySummaries(objects: objects)
                     guard summaries != lastSummaries else { return }
                     lastSummaries = summaries
                     continuation.yield(summaries)
@@ -613,15 +692,18 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         }
     }
 
-    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
-        guard let realm = try? openRealmForRead() else {
+    func observeCategoryCacheUpdates(categoryName: String, libraryIds: Set<String>?) -> AsyncStream<Void> {
+        guard let cache = try? snapshot(), let realm = try? cache.openRealmForRead() else {
             return AsyncStream { continuation in
                 continuation.finish()
             }
         }
 
-        let objects = realm.objects(CalibreLibraryCategoryObject.self)
+        var objects = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("categoryName == %@", categoryName)
+        if let libraryIds {
+            objects = objects.filter("libraryId IN %@", Array(libraryIds))
+        }
 
         return AsyncStream { continuation in
             var lastFingerprint: [Int]?
@@ -638,6 +720,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             }
 
             let token = objects.observe(on: DispatchQueue.main) { changes in
+                do { try cache.checkDatabase() }
+                catch { continuation.finish(); return }
                 switch changes {
                 case .initial(let objects):
                     lastFingerprint = makeFingerprint(objects)
@@ -657,13 +741,17 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     }
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
+        try checkScope(libraryId: libraryId)
         let realm = try openRealm()
-        try realm.write {
+        try writeIfChanged(in: realm) {
             if let cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
                 .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
                 .first {
+                guard cacheObj.generation != .distantPast else { return false }
                 cacheObj.generation = .distantPast
+                return true
             }
+            return false
         }
     }
 
@@ -671,8 +759,9 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         libraryId: String,
         activeCategoryNames: Set<String>
     ) throws {
+        try checkScope(libraryId: libraryId)
         let realm = try openRealm()
-        try realm.write {
+        try writeIfChanged(in: realm) {
             let libraryCategories = realm.objects(CalibreLibraryCategoryObject.self)
                 .filter("libraryId == %@", libraryId)
             let staleCategories: [CalibreLibraryCategoryObject]
@@ -684,12 +773,13 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 )
             }
 
-            guard !staleCategories.isEmpty else { return }
+            guard !staleCategories.isEmpty else { return false }
             realm.delete(staleCategories)
 
             let orphanedItems = realm.objects(CalibreLibraryCategoryItemObject.self)
                 .filter("assignee.@count == 0")
             realm.delete(orphanedItems)
+            return true
         }
     }
 }

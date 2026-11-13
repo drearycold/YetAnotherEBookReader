@@ -317,6 +317,8 @@ final class CalibreServerContractTests: XCTestCase {
         var library: CalibreLibrary = library
         library.categoryFields = categories.filter(\.is_category).reduce(into: [:]) { $0[$1.name] = $1.field }
         let authors = try XCTUnwrap(categories.first { $0.field == "authors" })
+        try container.serverManager.addServer(server: library.server, libraries: [library])
+        defer { XCTAssertNoThrow(try container.serverManager.removeServer(server: library.server)) }
         let authorItems = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: authors)
         let author = try XCTUnwrap(authorItems.items.first)
 
@@ -339,6 +341,7 @@ final class CalibreServerContractTests: XCTestCase {
     func testASyncReadsTheLibrary() async throws {
         let libraryManager = container.libraryManager
         try container.serverManager.addServer(server: library.server, libraries: [library])
+        defer { XCTAssertNoThrow(try container.serverManager.removeServer(server: library.server)) }
 
         await libraryManager.syncLibrary(request: .init(library: library))
 

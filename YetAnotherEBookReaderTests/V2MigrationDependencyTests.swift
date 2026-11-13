@@ -61,9 +61,11 @@ final class V2MigrationDependencyTests: XCTestCase {
         let repository = MockCategoryCacheRepository()
         container.categoryCacheRepository = repository
         AppContainer.shared = container
+        let library = TestFixtures.makeLibrary()
+        container.calibreLibraries = [library.id: library]
         
         let result = LibraryCategoryResult(
-            libraryId: "library-id",
+            libraryId: library.id,
             categoryName: "Authors",
             items: [LibraryCategoryItem(name: "Author A", averageRating: 4.5, count: 2, url: "author-a")],
             generation: Date(),
@@ -84,12 +86,15 @@ final class V2MigrationDependencyTests: XCTestCase {
         let repository = MockCategoryCacheRepository()
         container.categoryCacheRepository = repository
         AppContainer.shared = container
+        let first = TestFixtures.makeLibrary(key: "one", name: "One")
+        let second = TestFixtures.makeLibrary(key: "two", name: "Two")
+        container.calibreLibraries = [first.id: first, second.id: second]
 
         try? repository.saveLibraryCategoryResult(
-            libraryId: "library-one",
+            libraryId: first.id,
             categoryName: "Authors",
             result: LibraryCategoryResult(
-                libraryId: "library-one",
+                libraryId: first.id,
                 categoryName: "Authors",
                 items: [LibraryCategoryItem(name: "Author A", averageRating: 4.5, count: 2, url: "author-a")],
                 generation: Date(),
@@ -97,10 +102,10 @@ final class V2MigrationDependencyTests: XCTestCase {
             )
         )
         try? repository.saveLibraryCategoryResult(
-            libraryId: "library-two",
+            libraryId: second.id,
             categoryName: "Tags",
             result: LibraryCategoryResult(
-                libraryId: "library-two",
+                libraryId: second.id,
                 categoryName: "Tags",
                 items: [LibraryCategoryItem(name: "Tag B", averageRating: 0.0, count: 1, url: "tag-b")],
                 generation: Date(),
@@ -109,7 +114,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         )
 
         let viewModel = LibraryInfoView.ViewModel()
-        viewModel.filterCriteriaLibraries = ["library-one"]
+        viewModel.filterCriteriaLibraries = [first.id]
         viewModel.fetchAvailableCategories()
 
         XCTAssertEqual(viewModel.availableCategoryMenuItems.map(\.name), ["Authors"])
@@ -120,9 +125,11 @@ final class V2MigrationDependencyTests: XCTestCase {
         let repository = MockCategoryCacheRepository()
         container.categoryCacheRepository = repository
         AppContainer.shared = container
+        let library = TestFixtures.makeLibrary()
+        container.calibreLibraries = [library.id: library]
 
         let initialResult = LibraryCategoryResult(
-            libraryId: "library-id",
+            libraryId: library.id,
             categoryName: "Authors",
             items: [LibraryCategoryItem(name: "Author A", averageRating: 4.5, count: 2, url: "author-a")],
             generation: Date(),
@@ -142,10 +149,10 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(viewModel.availableCategories.first?.itemsCount, 1)
 
         try? repository.saveLibraryCategoryResult(
-            libraryId: "library-id",
+            libraryId: library.id,
             categoryName: updated.categoryName,
             result: LibraryCategoryResult(
-                libraryId: "library-id",
+                libraryId: library.id,
                 categoryName: updated.categoryName,
                 items: [
                     LibraryCategoryItem(name: "Tag A", averageRating: 0.0, count: 2, url: "tag-a"),

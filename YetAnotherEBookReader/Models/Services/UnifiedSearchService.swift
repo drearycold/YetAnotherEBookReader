@@ -34,6 +34,8 @@ actor UnifiedSearchService {
         /// Each library's books as last read: this search's answer, or the library's search cache
         /// until the answer arrives, and when the search fails.
         var libraryResults: [String: SourcedResult] = [:]
+        var libraryScopes: [String: CalibreLibrary] = [:]
+        var cache: SearchCacheRepository?
         /// The latest search for the key. A replaced search's results are dropped.
         var searchId = UUID()
     }
@@ -83,7 +85,9 @@ actor UnifiedSearchService {
     }
 
     func getActiveSearch(for key: SearchCriteriaMergedKey) -> UnifiedSearchResult? {
-        return activeSearches[key]?.currentResult
+        guard let search = activeSearches[key], let cache = search.cache,
+              (try? cache.checkCurrent()) != nil else { return nil }
+        return search.currentResult
     }
 
     func expandLimit(for key: SearchCriteriaMergedKey, by increment: Int = 100) {
@@ -173,43 +177,55 @@ actor UnifiedSearchService {
 
     @discardableResult
     private func triggerSearch(for key: SearchCriteriaMergedKey, force: Bool) async -> Task<Void, Never> {
-        let activeLibraryIds = await getTargetLibraryIds(for: key)
-        let libraries = await getLibraries()
-        let targetLibraries = activeLibraryIds.compactMap { libraries[$0] }
-
-        // Until a library answers, show what its search cache has.
-        var cachedResults = [String: SourcedResult]()
-        for library in targetLibraries where activeSearches[key]?.libraryResults[library.id] == nil {
-            cachedResults[library.id] = await cachedResult(for: library, key: key)
-        }
-
-        // Nothing suspends from here on, so no other call changes the search meanwhile.
         searchTasks[key]?.cancel()
+        let task = Task { await runSearch(for: key, force: force) }
+        searchTasks[key] = task
+        return task
+    }
 
-        var activeSearch = activeSearches[key] ?? {
-            var initialStatuses: [String: LibrarySearchStatus] = [:]
-            for libraryId in activeLibraryIds {
-                initialStatuses[libraryId] = LibrarySearchStatus(loading: false, error: nil)
+    private func runSearch(for key: SearchCriteriaMergedKey, force: Bool) async {
+        let database = Result { try repository.snapshot() }
+        let libraries = await getLibraries()
+        let targetLibraries = activeLibraries(in: libraries, for: key)
+        let activeLibraryIds = Set(targetLibraries.keys)
+        var requests: [String: Result<LibrarySearchService.Request, Error>] = [:]
+        for (id, library) in targetLibraries {
+            do {
+                try Task.checkCancellation()
+                requests[id] = .success(try await librarySearchService.prepareRequest(library: library, cache: database.get()))
+            } catch {
+                requests[id] = .failure(error)
             }
-            let initialResult = UnifiedSearchResult(
-                search: key.criteria.searchString,
-                sortBy: key.criteria.sortCriteria.by,
-                sortAsc: key.criteria.sortCriteria.ascending,
-                filters: key.criteria.filterCriteriaCategory,
-                libraryIds: key.libraryIds,
-                unifiedOffsets: [:],
-                totalNumber: 0,
-                limitNumber: 100,
-                books: []
-            )
-            return ActiveSearch(
-                criteria: key.criteria,
-                libraryIds: key.libraryIds,
-                currentResult: initialResult,
-                libraryStatuses: initialStatuses,
-                forceMetadataRefreshForLoadedBooks: false
-            )
-        }()
+        }
+        guard !Task.isCancelled else { return }
+
+        var activeSearch = activeSearches[key] ?? ActiveSearch(
+            criteria: key.criteria, libraryIds: key.libraryIds,
+            currentResult: UnifiedSearchResult(
+                search: key.criteria.searchString, sortBy: key.criteria.sortCriteria.by,
+                sortAsc: key.criteria.sortCriteria.ascending, filters: key.criteria.filterCriteriaCategory,
+                libraryIds: key.libraryIds, unifiedOffsets: [:], totalNumber: 0, limitNumber: 100, books: []
+            ),
+            libraryStatuses: [:], forceMetadataRefreshForLoadedBooks: false
+        )
+        if activeSearch.cache.map({ (try? $0.checkCurrent()) != nil }) != true {
+            activeSearch.libraryResults.removeAll()
+            activeSearch.currentResult.unifiedOffsets.removeAll()
+        }
+        activeSearch.libraryResults = activeSearch.libraryResults.filter { id, _ in
+            guard let old = activeSearch.libraryScopes[id], let current = targetLibraries[id] else { return false }
+            return old.hasSameCacheScope(as: current)
+        }
+        activeSearch.libraryScopes = targetLibraries
+        activeSearch.cache = try? database.get()
+        activeSearch.libraryStatuses = [:]
+
+        // Until each library answers, show the cache mapped with its captured library value.
+        for (id, preparation) in requests where activeSearch.libraryResults[id] == nil {
+            if case .success(let request) = preparation {
+                activeSearch.libraryResults[id] = try? cachedResult(for: request, key: key)
+            }
+        }
 
         if force {
             activeSearch.forceMetadataRefreshForLoadedBooks = true
@@ -217,7 +233,6 @@ actor UnifiedSearchService {
             activeSearch.forceMetadataRefreshForLoadedBooks = false
         }
 
-        activeSearch.libraryResults.merge(cachedResults) { current, _ in current }
         for libraryId in activeLibraryIds {
             activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(loading: true, error: nil)
         }
@@ -230,86 +245,150 @@ actor UnifiedSearchService {
         let limit = activeSearch.currentResult.limitNumber
         let forceMetadataRefresh = activeSearch.forceMetadataRefreshForLoadedBooks
 
-        let searchTask = Task {
-            await withTaskGroup(of: (String, Result<LibraryCachedResult, Error>).self) { group in
-                for library in targetLibraries {
-                    group.addTask {
-                        do {
-                            let result = try await self.librarySearchService.searchAndFetchMetadata(
-                                library: library,
-                                criteria: key.criteria,
-                                limit: limit,
-                                force: force,
-                                forceMetadataRefresh: forceMetadataRefresh
-                            )
-                            return (library.id, .success(result))
-                        } catch {
-                            return (library.id, .failure(error))
-                        }
-                    }
-                }
-
-                for await (libraryId, result) in group {
-                    guard !Task.isCancelled else { break }
-                    await self.handleLibrarySearchResult(key: key, searchId: searchId, libraryId: libraryId, result: result)
-                }
+        typealias Answer = (id: String, request: LibrarySearchService.Request?,
+                            result: Result<LibraryCachedResult, Error>, restarted: Bool)
+        let load: @Sendable (String, Result<LibrarySearchService.Request, Error>, Bool) async -> Answer = {
+            id, preparation, restarted in
+            let request = try? preparation.get()
+            do {
+                let result = try await self.librarySearchService.searchAndFetchMetadata(
+                    request: preparation.get(), criteria: key.criteria, limit: limit,
+                    force: force || restarted, forceMetadataRefresh: forceMetadataRefresh
+                )
+                return (id, request, .success(result), restarted)
+            } catch {
+                return (id, request, .failure(error), restarted)
             }
-
-            await self.finishSearch(for: key, searchId: searchId)
         }
 
-        searchTasks[key] = searchTask
-        return searchTask
+        await withTaskGroup(of: Answer.self) { group in
+            for (id, preparation) in requests {
+                group.addTask { await load(id, preparation, false) }
+            }
+
+            for await answer in group {
+                guard !Task.isCancelled else { break }
+                if let replacement = await handleLibrarySearchResult(
+                    key: key, searchId: searchId, libraryId: answer.id, request: answer.request,
+                    result: answer.result, canRestart: !answer.restarted
+                ) {
+                    group.addTaskUnlessCancelled { await load(answer.id, .success(replacement), true) }
+                }
+            }
+        }
+        if !Task.isCancelled { finishSearch(for: key, searchId: searchId) }
     }
 
     private func handleLibrarySearchResult(
-        key: SearchCriteriaMergedKey,
-        searchId: UUID,
-        libraryId: String,
-        result: Result<LibraryCachedResult, Error>
-    ) async {
-        let library = await getLibraries()[libraryId]
-        let targetLibraryIds = await getTargetLibraryIds(for: key)
+        key: SearchCriteriaMergedKey, searchId: UUID, libraryId: String,
+        request: LibrarySearchService.Request?, result: Result<LibraryCachedResult, Error>, canRestart: Bool
+    ) async -> LibrarySearchService.Request? {
+        let libraries = activeLibraries(in: await getLibraries(), for: key)
+        guard !Task.isCancelled, var activeSearch = activeSearches[key], activeSearch.searchId == searchId
+        else { return nil }
 
-        var answer: SourcedResult?
-        var searchError: SearchError?
-        switch result {
-        case .success(let cachedResult):
-            if let library {
-                let source = await librarySearchService.getTargetSource(for: library)
-                answer = cachedResult.sources[source].map { SourcedResult(source: source, result: $0) }
+        if let cache = activeSearch.cache, (try? cache.checkCurrent()) == nil {
+            activeSearch.libraryResults.removeAll()
+            activeSearch.libraryStatuses = activeSearch.libraryStatuses.mapValues { _ in .init(error: .superseded) }
+        } else if let captured = activeSearch.libraryScopes[libraryId], let current = libraries[libraryId],
+                  captured.hasSameCacheScope(as: current),
+                  request.map({ (try? $0.cache.checkCurrent()) != nil }) != false {
+            var searchError: SearchError?
+            switch result {
+            case .success(let cached):
+                if let request, let source = cached.sources[request.source] {
+                    activeSearch.libraryResults[libraryId] = SourcedResult(source: request.source, result: source)
+                }
+            case .failure(let error):
+                searchError = Self.searchError(error)
+                let failedOnNetwork: Bool
+                if case .network? = searchError { failedOnNetwork = true }
+                else { failedOnNetwork = false }
+                if let request, failedOnNetwork || activeSearch.libraryResults[libraryId] == nil || searchError == .superseded {
+                    do {
+                        if let fallback = try cachedResult(for: request, key: key) {
+                            activeSearch.libraryResults[libraryId] = fallback
+                        }
+                    } catch {
+                        // Keep the network failure that triggered fallback. A superseded result
+                        // has no failure to report unless reading the replacement itself fails.
+                        if searchError == .superseded { searchError = Self.searchError(error) }
+                    }
+                }
             }
-        case .failure(let error):
-            if let sErr = error as? SearchError {
-                searchError = sErr
-            } else if error is CancellationError {
-                searchError = .cancelled
-            } else {
-                searchError = .invalidState(error.localizedDescription)
+            activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(
+                error: searchError, fromCache: searchError != nil && activeSearch.libraryResults[libraryId] != nil
+            )
+        } else if let current = libraries[libraryId], let cache = activeSearch.cache {
+            return await prepareReplacement(for: current, key: key, searchId: searchId,
+                                            cache: cache, canRestart: canRestart)
+        } else {
+            activeSearch.libraryResults.removeValue(forKey: libraryId)
+            activeSearch.libraryStatuses[libraryId] = .init(error: .superseded)
+        }
+
+        publish(activeSearch, for: key, libraryIds: Set(libraries.keys))
+        return nil
+    }
+
+    private func prepareReplacement(
+        for library: CalibreLibrary, key: SearchCriteriaMergedKey, searchId: UUID,
+        cache: SearchCacheRepository, canRestart: Bool
+    ) async -> LibrarySearchService.Request? {
+        let preparation: Result<LibrarySearchService.Request, Error>
+        do {
+            preparation = .success(try await librarySearchService.prepareRequest(library: library, cache: cache))
+        } catch {
+            preparation = .failure(error)
+        }
+        let libraries = activeLibraries(in: await getLibraries(), for: key)
+        guard !Task.isCancelled, var activeSearch = activeSearches[key], activeSearch.searchId == searchId
+        else { return nil }
+
+        let id = library.id
+        var replacement: LibrarySearchService.Request?
+        if (try? cache.checkCurrent()) == nil {
+            activeSearch.libraryResults.removeAll()
+            activeSearch.libraryStatuses = activeSearch.libraryStatuses.mapValues { _ in .init(error: .superseded) }
+        } else {
+            activeSearch.libraryResults.removeValue(forKey: id)
+            do {
+                guard libraries[id]?.hasSameCacheScope(as: library) == true else { throw CacheContextError.superseded }
+                let request = try preparation.get()
+                try request.cache.checkCurrent()
+                let cached = try cachedResult(for: request, key: key)
+                activeSearch.libraryScopes[id] = library
+                activeSearch.libraryResults[id] = cached
+                // A second scope change can still use the newest cache. Limit each library to
+                // one replacement request per search so periodic updates cannot keep it loading.
+                activeSearch.libraryStatuses[id] = canRestart
+                    ? .init(loading: true)
+                    : .init(error: .superseded, fromCache: cached != nil)
+                if canRestart { replacement = request }
+            } catch {
+                activeSearch.libraryStatuses[id] = .init(error: Self.searchError(error))
             }
         }
 
-        // A library whose search failed shows what its search cache has.
-        var fallback: SourcedResult?
-        if searchError != nil, activeSearches[key]?.libraryResults[libraryId] == nil, let library {
-            fallback = await cachedResult(for: library, key: key)
-        }
+        publish(activeSearch, for: key, libraryIds: Set(libraries.keys))
+        return replacement
+    }
 
-        // Nothing suspends from here on, so no other call changes the search meanwhile.
-        guard var activeSearch = activeSearches[key], activeSearch.searchId == searchId else { return }
-
-        if let sourced = answer ?? fallback {
-            activeSearch.libraryResults[libraryId] = sourced
-        }
-        activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(
-            loading: false,
-            error: searchError,
-            fromCache: searchError != nil && activeSearch.libraryResults[libraryId] != nil
-        )
-        activeSearch.currentResult = merge(activeSearch, libraryIds: targetLibraryIds)
-
+    private func publish(_ search: ActiveSearch, for key: SearchCriteriaMergedKey, libraryIds: Set<String>) {
+        var activeSearch = search
+        activeSearch.currentResult = merge(activeSearch, libraryIds: libraryIds)
         activeSearches[key] = activeSearch
         emitUpdate(for: key)
+    }
+
+    private static func searchError(_ error: Error) -> SearchError {
+        if let searchError = error as? SearchError { return searchError }
+        if error is CancellationError { return .cancelled }
+        switch error as? CacheContextError {
+        case .superseded: return .superseded
+        case .databaseUnavailable: return .database("The search database is not ready.")
+        case nil: return .database(error.localizedDescription)
+        }
     }
 
     private func finishSearch(for key: SearchCriteriaMergedKey, searchId: UUID) {
@@ -333,7 +412,8 @@ actor UnifiedSearchService {
         for libraryId in libraryIds {
             guard let sourced = activeSearch.libraryResults[libraryId] else { continue }
             var result = sourced.result
-            if activeSearch.libraryStatuses[libraryId]?.failure != nil {
+            if let status = activeSearch.libraryStatuses[libraryId],
+               status.failure != nil || (status.error == .superseded && status.fromCache) {
                 result.totalNumber = result.books.count
             }
             libraryResults[libraryId] = result
@@ -349,33 +429,31 @@ actor UnifiedSearchService {
     /// The library's search cache for `key`, read through the URL its server is reached by, or else
     /// the newest of its other URLs': a server that can't be reached is looked up by its base URL,
     /// though its books may have been read through its public one.
-    private func cachedResult(for library: CalibreLibrary, key: SearchCriteriaMergedKey) async -> SourcedResult? {
-        guard let cached = try? repository.fetchLibraryCachedResult(
-            libraryId: library.id,
+    private func cachedResult(
+        for request: LibrarySearchService.Request, key: SearchCriteriaMergedKey
+    ) throws -> SourcedResult? {
+        guard let cached = try request.cache.fetchLibraryCachedResult(
+            library: request.library,
             search: key.criteria.searchString,
             sortBy: key.criteria.sortCriteria.by,
             sortAsc: key.criteria.sortCriteria.ascending,
             filters: key.criteria.filterCriteriaCategory
-        ) else {
-            return nil
-        }
+        ) else { return nil }
 
-        let targetSource = await librarySearchService.getTargetSource(for: library)
-        if let result = cached.sources[targetSource] {
-            return SourcedResult(source: targetSource, result: result)
+        if let result = cached.sources[request.source] {
+            return SourcedResult(source: request.source, result: result)
         }
         return cached.sources
             .max { ($0.value.generation, $0.value.books.count) < ($1.value.generation, $1.value.books.count) }
             .map { SourcedResult(source: $0.key, result: $0.value) }
     }
 
-    private func getTargetLibraryIds(for key: SearchCriteriaMergedKey) async -> Set<String> {
-        if !key.libraryIds.isEmpty {
-            return key.libraryIds
+    private func activeLibraries(
+        in libraries: [String: CalibreLibrary], for key: SearchCriteriaMergedKey
+    ) -> [String: CalibreLibrary] {
+        libraries.filter { id, library in
+            !library.hidden && !library.server.removed && (key.libraryIds.isEmpty || key.libraryIds.contains(id))
         }
-        let calibreLibraries = await getLibraries()
-        let activeLibraryIds = calibreLibraries.filter { !$0.value.hidden && !$0.value.server.removed }.map { $0.key }
-        return Set(activeLibraryIds)
     }
 
     // MARK: - LibraryProvider Thread-safe Wrappers

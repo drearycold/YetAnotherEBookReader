@@ -121,6 +121,7 @@ extension LibraryInfoView {
         private var preservesFilterCriteriaOnNextBookListAppear = false
         
         private var categoryObserverTask: Task<Void, Never>?
+        private var categoryObserverId: UUID?
 
         var visibleFilterItems: [VisibleFilterItem] {
             filterCriteriaCategory
@@ -153,24 +154,53 @@ extension LibraryInfoView {
         
         func fetchAvailableCategories() {
             guard let container = AppContainer.shared else { return }
-            let repository = container.categoryCacheRepository
-            if let summaries = try? repository.fetchCategorySummaries(libraryIds: filterCriteriaLibraries) {
-                self.availableCategories = summaries
+            do {
+                let cache = try container.categoryCacheRepository.snapshot()
+                try updateCategorySummaries(cache: cache, libraries: container.getLibraries())
+            } catch {
+                availableCategories = []
             }
+        }
+
+        private func updateCategorySummaries(cache: CategoryCacheRepository, libraries: [String: CalibreLibrary]) throws {
+            let activeIds = Set(libraries.values.filter {
+                !$0.hidden && !$0.server.removed && (filterCriteriaLibraries.isEmpty || filterCriteriaLibraries.contains($0.id))
+            }.map(\.id))
+            let summaries = activeIds.isEmpty ? [] : try cache.fetchCategorySummaries(libraryIds: activeIds)
+            try cache.checkCurrent()
+            availableCategories = summaries
         }
         
         func setupCategoryObserver() {
-            guard let container = AppContainer.shared, categoryObserverTask == nil else { return }
+            guard let container = AppContainer.shared, categoryObserverTask == nil,
+                  let cache = try? container.categoryCacheRepository.snapshot() else { return }
 
-            categoryObserverTask = Task { @MainActor [weak self, repository = container.categoryCacheRepository] in
-                for await _ in repository.observeCategorySummaries() {
-                    guard !Task.isCancelled else { break }
-                    guard let self else { continue }
-                    if let summaries = try? repository.fetchCategorySummaries(libraryIds: self.filterCriteriaLibraries) {
-                        self.availableCategories = summaries
+            let observationId = UUID()
+            categoryObserverId = observationId
+            categoryObserverTask = Task { @MainActor [weak self, weak container] in
+                defer {
+                    if let self, self.categoryObserverId == observationId {
+                        self.categoryObserverTask = nil
+                        self.categoryObserverId = nil
+                    }
+                }
+                for await _ in cache.observeCategorySummaries() {
+                    guard !Task.isCancelled, let self, let container else { break }
+                    do {
+                        try self.updateCategorySummaries(cache: cache, libraries: container.getLibraries())
+                    } catch CacheContextError.superseded {
+                        break
+                    } catch {
+                        self.availableCategories = []
                     }
                 }
             }
+        }
+
+        func stopCategoryObserver() {
+            categoryObserverTask?.cancel()
+            categoryObserverTask = nil
+            categoryObserverId = nil
         }
         
         deinit {
