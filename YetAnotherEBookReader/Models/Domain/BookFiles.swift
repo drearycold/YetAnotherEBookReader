@@ -104,14 +104,18 @@ func removeFolioCache(book: CalibreBook, format: Format) {
 
 func sha256new(for fileURL: URL) -> Data? {
     guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+    defer { try? handle.close() }
     let bufferSize = 1024*1024
     var hasher = SHA256()
-    while autoreleasepool(invoking: {
-        let nextChunk = handle.readData(ofLength: bufferSize)
-        guard !nextChunk.isEmpty else { return false }
-        hasher.update(data: nextChunk)
-        return true
-    }) { }
+    do {
+        while try autoreleasepool(invoking: {
+            guard let chunk = try handle.read(upToCount: bufferSize), !chunk.isEmpty else { return false }
+            hasher.update(data: chunk)
+            return true
+        }) {}
+    } catch {
+        return nil
+    }
     let digest = hasher.finalize()
     return Data(digest)
     
@@ -127,6 +131,7 @@ enum ImportError: String, CaseIterable, Hashable, Identifiable, Error {
     case destConflict
     case fileOpFail
     case loadMetaFail
+    case recoveryRequired
     case invalidArg
     case tooManyFiles
     case formatUnsupported
@@ -140,9 +145,37 @@ struct BookImportInfo {
     let url: URL
     var bookId: Int32?
     var error: ImportError?
+    var cleanupPending = false
+    var recoveryFolder: String?
+    var overwrite = false
+    var asNew = false
     
     mutating func with(error: ImportError) -> BookImportInfo{
         self.error = error
         return self
+    }
+}
+
+enum BookFileRemovalResult: Equatable {
+    case committed(cleanupPending: Bool = false)
+    case fileFailed
+    case storageFailed
+    case recoveryRequired(String?)
+
+    var succeeded: Bool {
+        if case .committed = self { return true }
+        return false
+    }
+
+    var cleanupPending: Bool { self == .committed(cleanupPending: true) }
+
+    var message: String {
+        switch self {
+        case .committed: return "The book was updated. Some temporary files could not be removed."
+        case .fileFailed: return "The book file could not be removed. Try again."
+        case .storageFailed: return "The library change could not be saved. Try again."
+        case .recoveryRequired(let folder):
+            return "The file could not be restored. A copy was kept for recovery\(folder.map { " in \($0)" } ?? "")."
+        }
     }
 }

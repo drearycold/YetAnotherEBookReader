@@ -14,6 +14,7 @@ struct MainView: View {
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
     @ObservedObject var viewModel: MainViewModel
+    @State private var importResultAction: (() -> Void)?
 
     init(container: AppContainer, viewModel: MainViewModel) {
         self.viewModel = viewModel
@@ -191,53 +192,13 @@ struct MainView: View {
                 allowsMultipleSelection: false
             )
         }
-        .actionSheet(isPresented: $viewModel.bookImportActionSheetPresenting, content: {
-            guard let bookImportInfo = viewModel.bookImportInfo else {
-                return ActionSheet(
-                    title: Text("Importing"),
-                    message: Text("Unexpected error occured (code empty result). Please consider report this."),
-                    buttons: [
-                        .default(Text("Report"), action: {
-                            viewModel.reportImportError()
-                        }),
-                        .cancel()])
-            }
-            if bookImportInfo.error == nil, let bookId = bookImportInfo.bookId {
-                return ActionSheet(
-                    title: Text("Importing"),
-                    message: Text("Imported, read now?"),
-                    buttons: [
-                        .default(Text("Read"), action: {
-                            viewModel.openImportedBook()
-                        }),
-                        .cancel()
-                    ]
-                )
-            }
-            if bookImportInfo.error == .destConflict {
-                return ActionSheet(
-                    title: Text("Importing"),
-                    message: Text("Book of same file name already exists. Do you wish to overwrite existing one?"),
-                    buttons: [
-                        .default(Text("As a new book"), action: {
-                            viewModel.importBookAsNew(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
-                        }),
-                        .destructive(Text("Overwrite"), action: {
-                            viewModel.importBookOverwrite(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
-                        }),
-                        .cancel()
-                    ]
-                )
-            }
-            return ActionSheet(
-                title: Text("Importing"),
-                message: Text("Unexpected error occured (code \(bookImportInfo.error?.rawValue ?? "unknown")). Please consider report this."),
-                buttons: [
-                    .default(Text("Report"), action: {
-                        viewModel.reportImportError()
-                    }),
-                    .cancel()])
-        })
+        .sheet(isPresented: $viewModel.bookImportResultPresenting, onDismiss: {
+            let action = importResultAction
+            importResultAction = nil
+            action?()
+        }) {
+            importResultSheet
+        }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
         .onOpenURL { url in
@@ -265,11 +226,84 @@ struct MainView: View {
         .environment(\.readerWorkspaceID, viewModel.readerWorkspaceViewModel.id)
     }
 
+    private var importResultSheet: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                importResultContent
+            }
+            .buttonStyle(.bordered)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 480)
+            .padding(24)
+            .frame(maxWidth: .infinity)
+        }
+        .modifier(ImportResultSheetPresentation())
+    }
+
+    @ViewBuilder
+    private var importResultContent: some View {
+        if let info = viewModel.bookImportInfo, info.error == nil, info.bookId != nil {
+            importResultMessage(
+                "Importing",
+                info.cleanupPending ? "Imported. Some files could not be cleaned up. Read now?" : "Imported, read now?"
+            )
+            Button("Read") { closeImportResult(then: viewModel.openImportedBook) }
+            Button("Cancel", role: .cancel) { closeImportResult() }
+        } else if let info = viewModel.bookImportInfo, info.error == .destConflict {
+            importResultMessage("Importing", "A book with the same filename already exists.")
+            Button("As a new book") {
+                closeImportResult { viewModel.importBookAsNew(url: info.url) }
+            }
+            Button("Overwrite", role: .destructive) {
+                closeImportResult { viewModel.importBookOverwrite(url: info.url) }
+            }
+            Button("Cancel", role: .cancel) { closeImportResult() }
+        } else if let info = viewModel.bookImportInfo, info.error == .fileOpFail || info.error == .loadMetaFail {
+            importResultMessage("Import Failed", info.error == .loadMetaFail
+                ? "The library change could not be saved." : "The file could not be imported.")
+            Button("Retry") { closeImportResult { viewModel.retryImport(info) } }
+            Button("Cancel", role: .cancel) { closeImportResult() }
+        } else if let info = viewModel.bookImportInfo, info.error == .recoveryRequired {
+            importResultMessage("Import Failed", info.recoveryFolder.map {
+                "The previous file could not be restored. A recovery copy was kept in \($0)."
+            } ?? "The import did not complete and the destination could not be rolled back. The original source was kept.")
+            Button("Dismiss") { closeImportResult() }
+        } else {
+            importResultMessage("Import Failed", "Unexpected error (code \(viewModel.bookImportInfo?.error?.rawValue ?? "unknown").")
+            Button("Report") { closeImportResult(then: viewModel.reportImportError) }
+            Button("Cancel", role: .cancel) { closeImportResult() }
+        }
+    }
+
+    private func importResultMessage(_ title: LocalizedStringKey, _ message: String) -> some View {
+        VStack(spacing: 8) {
+            Text(title).font(.title2.bold())
+            Text(message).font(.body)
+        }
+        .padding(.bottom, 8)
+    }
+
+    private func closeImportResult(then action: (() -> Void)? = nil) {
+        // Wait for onDismiss before an action can publish the next result.
+        importResultAction = action
+        viewModel.bookImportResultPresenting = false
+    }
+
     private func requestAdvertisingConsent() {
         guard UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED),
               !UITestingConfiguration.skipsConsentPrompts(),
               UIApplication.shared.applicationState == .active else { return }
         Task { await AdvertisingConsentManager.shared.gatherConsent() }
+    }
+}
+
+private struct ImportResultSheetPresentation: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, macCatalyst 16.0, *) {
+            content.presentationDetents([.medium, .large])
+        } else {
+            content
+        }
     }
 }
 

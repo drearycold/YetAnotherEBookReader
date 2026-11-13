@@ -16,6 +16,8 @@ protocol BookRepositoryProtocol {
     func observeBook(id: String) -> AsyncStream<CalibreBook?>
     func saveBook(_ book: CalibreBook)
     func deleteBook(id: String)
+    func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws
+    func localBooks(library: CalibreLibrary, filename: String, format: Format) throws -> [CalibreBook]
     func getAllBooksInShelf() -> [CalibreBook]
     func bookExists(id: String) -> Bool
     func persistMetadataEntries(
@@ -132,6 +134,32 @@ class RealmBookRepository: BookRepositoryProtocol {
         try? realm.write {
             realm.delete(object)
         }
+    }
+
+    func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws {
+        guard let realm = getRealm(), !realm.configuration.readOnly, !realm.isInWriteTransaction else {
+            throw ImportError.loadMetaFail
+        }
+        let records = books.map { $0.makeRealmObject() }
+        try realm.write {
+            for id in ids {
+                if let book = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id) {
+                    realm.delete(book)
+                }
+            }
+            realm.add(records, update: .modified)
+        }
+    }
+
+    func localBooks(library: CalibreLibrary, filename: String, format: Format) throws -> [CalibreBook] {
+        guard let realm = getRealm() else { throw ImportError.loadMetaFail }
+        if !realm.isInWriteTransaction && !realm.configuration.readOnly { realm.refresh() }
+        return realm.objects(CalibreBookRealm.self)
+            .filter("serverUUID == %@ AND libraryName == %@", library.server.id, library.name)
+            .compactMap {
+                guard $0.formats()[format.rawValue]?.filename == filename else { return nil }
+                return $0.toDomain(library: library)
+            }
     }
 
     func getAllBooksInShelf() -> [CalibreBook] {

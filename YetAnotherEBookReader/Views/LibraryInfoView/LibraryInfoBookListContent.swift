@@ -103,6 +103,19 @@ struct LibraryInfoBookListContent: View {
                     .disabled(viewModel.isSearchLoading)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let local = container.libraryManager.localLibrary,
+                   libraryInfoViewModel.filterCriteriaLibraries == [local.id],
+                   !books.isEmpty, !listViewModel.isBatchSelectionMode {
+                    Button(action: importBook) {
+                        Label("Import from Files", systemImage: "square.and.arrow.down")
+                    }
+                    .accessibilityIdentifier("browse.local.add")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial)
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 if listViewModel.isBatchSelectionMode {
                     batchSelectionBar(books: books)

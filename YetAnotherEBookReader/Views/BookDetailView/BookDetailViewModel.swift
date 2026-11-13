@@ -361,7 +361,10 @@ class BookDetailViewModel: ObservableObject {
         container.downloadManager.cancelDownload(book, format: format)
         // Reconcile with the latest metadata before the manager persists the cache change.
         let current = bookRepository.getBook(id: book.inShelfId) ?? book
-        container.bookManager.clearCache(book: current, format: format)
+        let result = container.bookManager.clearCache(book: current, format: format)
+        if !result.succeeded || result.cleanupPending {
+            alertItem = AlertItem(id: "File Cleanup", msg: result.message)
+        }
         if let current = bookRepository.getBook(id: book.inShelfId), loadedBookId == book.inShelfId {
             applyBookUpdate(current, container: container)
         }

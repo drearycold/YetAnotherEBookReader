@@ -12,6 +12,7 @@ enum RecentShelfAlert: Identifiable {
     case missingFormat(book: CalibreBook, format: Format)
     case downloadingFormat(book: CalibreBook, format: Format)
     case deleteConfirm(bookIds: Set<String>)
+    case fileRemoval(BookFileRemovalResult)
     /// Another device saved a newer position than the one the book would open at.
     case newerPosition(book: CalibreBook, readerInfo: ReaderInfo, position: BookDeviceReadingPosition)
     
@@ -23,6 +24,8 @@ enum RecentShelfAlert: Identifiable {
             return "downloading-\(book.id)-\(format.rawValue)"
         case .deleteConfirm:
             return "deleteConfirm"
+        case .fileRemoval:
+            return "fileRemoval"
         case .newerPosition(let book, _, let position):
             return "newerPosition-\(book.id)-\(position.id)-\(position.epoch)"
         }
@@ -128,18 +131,22 @@ final class RecentShelfViewModel: ObservableObject {
     }
 
     func deleteBooks(bookIds: Set<String>) {
-        bookIds.forEach {
-            container.bookManager.clearCache(inShelfId: $0)
+        var removed = Set<String>()
+        for id in bookIds {
+            let result = container.bookManager.clearCache(inShelfId: id)
+            if result.succeeded { removed.insert(id) }
+            if !result.succeeded || result.cleanupPending { activeAlert = .fileRemoval(result) }
         }
-        selectionState.selectedBookIds.subtract(bookIds)
+        selectionState.selectedBookIds.subtract(removed)
         if selectionState.selectedBookIds.isEmpty {
             selectionState.isEditing = false
         }
-        container.publishCalibreUpdate(.shelf)
+        if !removed.isEmpty { container.publishCalibreUpdate(.shelf) }
     }
 
     func deleteBook(bookId: String) {
-        container.bookManager.clearCache(inShelfId: bookId)
+        let result = container.bookManager.clearCache(inShelfId: bookId)
+        if !result.succeeded || result.cleanupPending { activeAlert = .fileRemoval(result) }
     }
 
     func prepareReading(bookId: String) -> ReaderInfo? {

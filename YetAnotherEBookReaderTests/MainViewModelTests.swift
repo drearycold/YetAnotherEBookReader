@@ -37,7 +37,7 @@ import Combine
         XCTAssertFalse(viewModel.initialTermsAgreementPresenting)
         XCTAssertFalse(viewModel.privacyWebViewPresenting)
         XCTAssertFalse(viewModel.termsWebViewPresenting)
-        XCTAssertFalse(viewModel.bookImportActionSheetPresenting)
+        XCTAssertFalse(viewModel.bookImportResultPresenting)
         XCTAssertNil(viewModel.bookImportInfo)
         XCTAssertFalse(viewModel.consentRequestTriggered)
         XCTAssertNil(viewModel.urlToOpen)
@@ -181,12 +181,41 @@ import Combine
             XCTAssertEqual(viewModel.activeTab, tab)
             XCTAssertEqual(mockAppContainer.bookManager.booksInShelf, books)
             XCTAssertNil(viewModel.bookImportInfo)
-            XCTAssertFalse(viewModel.bookImportActionSheetPresenting)
+            XCTAssertFalse(viewModel.bookImportResultPresenting)
         }
     }
 
     func testPickedEPUBUsesExistingImportReadAndDuplicateHandling() async throws {
         try await verifyPickedEPUB(dismissBeforeSelection: false)
+    }
+
+    func testFailedImportDoesNotPublishSuccessOrOpenExistingBook() async throws {
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.localLibrary)
+        let book = try XCTUnwrap(mockAppContainer.bookManager.booksInShelf.values.first {
+            $0.library.id == library.id
+        })
+        let result = BookImportInfo(url: URL(fileURLWithPath: "/tmp/failed.epub"),
+                                    bookId: book.id, error: .loadMetaFail)
+        let published = expectation(description: "A failed import cannot publish the book")
+        published.isInverted = true
+        let updates = mockAppContainer.calibreUpdates()
+        let observer = Task {
+            for await update in updates {
+                if case .book(let updated) = update, updated.inShelfId == book.inShelfId {
+                    published.fulfill()
+                    return
+                }
+            }
+        }
+        defer { observer.cancel() }
+        viewModel.activeTab = 2
+        viewModel.bookImportInfo = result
+        viewModel.handleImportedBook(result)
+        viewModel.openImportedBook()
+        XCTAssertEqual(viewModel.activeTab, 2)
+        XCTAssertTrue(viewModel.bookImportResultPresenting)
+        XCTAssertNil(viewModel.activeReaderPresentation)
+        await fulfillment(of: [published], timeout: 0.25)
     }
 
     func testPickerCanDismissBeforeItsSelectionCallback() async throws {
@@ -226,7 +255,7 @@ import Combine
             viewModel.bookImportPickerPresenting = false
             viewModel.completeBookImportPicker()
         }
-        let imported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        let imported = await waitUntil { self.viewModel.bookImportResultPresenting }
         XCTAssertTrue(imported)
         XCTAssertNil(viewModel.bookImportInfo?.error)
         XCTAssertTrue(viewModel.bookImportURLs.isEmpty)
@@ -245,9 +274,9 @@ import Combine
         let savedPositions = mockAppContainer.readingPositionRepository.getPositions(for: book)
 
         // System Files/onOpenURL uses this same entry point, including identical-file detection.
-        viewModel.bookImportActionSheetPresenting = false
+        viewModel.bookImportResultPresenting = false
         viewModel.importBook(url: source)
-        let reimported = await waitUntil { self.viewModel.bookImportActionSheetPresenting }
+        let reimported = await waitUntil { self.viewModel.bookImportResultPresenting }
         XCTAssertTrue(reimported)
         XCTAssertNil(viewModel.bookImportInfo?.error)
         XCTAssertEqual(viewModel.bookImportInfo?.bookId, bookId)

@@ -2,10 +2,97 @@
 
 ## Current Focus
 
-**Search and Category Cache Consistency (CC).** CC3 is implemented on
-`codex/cache-consistency-cc3` from main `353d1cf7`, which includes CC1 and
-CC2 through PRs #151 and #152. The earlier PDF investigation remains
-under Current Branch Notes.
+**Local File Import and Removal Consistency (FI).** FI1 is implemented on
+`codex/local-file-consistency-fi1` from main `37a40c08`, after CC3 merged in
+PR #153. FI2 and FI3 remain follow-up work. The earlier PDF investigation
+remains under Current Branch Notes.
+
+## Next Refactoring Direction: Local File Operations (2026-11-13)
+
+Prioritize the local file-operation failure boundary. In CalibreBookManager,
+`onOpenURL` calls `clearCache` for a same-name overwrite before copying or
+moving the replacement. A later file operation can fail after the old file
+and its shelf/database state have already been removed. `removeCachedFile`
+logs a deletion error but still returns true, allowing callers to clear state
+while bytes remain. These are code-traced failure paths, not newly executed
+runtime reproductions. Use isolated file-operation failures to pin them first.
+
+FI1 should define commit/failure outcomes for overwrite and removal: preserve
+the previous readable file and state when replacement fails, and do not
+publish deletion success after a failed filesystem operation. Include the
+metadata persistence boundary; filesystem and Realm cannot be treated as
+one automatically atomic transaction. Choose a minimal staged replacement
+and recovery strategy supported by tests.
+FI2 should separate import preparation, file work and asynchronous publication
+metadata enrichment from the general book manager. Give enrichment a current
+import identity so late callbacks cannot replace newer state or recreate a
+removed import. FI3 should verify file, Realm, shelf and Browse consistency
+through duplicate/conflict choices, deletion, retry and app restart, with
+EPUB/PDF/CBZ and native Files flows as applicable.
+
+Preserve existing book IDs, duplicate detection, conflict choices, annotations,
+reading history and originating-reader-workspace behavior. Do not change the
+book-ID hashing scheme or rewrite the downloader. Shared file helpers must
+retain the established remote cache/download safeguards. Reuse AL3 staging
+and SC commit-outcome patterns only where they fit. Start with a focused
+fixture and keep schema 151 unless a separately justified migration is needed.
+
+The alternative is Book Metadata Refresh and Sync Coordination: the manager
+still owns metadata fetch/persistence plus unstructured retry and annotation
+upload tasks. Its existing BookMetadataSyncWorker and BD1 cancellation-after-
+commit protections are already implemented and should be reused in a later
+workstream. This assessment changed only the handoff, not production code or
+tests.
+
+## Local File Consistency FI1 (2026-11-13)
+
+FI1 starts at `37a40c08` after CC3. The file-operation boundary uses
+real copy, move, replace and remove by default. Import hashes the source
+and staged bytes using the existing ID algorithm. It validates that
+the staged file is readable, regular and nonempty. It keeps an overwrite
+backup in a private directory next to the destination, then installs the
+staged file. A throwing Realm transaction saves the new record and
+clears or deletes only the old format's owners. Shelf and book events
+follow that transaction. A move import removes its source only after
+commit. Importing the file already at its destination leaves the source
+alone. Startup scanning skips the private operation directories.
+
+On a Realm failure, overwrite restores the old file and new import
+moves the uncommitted file out of the library. If restoration fails,
+the backup stays in the private directory and the result reports that
+recovery is required. Cleanup failure after a successful commit keeps
+the import successful and reports pending cleanup. This is in-process
+compensation across two stores. It does not provide atomic recovery
+after process termination or power loss. There is no automatic retry
+of pending cleanup.
+
+Local removal keeps a backup until the Realm change commits. Failure
+to remove the file leaves book and shelf state intact. A missing file
+can be reconciled by retrying the removal. A remote cache removal
+failure leaves the cache state intact. SC3 post-commit file cleanup
+logs a failure and leaves the committed record deletion in place.
+Annotations, history and reader workspace policies stay with their
+existing repositories and routing. Publication enrichment begins
+only after commit. The callback checks that the file and committed
+record still belong to that import, then updates the current book.
+FI2 will make this task ownership explicit.
+
+The red fixture found eight failed assertions across copy, move and
+remove failures. The focused suite passed 300 tests. The final iPhone
+17 suite recorded 1,180 tests, 22 skips and two existing expected
+PDFKit failures, with zero unexpected failures. The 21 real Calibre
+contract tests were skipped. iOS Simulator Release and Mac Catalyst
+builds passed after the local library Import button moved into the
+safe area. On iPhone 7, the first native run showed that a
+new conflict result could arrive while SwiftUI still considered the
+previous import action sheet presented. The import result now uses a
+sheet with an onDismiss callback. Overwrite, Retry, As a new book and
+Read run after the sheet closes. The complete native Files journey
+passed on iPhone 7 (iOS 15.5) and iPhone 17, including visible success
+after Retry and As a new book and two books in Browse. The fixture
+taps Files icons to avoid inline rename on iOS 15.5.
+
+Logs and result bundles are in `/tmp/YabrFI1`.
 
 ## Cache Consistency CC1 (2026-11-12)
 
