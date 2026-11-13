@@ -8,12 +8,14 @@ final class ReadingPositionListViewModel {
 
     private let sessionManager: ReadingSessionManager
     private let openReader: (CalibreBook, ReaderInfo, UUID?) -> Void
+    private let localFileAccessNotice: (CalibreBook) -> AlertItem?
 
     init(container: AppContainer, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.book = book
         self.positions = positions
         bookRepository = container.bookRepository
         sessionManager = container.sessionManager
+        localFileAccessNotice = { container.libraryManager.localFileAccessNotice(for: $0) }
         openReader = { book, info, workspaceID in
             container.openReader(book: book, readerInfo: info, source: .readingPosition, targetWorkspaceID: workspaceID)
         }
@@ -72,6 +74,7 @@ final class ReadingPositionListViewModel {
         if let latest = bookRepository.getBook(id: book.inShelfId), latest.inShelfId == book.inShelfId {
             book = latest
         }
+        if let notice = localFileAccessNotice(book) { return notice }
         guard let (reader, format) = readerAndFormat(for: position, format: format, readerType: readerType) else {
             return AlertItem(id: "Unsupported Reader", msg: "No reader can open \(position.readerName)")
         }

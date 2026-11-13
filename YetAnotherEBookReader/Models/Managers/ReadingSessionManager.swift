@@ -151,6 +151,7 @@ class ReadingSessionManager {
     private let persistenceStore: ReaderPresentationPersistenceStore
     private var suppressPersistence = false
     private var hasAttemptedPersistedRestore = false
+    private var userOpenedReader = false
 
     var readerPresentations: [ReaderPresentation] = [] {
         didSet {
@@ -344,11 +345,14 @@ class ReadingSessionManager {
     }
 
     @discardableResult
+    @MainActor
     func restorePersistedReaderPresentationsIfNeeded() -> [ReaderPresentation] {
         guard hasAttemptedPersistedRestore == false else { return [] }
+        guard container?.libraryManager.startupScan.isPending != true else { return [] }
         hasAttemptedPersistedRestore = true
+        defer { container?.libraryManager.finishRestoringStartupReaders() }
 
-        guard readerPresentations.isEmpty else {
+        guard !userOpenedReader, readerPresentations.isEmpty else {
             persistReaderPresentationSnapshots()
             return []
         }
@@ -388,6 +392,7 @@ class ReadingSessionManager {
         source: ReaderPresentationSource,
         reuseExisting: Bool = true
     ) -> ReaderPresentation {
+        if !hasAttemptedPersistedRestore { userOpenedReader = true }
         let resolvedReaderInfo = readerInfo ?? prepareBookReading(book: book)
         let opensPickedPosition = source == .readingPosition || source == .newerPosition
         // Opened from the shelf: look for a newer position from another device in the background.
@@ -569,6 +574,7 @@ class ReadingSessionManager {
         "\(book.inShelfId)|\(position.id)|\(position.epoch)"
     }
 
+    @MainActor
     private func restorePresentation(from snapshot: ReaderPresentationSnapshot) -> ReaderPresentation? {
         guard let container,
               snapshot.readerType != .UNSUPPORTED,
@@ -578,6 +584,8 @@ class ReadingSessionManager {
               let savedURL = getSavedUrl(book: book, format: snapshot.format),
               FileManager.default.fileExists(atPath: savedURL.path)
         else { return nil }
+        if book.library.server.isLocal,
+           !container.libraryManager.canRestoreLocalFile(book: book, url: savedURL) { return nil }
 
         let positions = container.readingPositionRepository.getPositions(for: book)
             .filter { position in

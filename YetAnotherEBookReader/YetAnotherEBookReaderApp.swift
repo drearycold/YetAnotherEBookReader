@@ -26,7 +26,6 @@ struct YetAnotherEBookReaderApp: App {
         if UITestingConfiguration.skipsConsentPrompts() {
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
         }
-
         setupAppearance()
     }
 
@@ -116,6 +115,19 @@ private struct AppRootView: View {
         .onChange(of: scenePhase) { newScenePhase in
             handleScenePhase(newScenePhase)
         }
+        .onChange(of: launchStateIsReady) { ready in
+            if ready { handleDatabaseReady() }
+        }
+        .task(id: launchStateIsReady) { @MainActor in
+            guard launchStateIsReady else { return }
+            for await pending in container.libraryManager.startupScanChanges() where !pending {
+                guard !Task.isCancelled else { return }
+                if scenePhase == .active {
+                    mainViewModel.restorePersistedReadersIfNeeded()
+                }
+                return
+            }
+        }
     }
 
     private func handleScenePhase(_ newScenePhase: ScenePhase) {
@@ -148,7 +160,6 @@ private struct AppRootView: View {
                                 bootstrapInFlight = false
                                 return
                             }
-                            handleDatabaseReady()
                         }
                     } catch {
                         DispatchQueue.main.async {
@@ -171,5 +182,10 @@ private struct AppRootView: View {
         guard scenePhase == .active else { return }
         mainViewModel.restorePersistedReadersIfNeeded()
         container.markAppSceneActive(id: sceneID)
+    }
+
+    private var launchStateIsReady: Bool {
+        if case .ready = launchState { return true }
+        return false
     }
 }

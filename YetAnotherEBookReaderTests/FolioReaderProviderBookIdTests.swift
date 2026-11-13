@@ -65,6 +65,22 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertNil(identity.canonicalizing("unrelated-id"))
     }
 
+    func testSameLocalFilenameHasDifferentFolioResourceIdentityAfterOverwrite() {
+        var localServer = book.library.server
+        localServer.baseUrl = "."
+        var localLibrary = book.library
+        localLibrary.server = localServer
+        let oldBook = CalibreBook(id: 101, library: localLibrary)
+        let replacement = CalibreBook(id: 102, library: localLibrary)
+        let first = FolioReaderBookIdentity(book: oldBook, readerInfo: readerInfo)
+        let second = FolioReaderBookIdentity(book: replacement, readerInfo: readerInfo)
+
+        XCTAssertNotEqual(first.folioReaderBookId, second.folioReaderBookId)
+        XCTAssertEqual(first.canonicalizing(folioReaderBookId), oldBook.bookPrefId)
+        XCTAssertEqual(second.canonicalizing(second.folioReaderBookId), replacement.bookPrefId)
+        XCTAssertNil(second.canonicalizing(first.folioReaderBookId))
+    }
+
     func testDSReaderFolioConfigurationHidesInternalCloseButton() {
         let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
 

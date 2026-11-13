@@ -241,6 +241,8 @@ struct RecentShelfView: View {
             }
             .alert(item: $viewModel.activeAlert) { alertType in
                 switch alertType {
+                case .localLibraryCheck(let notice):
+                    return Alert(title: Text(notice.id), message: Text(notice.msg ?? ""))
                 case .missingFormat(let book, let format):
                     return Alert(
                         title: Text("Missing Format"),

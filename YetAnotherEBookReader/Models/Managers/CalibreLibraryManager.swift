@@ -9,6 +9,81 @@ import Foundation
 import OSLog
 
 class CalibreLibraryManager {
+    enum StartupScan {
+        case notRequired
+        case pending
+        case complete
+        case incomplete
+
+        var isPending: Bool {
+            if case .pending = self { return true }
+            return false
+        }
+
+        var fileAccessNotice: AlertItem? {
+            switch self {
+            case .pending:
+                return AlertItem(id: "Checking Local Library", msg: "Try again after the file check finishes.")
+            case .incomplete:
+                return AlertItem(id: "Local Library Check Incomplete", msg: "Reopen the app to check the library files again.")
+            case .notRequired, .complete:
+                return nil
+            }
+        }
+    }
+
+    @MainActor private(set) var startupScan: StartupScan = .notRequired
+    @MainActor private var verifiedStartupFiles = [URL: Int32]()
+    @MainActor private var unverifiedStartupFiles = Set<URL>()
+    private let startupScanBroadcaster = ManagerAsyncBroadcaster<Bool>()
+
+    @MainActor
+    func beginStartupScan() {
+        verifiedStartupFiles = [:]
+        unverifiedStartupFiles = []
+        startupScan = .pending
+        startupScanBroadcaster.send(true)
+    }
+
+    @MainActor
+    func finishStartupScan(_ result: LocalBookImportCoordinator.ScanResult?) {
+        startupScan = result == nil ? .incomplete : .complete
+        verifiedStartupFiles = result?.verifiedFiles ?? [:]
+        unverifiedStartupFiles = result?.unverifiedFiles ?? []
+        startupScanBroadcaster.send(false)
+    }
+
+    @MainActor
+    func startupScanChanges() -> AsyncStream<Bool> {
+        startupScanBroadcaster.stream(initialValue: startupScan.isPending, bufferingPolicy: .bufferingNewest(1))
+    }
+
+    @MainActor
+    func canRestoreLocalFile(book: CalibreBook, url: URL) -> Bool {
+        switch startupScan {
+        case .notRequired: return true
+        case .pending, .incomplete: return false
+        case .complete: return verifiedStartupFiles[url.standardizedFileURL] == book.id
+        }
+    }
+
+    @MainActor
+    func finishRestoringStartupReaders() { verifiedStartupFiles = [:] }
+
+    @MainActor
+    func localFileAccessNotice(for book: CalibreBook, format: Format? = nil) -> AlertItem? {
+        guard book.library.server.isLocal else { return nil }
+        if let notice = startupScan.fileAccessNotice { return notice }
+        let formats = format.map { [$0] } ?? Format.allCases
+        if formats.contains(where: { format in
+            getSavedUrl(book: book, format: format).map { unverifiedStartupFiles.contains($0.standardizedFileURL) } == true
+        }) {
+            return AlertItem(id: "Local Book File Could Not Be Checked",
+                             msg: "Reopen the app to check this file again.")
+        }
+        return nil
+    }
+
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreLibraryManager")
 
     weak var container: AppContainerProtocol?
@@ -82,15 +157,16 @@ class CalibreLibraryManager {
     }
 
     @MainActor
-    func populateLocalLibraryBooks(scan: Bool = true, completion: (() -> Void)? = nil) {
+    func populateLocalLibraryBooks(scan: Bool = true,
+                                   completion: ((LocalBookImportCoordinator.ScanResult?) -> Void)? = nil) {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
-            completion?()
+            completion?(nil)
             return
         }
 
         let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         guard let container = self.container else {
-            completion?()
+            completion?(nil)
             return
         }
 
@@ -116,7 +192,7 @@ class CalibreLibraryManager {
         }
 
         guard let documentServer = container.serverManager.documentServer else {
-            completion?()
+            completion?(nil)
             return
         }
         let tmpLibrary = CalibreLibrary(
@@ -135,12 +211,12 @@ class CalibreLibraryManager {
         }
 
         guard scan else {
-            completion?()
+            completion?(nil)
             return
         }
         Task { @MainActor [weak container] in
-            await container?.bookManager.scanLocalBooks()
-            completion?()
+            let result = await container?.bookManager.scanLocalBooks()
+            completion?(result)
         }
     }
 

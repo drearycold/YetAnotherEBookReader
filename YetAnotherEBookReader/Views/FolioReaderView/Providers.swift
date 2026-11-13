@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CryptoKit
 import UIKit
 import FolioReaderKit
 
@@ -89,21 +90,30 @@ private let folioFontSizes = ["15.5px", "17px", "18.5px", "20px", "22px", "24px"
 struct FolioReaderBookIdentity {
     let canonicalBookId: String
     let folioReaderBookId: String
+    private let filenameBookId: String?
 
     init(canonicalBookId: String, folioReaderBookId: String) {
         self.canonicalBookId = canonicalBookId
         self.folioReaderBookId = folioReaderBookId
+        filenameBookId = nil
     }
 
     init(book: CalibreBook, readerInfo: ReaderInfo) {
-        self.init(
-            canonicalBookId: book.bookPrefId,
-            folioReaderBookId: readerInfo.url.deletingPathExtension().lastPathComponent
-        )
+        canonicalBookId = book.bookPrefId
+        let filename = readerInfo.url.deletingPathExtension().lastPathComponent
+        filenameBookId = filename
+        if book.library.server.isLocal {
+            // Folio serves resources at a URL derived from its runtime book name.
+            // Different local content can occupy the same filename after overwrite.
+            let digest = SHA256.hash(data: Data(book.bookPrefId.utf8))
+            folioReaderBookId = "local-" + digest.map { String(format: "%02x", $0) }.joined()
+        } else {
+            folioReaderBookId = filename
+        }
     }
 
     func accepts(_ bookId: String) -> Bool {
-        bookId == canonicalBookId || bookId == folioReaderBookId
+        bookId == canonicalBookId || bookId == folioReaderBookId || bookId == filenameBookId
     }
 
     func canonicalizing(_ bookId: String) -> String? {
