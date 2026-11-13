@@ -68,7 +68,7 @@ extension LibraryInfoView {
             }
         }
 
-        var calibreLibraries: [String: CalibreLibrary] = [:]
+        @Published var calibreLibraries: [String: CalibreLibrary] = [:]
         
         //booklist group
         @Published var sectionedBy: GroupKey?
@@ -90,12 +90,7 @@ extension LibraryInfoView {
         
         var currentLibrarySearchResultKey: SearchCriteriaMergedKey {
             .init(
-                libraryIds: filterCriteriaLibraries.isEmpty ? self.calibreLibraries.reduce(into: Set<String>(), { partialResult, entry in
-                    if entry.value.hidden == false,
-                       entry.value.server.removed == false {
-                        partialResult.insert(entry.key)
-                    }
-                }) : filterCriteriaLibraries,
+                libraryIds: filterCriteriaLibraries,
                 criteria: .init(
                     searchString: self.searchString,
                     sortCriteria: self.sortCriteria,
@@ -107,7 +102,7 @@ extension LibraryInfoView {
         //category filters
         @Published var categoriesSelected: String? = nil
         @Published var categoryItemSelected: String? = nil
-        
+
         @Published var categoryName: String = ""
         @Published var categoryFilter: String = ""
         
@@ -121,7 +116,9 @@ extension LibraryInfoView {
         private var preservesFilterCriteriaOnNextBookListAppear = false
         
         private var categoryObserverTask: Task<Void, Never>?
-        private var categoryObserverId: UUID?
+        private var categoryScopeTask: Task<Void, Never>?
+        private var categoryDatabaseTask: Task<Void, Never>?
+        private var observedCategoryEpoch: UUID?
 
         var visibleFilterItems: [VisibleFilterItem] {
             filterCriteriaCategory
@@ -163,27 +160,45 @@ extension LibraryInfoView {
         }
 
         private func updateCategorySummaries(cache: CategoryCacheRepository, libraries: [String: CalibreLibrary]) throws {
-            let activeIds = Set(libraries.values.filter {
-                !$0.hidden && !$0.server.removed && (filterCriteriaLibraries.isEmpty || filterCriteriaLibraries.contains($0.id))
-            }.map(\.id))
+            let activeIds = Set(activeBrowseLibraries(libraries, in: filterCriteriaLibraries).keys)
             let summaries = activeIds.isEmpty ? [] : try cache.fetchCategorySummaries(libraryIds: activeIds)
             try cache.checkCurrent()
-            availableCategories = summaries
+            if availableCategories != summaries { availableCategories = summaries }
         }
         
         func setupCategoryObserver() {
-            guard let container = AppContainer.shared, categoryObserverTask == nil,
-                  let cache = try? container.categoryCacheRepository.snapshot() else { return }
-
-            let observationId = UUID()
-            categoryObserverId = observationId
-            categoryObserverTask = Task { @MainActor [weak self, weak container] in
-                defer {
-                    if let self, self.categoryObserverId == observationId {
-                        self.categoryObserverTask = nil
-                        self.categoryObserverId = nil
-                    }
+            guard let container = AppContainer.shared, categoryScopeTask == nil else { return }
+            bindCategoryObserver(container: container)
+            let libraries = container.libraryManager.librarySnapshots(bufferingPolicy: .bufferingNewest(1))
+            let activeIds = Set(activeBrowseLibraries(container.getLibraries(), in: filterCriteriaLibraries).keys)
+            categoryScopeTask = Task { [weak self] in
+                var previous = activeIds
+                for await snapshot in libraries {
+                    guard !Task.isCancelled, let self else { return }
+                    let current = Set(activeBrowseLibraries(snapshot, in: self.filterCriteriaLibraries).keys)
+                    if current != previous { self.fetchAvailableCategories() }
+                    previous = current
                 }
+            }
+            let changes = container.databaseService.cacheConfigurationChanges()
+            categoryDatabaseTask = Task { [weak self, weak container] in
+                for await _ in changes {
+                    guard !Task.isCancelled, let self, let container else { return }
+                    let epoch = container.databaseService.cacheConfigurationSnapshot?.id
+                    if self.observedCategoryEpoch != epoch { self.bindCategoryObserver(container: container) }
+                }
+            }
+        }
+
+        private func bindCategoryObserver(container: AppContainer) {
+            categoryObserverTask?.cancel()
+            categoryObserverTask = nil
+            observedCategoryEpoch = container.databaseService.cacheConfigurationSnapshot?.id
+            guard let cache = try? container.categoryCacheRepository.snapshot() else {
+                availableCategories = []
+                return
+            }
+            categoryObserverTask = Task { @MainActor [weak self, weak container] in
                 for await _ in cache.observeCategorySummaries() {
                     guard !Task.isCancelled, let self, let container else { break }
                     do {
@@ -200,11 +215,16 @@ extension LibraryInfoView {
         func stopCategoryObserver() {
             categoryObserverTask?.cancel()
             categoryObserverTask = nil
-            categoryObserverId = nil
+            categoryScopeTask?.cancel()
+            categoryScopeTask = nil
+            categoryDatabaseTask?.cancel()
+            categoryDatabaseTask = nil
         }
         
         deinit {
             categoryObserverTask?.cancel()
+            categoryScopeTask?.cancel()
+            categoryDatabaseTask?.cancel()
         }
         
         func getLibraryLoadingCount(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
@@ -344,6 +364,16 @@ extension LibraryInfoView {
             )
 
             applySortRule(forField: categoryField ?? categoryName.lowercased())
+        }
+
+        func resumeRootCategorySearch(
+            categoryName: String, itemName: String, categoryField: String,
+            searchViewModel: UnifiedSearchViewModel
+        ) {
+            if filterCriteriaCategory[categoryName]?.contains(itemName) != true {
+                applyCategoryItemSelection(categoryName: categoryName, itemName: itemName, categoryField: categoryField)
+            }
+            searchViewModel.resumeSearch(key: currentLibrarySearchResultKey)
         }
 
         func applyCategoryValuesSelection(

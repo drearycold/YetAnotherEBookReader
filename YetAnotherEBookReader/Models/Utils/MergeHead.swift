@@ -28,37 +28,43 @@ struct MergeHead: Comparable {
     }
     
     static func < (lhs: MergeHead, rhs: MergeHead) -> Bool {
-        let lhsBook = lhs.currentBook
-        let rhsBook = rhs.currentBook
-        
-        switch lhs.sortBy {
+        precedes(lhs.currentBook, rhs.currentBook, sortingBy: lhs.sortBy,
+                 firstLibrary: lhs.libraryId, secondLibrary: rhs.libraryId)
+    }
+
+    static func precedes(
+        _ lhsBook: CalibreBook, _ rhsBook: CalibreBook, sortingBy sortBy: SortCriteria,
+        firstLibrary: String, secondLibrary: String
+    ) -> Bool {
+        let tieBreak = firstLibrary < secondLibrary || (firstLibrary == secondLibrary && lhsBook.id < rhsBook.id)
+        switch sortBy {
         case .Title:
             let result = lhsBook.title.compare(rhsBook.title)
             if result == .orderedSame {
-                return lhs.libraryId < rhs.libraryId || (lhs.libraryId == rhs.libraryId && lhsBook.id < rhsBook.id)
+                return tieBreak
             }
             return result == .orderedAscending
         case .Added:
             let result = lhsBook.timestamp.compare(rhsBook.timestamp)
             if result == .orderedSame {
-                return lhs.libraryId < rhs.libraryId || (lhs.libraryId == rhs.libraryId && lhsBook.id < rhsBook.id)
+                return tieBreak
             }
             return result == .orderedAscending
         case .Publication:
             let result = lhsBook.pubDate.compare(rhsBook.pubDate)
             if result == .orderedSame {
-                return lhs.libraryId < rhs.libraryId || (lhs.libraryId == rhs.libraryId && lhsBook.id < rhsBook.id)
+                return tieBreak
             }
             return result == .orderedAscending
         case .Modified:
             let result = lhsBook.lastModified.compare(rhsBook.lastModified)
             if result == .orderedSame {
-                return lhs.libraryId < rhs.libraryId || (lhs.libraryId == rhs.libraryId && lhsBook.id < rhsBook.id)
+                return tieBreak
             }
             return result == .orderedAscending
         case .SeriesIndex:
             if lhsBook.seriesIndex == rhsBook.seriesIndex {
-                return lhs.libraryId < rhs.libraryId || (lhs.libraryId == rhs.libraryId && lhsBook.id < rhsBook.id)
+                return tieBreak
             }
             return lhsBook.seriesIndex < rhsBook.seriesIndex
         }

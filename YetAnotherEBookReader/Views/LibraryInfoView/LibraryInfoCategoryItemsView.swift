@@ -124,6 +124,7 @@ struct LibraryInfoCategoryItemsView: View {
             }
         }
         .statusBar(hidden: false)
+        .onDisappear { unifiedSearchViewModel.stopSearch() }
     }
     
     func resetSearchCriteria() {
@@ -161,16 +162,11 @@ struct LibraryInfoCategoryItemsView: View {
     }
 
     private func selectRootCategoryItem(_ itemName: String) {
-        if viewModel.filterCriteriaCategory[categoryName]?.contains(itemName) == true {
-            return
-        }
-
-        viewModel.applyCategoryItemSelection(
+        viewModel.resumeRootCategorySearch(
             categoryName: categoryName,
             itemName: itemName,
             categoryField: container.libraryManager.searchField(forCategory: categoryName),
-            preservingLibraryScope: false
+            searchViewModel: unifiedSearchViewModel
         )
-        resetToFirstPage()
     }
 }

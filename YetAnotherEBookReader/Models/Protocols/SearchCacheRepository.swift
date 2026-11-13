@@ -129,6 +129,7 @@ struct LocalLibrarySearchResult: Equatable, Sendable {
 }
 
 protocol SearchCacheRepository: CacheRepository {
+    func observeBookChanges(in libraries: [CalibreLibrary]) -> AsyncStream<Void>
     func fetchLibraryCachedResult(
         library: CalibreLibrary,
         search: String,
@@ -169,6 +170,10 @@ protocol SearchCacheRepository: CacheRepository {
 }
 
 extension SearchCacheRepository {
+    func observeBookChanges(in libraries: [CalibreLibrary]) -> AsyncStream<Void> {
+        AsyncStream { $0.finish() }
+    }
+
     func writeMetadataEntries(library: CalibreLibrary, entries: [String: CalibreBookEntry?], json: NSDictionary?) throws {
         try writeMetadataEntries(library: library, entries: entries, json: json, retainingExisting: [])
     }

@@ -25,6 +25,7 @@ class DatabaseService: ObservableObject {
     private let configurationLock = NSLock()
     private var configuration: Realm.Configuration?
     private var cacheConfiguration: CacheConfiguration?
+    private let cacheConfigurationBroadcaster = ManagerAsyncBroadcaster<Void>()
 
     // Bootstrap replaces this value while background repositories take snapshots.
     var realmConf: Realm.Configuration? {
@@ -35,6 +36,10 @@ class DatabaseService: ObservableObject {
 
     var cacheConfigurationSnapshot: CacheConfiguration? {
         configurationLock.withLock { cacheConfiguration }
+    }
+
+    func cacheConfigurationChanges() -> AsyncStream<Void> {
+        cacheConfigurationBroadcaster.stream(initialValue: (), bufferingPolicy: .bufferingNewest(1))
     }
     @Published var realm: Realm?
     var metadataRealm: Realm?
@@ -75,7 +80,7 @@ class DatabaseService: ObservableObject {
 
     private func setConfiguration(_ configuration: Realm.Configuration?, cacheReady: Bool = true) {
         configurationLock.lock()
-        defer { configurationLock.unlock() }
+        let previous = cacheConfiguration?.id
         self.configuration = configuration
         if var configuration, cacheReady {
             configuration.migrationBlock = nil
@@ -84,6 +89,9 @@ class DatabaseService: ObservableObject {
         } else {
             cacheConfiguration = nil
         }
+        let changed = previous != cacheConfiguration?.id
+        configurationLock.unlock()
+        if changed { cacheConfigurationBroadcaster.send(()) }
     }
 
     func setup(conf: Realm.Configuration) {
@@ -111,10 +119,13 @@ class DatabaseService: ObservableObject {
     }
 
     func reset(clearConfiguration: Bool) {
-        configurationLock.withLock {
+        let changed = configurationLock.withLock {
+            let wasReady = cacheConfiguration != nil
             if clearConfiguration { configuration = nil }
             cacheConfiguration = nil
+            return wasReady
         }
+        if changed { cacheConfigurationBroadcaster.send(()) }
         realm = nil
         metadataRealm = nil
     }

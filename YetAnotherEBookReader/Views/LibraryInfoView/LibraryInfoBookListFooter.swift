@@ -43,6 +43,7 @@ struct LibraryInfoBookListFooter: View {
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
+            .accessibilityIdentifier("browse.search.refresh")
         }
         .padding(4)
     }

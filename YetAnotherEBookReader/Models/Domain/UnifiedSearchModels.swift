@@ -193,3 +193,15 @@ protocol LibraryProvider {
     @MainActor func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool?
     @MainActor func isServerReachable(server: CalibreServer) -> Bool
 }
+
+func activeBrowseLibraries(_ libraries: [String: CalibreLibrary], in scope: Set<String>) -> [String: CalibreLibrary] {
+    libraries.filter { id, library in
+        !library.hidden && !library.server.removed && (scope.isEmpty || scope.contains(id))
+    }
+}
+
+func sameBrowseScope(_ lhs: [String: CalibreLibrary], _ rhs: [String: CalibreLibrary]) -> Bool {
+    lhs.count == rhs.count && lhs.allSatisfy { id, library in
+        rhs[id].map { library.hasSameCacheScope(as: $0) } == true
+    }
+}

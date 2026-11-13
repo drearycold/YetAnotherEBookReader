@@ -338,6 +338,7 @@ class UIJourneyTestCase: XCTestCase {
 
                 resetBrowseBookListState(restoreDefaultSort: true)
                 navigateBackFromNavigationStack()
+                waitForNonExistence(AccessibilityID.browseBookListScreen)
                 waitForIdentifier(AccessibilityID.browseCategoryAuthorsPage)
                 navigateBackFromNavigationStack()
                 waitForIdentifier(AccessibilityID.browseCategoryAuthors)
@@ -900,10 +901,115 @@ final class CalibreOnboardingUITests: XCTestCase {
         app = XCUIApplication(bundleIdentifier: bundleID)
         // Uses the existing test-host consent gate, with normal disk persistence and networking.
         app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/CalibreOnboardingValidation"
+        if environment["YABR_CC3_LOCAL_FILE"] == "1" { app.launchEnvironment["YABR_CC3_LOCAL_FILE"] = "1" }
         injectConfigurationSaveFailures = environment["YABR_SC3_SAVE_FAILURES"] == "1"
         if injectConfigurationSaveFailures { app.launchEnvironment["YABR_SC3_SAVE_FAILURES"] = "1" }
         app.launch()
         element("welcome.calibre")
+    }
+
+    func testBrowseKeepsCachedBooksThroughAnOfflineSearchAndReconnects() throws {
+        let control = "YABR_CC3_CONTROL_URL"
+        try XCTSkipIf(ProcessInfo.processInfo.environment[control] == nil, "Requires the isolated Browse loopback fixture")
+        try configureFixture("online", environmentKey: control)
+        connect(name: "CC3 Search Fixture", url: singleURL)
+        let add = element("server.connection.confirm")
+        waitForEnabled(add)
+        add.tap()
+        element("screen.browse.book-list")
+        element("browse.book.41")
+        capture("cc3-online")
+
+        try configureFixture("offline", environmentKey: control)
+        element("browse.search.refresh").tap()
+        let failed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "1 failed")).firstMatch
+        XCTAssertTrue(failed.waitForExistence(timeout: 15), app.debugDescription)
+        element("browse.book.41")
+        capture("cc3-offline-cache")
+
+        try configureFixture("reconnected", environmentKey: control)
+        element("browse.search.refresh").tap()
+        element("browse.book.42")
+        XCTAssertFalse(app.buttons["browse.book.41"].exists)
+        capture("cc3-reconnected")
+    }
+
+    func testCategoryBookListCanRefreshAfterReturningFromDetails() throws {
+        let control = "YABR_CC3_CONTROL_URL"
+        try XCTSkipIf(ProcessInfo.processInfo.environment[control] == nil, "Requires the isolated Browse loopback fixture")
+        try configureFixture("category-online", environmentKey: control)
+        connect(name: "CC3 Category Fixture", url: singleURL)
+        let add = element("server.connection.confirm")
+        waitForEnabled(add)
+        add.tap()
+        element("browse.book.41")
+        back()
+        element("browse.category.authors").tap()
+        element("browse.category.authors.item.alpha-author").tap()
+        let book = element("browse.book.41")
+        book.tap()
+        element("screen.book-detail")
+        back()
+        let detail = app.descendants(matching: .any)["screen.book-detail"].firstMatch
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: detail)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed, app.debugDescription)
+        XCTAssertTrue(book.waitForExistence(timeout: 10), app.debugDescription)
+        try configureFixture("category-reconnected", environmentKey: control)
+        element("browse.search.refresh").tap()
+        element("browse.book.42")
+        XCTAssertFalse(app.buttons["browse.book.41"].exists)
+        capture("cc3-category-refreshed-after-detail")
+
+        back()
+        let item = element("browse.category.authors.item.alpha-author")
+        waitForHittable(item)
+        item.tap()
+        element("browse.book.42")
+        try configureFixture("category-online", environmentKey: control)
+        element("browse.search.refresh").tap()
+        element("browse.book.41")
+    }
+
+    func testImportFromFilesUpdatesAnEmptyLocalBrowseAndDeletionRemovesTheBook() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_CC3_LOCAL_FILE"] != "1",
+                      "Requires a fixture placed in this isolated app's Documents folder")
+        element("welcome.browse").tap()
+        let browse = app.tabBars.buttons["Browse"]
+        if !browse.isSelected { browse.tap() }
+        element("Local Library").tap()
+        let importButton = element("browse.local.import")
+        capture("cc3-local-empty")
+        importButton.tap()
+        let file = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "CC3 Import")).firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
+        file.tap()
+        XCTAssertTrue(app.staticTexts["Imported, read now?"].waitForExistence(timeout: 15), app.debugDescription)
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        }
+
+        let recent = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.options.")).firstMatch
+        XCTAssertTrue(recent.waitForExistence(timeout: 15), app.debugDescription)
+        app.tabBars.buttons["Browse"].tap()
+        if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+                                                   "browse.book.", "CC3")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), app.debugDescription)
+        capture("cc3-local-imported")
+
+        app.tabBars.buttons["Recent"].tap()
+        recent.tap()
+        element("Delete").tap()
+        let welcomeBrowse = app.descendants(matching: .any)["welcome.browse"].firstMatch
+        if welcomeBrowse.waitForExistence(timeout: 4) { welcomeBrowse.tap() }
+        if !browse.isSelected { browse.tap() }
+        if !browse.isSelected { browse.tap() }
+        if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
+        element("browse.local.import")
+        capture("cc3-local-deleted")
     }
 
     func testHelperConfigurationRetryConfirmationAndPageExit() throws {

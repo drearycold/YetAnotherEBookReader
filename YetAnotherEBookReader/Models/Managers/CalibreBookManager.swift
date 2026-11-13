@@ -401,6 +401,14 @@ class CalibreBookManager {
 
     func clearCache(book: CalibreBook, format: Format) {
         guard removeCachedFile(book: book, format: format) else { return }
+        if book.library.server.isLocal,
+           !book.formats.contains(where: { $0.key != format.rawValue && $0.value.cached }) {
+            bookRepository.deleteBook(id: book.inShelfId)
+            if readingBook?.inShelfId == book.inShelfId { readingBook?.inShelf = false }
+            booksInShelf.removeValue(forKey: book.inShelfId)
+            Task { @MainActor in container?.publishCalibreUpdate(.deleted(book.inShelfId)) }
+            return
+        }
         var newBook = book
 
         newBook.formats[format.rawValue]?.cacheMTime = .distantPast
@@ -606,6 +614,9 @@ class CalibreBookManager {
                 container?.coverCache.storeCoverData(coverData, for: coverUrl)
             }
 
+            // The file may have been removed while the publication was opening.
+            guard FileManager.default.fileExists(atPath: fileURL.path),
+                  self.bookRepository.bookExists(id: book.inShelfId) else { return }
             self.updateBook(book: book)
         }
         #endif

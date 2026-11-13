@@ -21,6 +21,8 @@ actor UnifiedSearchService {
 
     // Active search tasks
     private var searchTasks: [SearchCriteriaMergedKey: Task<Void, Never>] = [:]
+    private var runningSearches: [SearchCriteriaMergedKey: UUID] = [:]
+    private var pendingScopeRefreshes: [SearchCriteriaMergedKey: UUID] = [:]
 
     private var isServerReachableProvider: (@Sendable (CalibreServer, Bool) -> Bool?)?
     private var isServerReachableNoPublicProvider: (@Sendable (CalibreServer) -> Bool)?
@@ -88,6 +90,60 @@ actor UnifiedSearchService {
         guard let search = activeSearches[key], let cache = search.cache,
               (try? cache.checkCurrent()) != nil else { return nil }
         return search.currentResult
+    }
+
+    func refreshVisibleSearch(for key: SearchCriteriaMergedKey, force: Bool = false, onlyWhenIdle: Bool = false) {
+        guard resultContinuations[key]?.isEmpty == false else { return }
+        if onlyWhenIdle, let run = runningSearches[key], let task = searchTasks[key] {
+            guard pendingScopeRefreshes[key] != run else { return }
+            pendingScopeRefreshes[key] = run
+            Task {
+                defer {
+                    if pendingScopeRefreshes[key] == run { pendingScopeRefreshes.removeValue(forKey: key) }
+                }
+                await task.value
+                guard resultContinuations[key]?.isEmpty == false, runningSearches[key] == nil,
+                      activeSearches[key]?.searchId == run else { return }
+                let libraries = activeLibraries(in: await getLibraries(), for: key)
+                guard resultContinuations[key]?.isEmpty == false, runningSearches[key] == nil,
+                      let active = activeSearches[key], active.searchId == run,
+                      !sameBrowseScope(active.libraryScopes, libraries) else { return }
+                triggerSearch(for: key, force: force, rereadCache: true)
+            }
+            return
+        }
+        triggerSearch(for: key, force: force, rereadCache: true)
+    }
+
+    func refreshVisibleBookValues(for key: SearchCriteriaMergedKey) {
+        guard resultContinuations[key]?.isEmpty == false, var search = activeSearches[key],
+              let cache = search.cache, (try? cache.checkCurrent()) != nil else { return }
+        var changed = false
+        for (id, sourced) in search.libraryResults {
+            guard let library = search.libraryScopes[id], !library.server.isLocal,
+                  let books = try? cache.fetchBooks(library: library, bookIds: sourced.result.bookIds) else { continue }
+            let updated = sourced.result.bookIds.compactMap { books[$0] }.sorted { first, second in
+                let sort = key.criteria.sortCriteria
+                return MergeHead.precedes(sort.ascending ? first : second, sort.ascending ? second : first,
+                                          sortingBy: sort.by, firstLibrary: id, secondLibrary: id)
+            }
+            let old = sourced.result.books
+            let same = old.count == updated.count && zip(old, updated).allSatisfy { previous, current in
+                previous.id == current.id && previous.lastUpdated == current.lastUpdated
+                    && previous.lastSynced == current.lastSynced && previous.title == current.title
+                    && previous.lastModified == current.lastModified && previous.inShelf == current.inShelf
+                    && previous.authors == current.authors && previous.tags == current.tags
+                    && previous.series == current.series && previous.seriesIndex == current.seriesIndex
+                    && previous.rating == current.rating && previous.timestamp == current.timestamp
+                    && previous.pubDate == current.pubDate
+            }
+            guard !same else { continue }
+            var result = sourced.result
+            result.books = updated
+            search.libraryResults[id] = SourcedResult(source: sourced.source, result: result)
+            changed = true
+        }
+        if changed { publish(search, for: key, libraryIds: Set(search.libraryScopes.keys)) }
     }
 
     func expandLimit(for key: SearchCriteriaMergedKey, by increment: Int = 100) {
@@ -160,6 +216,8 @@ actor UnifiedSearchService {
             resultContinuations.removeValue(forKey: key)
             searchTasks[key]?.cancel()
             searchTasks.removeValue(forKey: key)
+            runningSearches.removeValue(forKey: key)
+            pendingScopeRefreshes.removeValue(forKey: key)
         } else {
             resultContinuations[key] = list
         }
@@ -176,14 +234,21 @@ actor UnifiedSearchService {
     }
 
     @discardableResult
-    private func triggerSearch(for key: SearchCriteriaMergedKey, force: Bool) async -> Task<Void, Never> {
+    private func triggerSearch(
+        for key: SearchCriteriaMergedKey, force: Bool, rereadCache: Bool = false
+    ) -> Task<Void, Never> {
         searchTasks[key]?.cancel()
-        let task = Task { await runSearch(for: key, force: force) }
+        let id = UUID()
+        runningSearches[key] = id
+        let task = Task {
+            await runSearch(for: key, force: force, rereadCache: rereadCache, searchId: id)
+            if runningSearches[key] == id { runningSearches.removeValue(forKey: key) }
+        }
         searchTasks[key] = task
         return task
     }
 
-    private func runSearch(for key: SearchCriteriaMergedKey, force: Bool) async {
+    private func runSearch(for key: SearchCriteriaMergedKey, force: Bool, rereadCache: Bool, searchId: UUID) async {
         let database = Result { try repository.snapshot() }
         let libraries = await getLibraries()
         let targetLibraries = activeLibraries(in: libraries, for: key)
@@ -221,7 +286,7 @@ actor UnifiedSearchService {
         activeSearch.libraryStatuses = [:]
 
         // Until each library answers, show the cache mapped with its captured library value.
-        for (id, preparation) in requests where activeSearch.libraryResults[id] == nil {
+        for (id, preparation) in requests where rereadCache || activeSearch.libraryResults[id] == nil {
             if case .success(let request) = preparation {
                 activeSearch.libraryResults[id] = try? cachedResult(for: request, key: key)
             }
@@ -236,7 +301,6 @@ actor UnifiedSearchService {
         for libraryId in activeLibraryIds {
             activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(loading: true, error: nil)
         }
-        let searchId = UUID()
         activeSearch.searchId = searchId
         activeSearch.currentResult = merge(activeSearch, libraryIds: activeLibraryIds)
         activeSearches[key] = activeSearch
@@ -306,9 +370,7 @@ actor UnifiedSearchService {
                 else { failedOnNetwork = false }
                 if let request, failedOnNetwork || activeSearch.libraryResults[libraryId] == nil || searchError == .superseded {
                     do {
-                        if let fallback = try cachedResult(for: request, key: key) {
-                            activeSearch.libraryResults[libraryId] = fallback
-                        }
+                        activeSearch.libraryResults[libraryId] = try cachedResult(for: request, key: key)
                     } catch {
                         // Keep the network failure that triggered fallback. A superseded result
                         // has no failure to report unless reading the replacement itself fails.
@@ -324,6 +386,7 @@ actor UnifiedSearchService {
                                             cache: cache, canRestart: canRestart)
         } else {
             activeSearch.libraryResults.removeValue(forKey: libraryId)
+            activeSearch.libraryScopes.removeValue(forKey: libraryId)
             activeSearch.libraryStatuses[libraryId] = .init(error: .superseded)
         }
 
@@ -451,9 +514,7 @@ actor UnifiedSearchService {
     private func activeLibraries(
         in libraries: [String: CalibreLibrary], for key: SearchCriteriaMergedKey
     ) -> [String: CalibreLibrary] {
-        libraries.filter { id, library in
-            !library.hidden && !library.server.removed && (key.libraryIds.isEmpty || key.libraryIds.contains(id))
-        }
+        activeBrowseLibraries(libraries, in: key.libraryIds)
     }
 
     // MARK: - LibraryProvider Thread-safe Wrappers

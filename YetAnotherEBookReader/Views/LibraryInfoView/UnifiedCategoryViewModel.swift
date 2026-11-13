@@ -30,6 +30,11 @@ class UnifiedCategoryViewModel: ObservableObject {
     private var currentLibraryIds = Set<String>()
     private var currentPageSize = UnifiedCategoryViewModel.defaultPageSize
     private var cacheUpdateTask: Task<Void, Never>?
+    private var libraryScopeTask: Task<Void, Never>?
+    private var databaseTask: Task<Void, Never>?
+    private var observedLibraries: [String: CalibreLibrary] = [:]
+    private var observedEpoch: UUID?
+    private var requestedPrefix = UnifiedCategoryViewModel.defaultPageSize
     private var query: UnifiedCategoryService.Query?
     private let logger = Logger(subsystem: "io.github.drearycold.DSReader", category: "CategoryCache")
     
@@ -49,6 +54,8 @@ class UnifiedCategoryViewModel: ObservableObject {
     deinit {
         mergeTask?.cancel()
         cacheUpdateTask?.cancel()
+        libraryScopeTask?.cancel()
+        databaseTask?.cancel()
     }
 
     func stopObserving() {
@@ -56,6 +63,10 @@ class UnifiedCategoryViewModel: ObservableObject {
         mergeTask = nil
         cacheUpdateTask?.cancel()
         cacheUpdateTask = nil
+        libraryScopeTask?.cancel()
+        libraryScopeTask = nil
+        databaseTask?.cancel()
+        databaseTask = nil
         query = nil
         isLoading = false
         isLoadingMore = false
@@ -80,6 +91,35 @@ class UnifiedCategoryViewModel: ObservableObject {
         self.currentLibraryIds = libraryIds
         self.currentPageSize = max(1, pageSize)
         
+        observeScope()
+        rebindCache()
+    }
+
+    private func observeScope() {
+        guard libraryScopeTask == nil else { return }
+        let libraries = container.libraryManager.librarySnapshots(bufferingPolicy: .bufferingNewest(1))
+        libraryScopeTask = Task { [weak self] in
+            for await _ in libraries {
+                guard !Task.isCancelled, let self else { return }
+                let current = activeBrowseLibraries(self.container.getLibraries(), in: self.currentLibraryIds)
+                if !sameBrowseScope(self.observedLibraries, current) { self.rebindCache() }
+            }
+        }
+        let changes = container.databaseService.cacheConfigurationChanges()
+        databaseTask = Task { [weak self] in
+            for await _ in changes {
+                guard !Task.isCancelled, let self else { return }
+                let epoch = self.container.databaseService.cacheConfigurationSnapshot?.id
+                if self.observedEpoch != epoch { self.rebindCache() }
+            }
+        }
+    }
+
+    private func rebindCache() {
+        guard let categoryName = currentCategoryName else { return }
+        observedEpoch = container.databaseService.cacheConfigurationSnapshot?.id
+        observedLibraries = activeBrowseLibraries(container.getLibraries(), in: currentLibraryIds)
+        requestedPrefix = currentPageSize
         cacheUpdateTask?.cancel()
         cacheUpdateTask = nil
         do {
@@ -106,16 +146,19 @@ class UnifiedCategoryViewModel: ObservableObject {
         let search = currentSearchString
         let offset = nextOffset
         let limit = currentPageSize
+        requestedPrefix = offset + limit
         isLoadingMore = true
         mergeTask = Task {
             defer { if !Task.isCancelled { self.isLoadingMore = false } }
             do {
+                // Read the expanded prefix together so a concurrent insert or reorder cannot
+                // splice a page from a different Realm version onto the rows already displayed.
                 let result = try await unifiedCategoryService.mergeCategoryPage(
-                    categoryName: categoryName, searchString: search, query: query, offset: offset, limit: limit
+                    categoryName: categoryName, searchString: search, query: query, offset: 0, limit: offset + limit
                 )
                 try Task.checkCancellation()
                 try query.cache.checkCurrent()
-                self.applyPage(result, replacing: false)
+                self.applyPage(result)
             } catch {
                 guard !Task.isCancelled else { return }
                 if error as? CacheContextError == .superseded { self.hasMore = false }
@@ -125,28 +168,31 @@ class UnifiedCategoryViewModel: ObservableObject {
     }
 
     private func setupCategoryObserver(for categoryName: String, cache: CategoryCacheRepository) {
-        let scope = currentLibraryIds.isEmpty ? nil : currentLibraryIds
+        let scope = Set(observedLibraries.keys)
         cacheUpdateTask = Task { [weak self] in
             for await _ in cache.observeCategoryCacheUpdates(categoryName: categoryName, libraryIds: scope) {
                 guard !Task.isCancelled, (try? cache.checkCurrent()) != nil else { break }
-                self?.loadFirstPage(cache: cache)
+                guard let self else { return }
+                self.loadFirstPage(cache: cache, retainingPrefix: true)
             }
         }
     }
 
-    private func loadFirstPage(cache: CategoryCacheRepository) {
+    private func loadFirstPage(cache: CategoryCacheRepository, retainingPrefix: Bool = false) {
         guard let categoryName = currentCategoryName else { return }
         mergeTask?.cancel()
         let search = currentSearchString
         let libraryIds = currentLibraryIds
-        let limit = currentPageSize
+        let limit = retainingPrefix ? requestedPrefix : currentPageSize
         query = nil
         isLoading = true
         isLoadingMore = false
         hasMore = false
-        nextOffset = 0
-        items = []
-        unifiedCategoryResult = nil
+        if !retainingPrefix {
+            nextOffset = 0
+            items = []
+            unifiedCategoryResult = nil
+        }
         mergeTask = Task {
             defer { if !Task.isCancelled { self.isLoading = false } }
             do {
@@ -157,7 +203,7 @@ class UnifiedCategoryViewModel: ObservableObject {
                 try Task.checkCancellation()
                 try query.cache.checkCurrent()
                 self.query = query
-                self.applyPage(result, replacing: true)
+                self.applyPage(result)
             } catch {
                 guard !Task.isCancelled else { return }
                 self.reportCacheError(error)
@@ -170,13 +216,8 @@ class UnifiedCategoryViewModel: ObservableObject {
         logger.error("Could not read category cache: \(error.localizedDescription)")
     }
 
-    private func applyPage(_ page: UnifiedCategoryPageResult, replacing: Bool) {
-        if replacing {
-            items = page.items
-        } else {
-            let existingIds = Set(items.map(\.id))
-            items.append(contentsOf: page.items.filter { !existingIds.contains($0.id) })
-        }
+    private func applyPage(_ page: UnifiedCategoryPageResult) {
+        items = page.items
 
         hasMore = page.hasMore
         nextOffset = page.nextOffset

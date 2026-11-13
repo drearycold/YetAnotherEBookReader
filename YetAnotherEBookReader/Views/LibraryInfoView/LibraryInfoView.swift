@@ -13,6 +13,7 @@ import KingfisherSwiftUI
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
     @Environment(\.appContainer) var container
+    @Environment(\.scenePhase) private var scenePhase
     let importBook: () -> Void
     @Binding var libraryToBrowse: String?
 
@@ -34,7 +35,6 @@ struct LibraryInfoView: View {
 //    private let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
     
     @State private var searchHistoryList = [String]()
-    @State private var libraryList = [CalibreLibrary]()
     @State private var preparedBrowseLibraryID: String?
 
     @State private var lastSortCriteria = [LibrarySearchSort]()
@@ -88,13 +88,22 @@ struct LibraryInfoView: View {
         .onAppear {
             viewModel.calibreLibraries = container.libraryManager.calibreLibraries
             viewModel.setupCategoryObserver()
-
-            libraryList = container.libraryManager.calibreLibraries.values
-                .filter { $0.hidden == false }
-                .sorted { $0.name < $1.name }
         }
         .onDisappear {
             viewModel.stopCategoryObserver()
+            unifiedSearchViewModel.stopSearch()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                viewModel.fetchAvailableCategories()
+                unifiedSearchViewModel.refreshAfterForeground()
+            }
+        }
+        .task {
+            for await libraries in container.libraryManager.librarySnapshots(bufferingPolicy: .bufferingNewest(1)) {
+                guard !Task.isCancelled else { return }
+                viewModel.calibreLibraries = libraries
+            }
         }
         .onChange(of: libraryToBrowse) { libraryID in
             if libraryID == nil { preparedBrowseLibraryID = nil }
@@ -135,7 +144,7 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func libraryListView() -> some View {
         Section {
-            ForEach(libraryList, id: \.id) { library in
+            ForEach(activeBrowseLibraries(viewModel.calibreLibraries, in: []).values.sorted { $0.name < $1.name }, id: \.id) { library in
                 NavigationLink {
                     libraryBookListView(library)
                 } label: {
@@ -188,6 +197,7 @@ struct LibraryInfoView: View {
             }
         }
         .statusBar(hidden: false)
+        .onDisappear { unifiedSearchViewModel.stopSearch() }
     }
     
     func updateFilterCategory(key: String, value: String) {

@@ -7,6 +7,7 @@
 
 import XCTest
 import RealmSwift
+import Combine
 @testable import YetAnotherEBookReader
 
 func debugLog(_ message: String) {
@@ -541,6 +542,319 @@ class UnifiedSearchIntegrationTests: XCTestCase {
 
 @MainActor
 final class CacheRequestContextTests: XCTestCase {
+    func testCategoryReturnRestoresRefreshPaginationAndBookObservation() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let view = UnifiedSearchViewModel(container: container)
+        let filters = LibraryInfoView.ViewModel()
+        let requests = SearchAttempts()
+        let nextPage = expectation(description: "Expanded category search requests the next offset")
+        let refreshed = expectation(description: "Refresh returns to the first offset")
+        defer { view.stopSearch(); MockURLProtocol.requestHandler = nil }
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: true)?.queryItems ?? []
+            let params = Dictionary(uniqueKeysWithValues: query.compactMap { item in
+                item.value.map { (item.name, $0) }
+            })
+            if url.path.contains("ajax/search") {
+                let attempt = requests.next()
+                XCTAssertTrue(params["query"]?.contains("Alpha") == true)
+                let offset = Int(params["offset"] ?? "") ?? 0
+                if offset == 100 { nextPage.fulfill() }
+                if attempt == 3 && offset == 0 { refreshed.fulfill() }
+                let ids = offset == 100 ? Array(101...102) : Array(1...100)
+                let body = CalibreLibraryBooksResult.SearchResult(
+                    total_num: 102, sort_order: "desc", num_books_without_search: 102, offset: offset,
+                    num: ids.count, sort: "pubdate", base_url: "", library_id: "books",
+                    book_ids: ids.map(Int32.init), vl: ""
+                )
+                let data = try JSONEncoder().encode(body)
+                return try Self.jsonResponse(url: url, body: String(decoding: data, as: UTF8.self))
+            }
+            if url.path.contains("ajax/books") {
+                let ids = (params["ids"] ?? "").split(separator: ",").map(String.init)
+                let books = Dictionary(uniqueKeysWithValues: ids.map { id in
+                    var book = CalibreBookEntry()
+                    book.title = "Category book \(id)"
+                    book.last_modified = "2026-01-01T00:00:00+00:00"
+                    return (id, book)
+                })
+                return try Self.jsonResponse(url: url, body: String(decoding: JSONEncoder().encode(books), as: UTF8.self))
+            }
+            throw URLError(.unsupportedURL)
+        }
+
+        func appear() {
+            filters.resumeRootCategorySearch(categoryName: "Authors", itemName: "Alpha", categoryField: "authors",
+                                             searchViewModel: view)
+        }
+        let loaded = expectation(description: "Initial category page has 100 of 102 books")
+        let first = view.$unifiedSearchResult.first { $0?.books.count == 100 && $0?.totalNumber == 102 }
+            .sink { _ in loaded.fulfill() }
+        defer { first.cancel() }
+        appear()
+        await fulfillment(of: [loaded], timeout: 8)
+        let key = filters.currentLibrarySearchResultKey
+        view.stopSearch()
+        view.stopSearch()
+        appear()
+        appear()
+        XCTAssertEqual(filters.currentLibrarySearchResultKey, key)
+        let resumed = expectation(description: "Same category subscription settles after returning")
+        let loading = view.$isSearchLoading.first { !$0 }.sink { _ in resumed.fulfill() }
+        defer { loading.cancel() }
+        await fulfillment(of: [resumed], timeout: 8)
+        XCTAssertEqual(requests.count, 1, "The cached first page does not need a second network listing")
+
+        let allBooks = expectation(description: "Expanded category page has 102 distinct books")
+        let expanded = view.$unifiedSearchResult.first { $0?.books.count == 102 }.sink { _ in allBooks.fulfill() }
+        defer { expanded.cancel() }
+        view.expandSearchUnifiedBookLimit()
+        await fulfillment(of: [nextPage, allBooks], timeout: 8)
+        XCTAssertEqual(Set(view.unifiedSearchResult?.books.map(\.id) ?? []).count, 102)
+        XCTAssertEqual(requests.count, 2)
+
+        let returned = expectation(description: "Refresh settles with the first page")
+        let afterRefresh = view.$isSearchLoading.dropFirst().first { !$0 }.sink { _ in returned.fulfill() }
+        defer { afterRefresh.cancel() }
+        view.resetSearch(force: true)
+        await fulfillment(of: [refreshed, returned], timeout: 8)
+
+        let renamed = expectation(description: "The resumed Realm observer publishes a changed book")
+        let rename = view.$unifiedSearchResult.first {
+            $0?.books.contains { $0.id == 1 && $0.title == "Updated title" } == true
+        }.sink { _ in renamed.fulfill() }
+        defer { rename.cancel() }
+        var book = try XCTUnwrap(container.searchCacheRepository.fetchBooks(library: fixture.library, bookIds: [1])[1])
+        book.title = "Updated title"
+        container.bookRepository.saveBook(book)
+        await fulfillment(of: [renamed], timeout: 8)
+        XCTAssertEqual(requests.count, 3)
+    }
+
+    func testLocalBrowseRebuildsAfterBookInsertRenameAndDelete() async throws {
+        let container = MockAppContainerFactory.makeContainer()
+        let library = try XCTUnwrap(container.libraryManager.localLibrary)
+        let view = UnifiedSearchViewModel(container: container)
+        defer { view.stopSearch() }
+        let key = SearchCriteriaMergedKey(libraryIds: [library.id], criteria: .init(
+            searchString: "CC3 uncommon title", sortCriteria: .init(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        ))
+        var book = CalibreBook(id: 61573, library: library)
+        book.title = "CC3 uncommon title"
+        let first = expectation(description: "Filtered local search initially empty")
+        let initial = view.$unifiedSearchResult.first { $0?.totalNumber == 0 }.sink { _ in first.fulfill() }
+        defer { initial.cancel() }
+        view.startSearch(key: key)
+        await fulfillment(of: [first], timeout: 5)
+
+        func expectTitles(_ titles: [String], write: () -> Void) async {
+            let changed = expectation(description: "Local results show \(titles)")
+            let updates = view.$unifiedSearchResult.dropFirst().first { $0?.books.map(\.title) == titles }
+                .sink { _ in changed.fulfill() }
+            defer { updates.cancel() }
+            write()
+            await fulfillment(of: [changed], timeout: 5)
+        }
+        await expectTitles([book.title]) { container.bookRepository.saveBook(book) }
+        book.title += " updated"
+        await expectTitles([book.title]) { container.bookRepository.saveBook(book) }
+        await expectTitles([]) { container.bookRepository.deleteBook(id: book.inShelfId) }
+    }
+
+    func testCategoryPagesRefreshSameSizeEditsAndRebuildTheLoadedPrefix() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let library = fixture.library
+        let view = UnifiedCategoryViewModel(container: container)
+        defer { view.stopObserving() }
+        func save(_ names: [String]) throws {
+            try container.categoryCacheRepository.saveLibraryCategoryResult(
+                libraryId: library.id, categoryName: "Authors", result: .init(
+                    libraryId: library.id, categoryName: "Authors", items: names.enumerated().map { index, name in
+                        .init(name: name, averageRating: 0, count: 1, url: "author-\(index)")
+                    }, generation: library.lastModified, totalNumber: names.count
+                )
+            )
+        }
+        func expectNames(_ names: [String], action: () throws -> Void) async throws {
+            let changed = expectation(description: "Category contains \(names)")
+            let updates = view.$unifiedCategoryResult.first { $0?.items.map(\.name) == names }
+                .sink { _ in changed.fulfill() }
+            defer { updates.cancel() }
+            try action()
+            await fulfillment(of: [changed], timeout: 5)
+        }
+        try save(["Bravo", "Charlie", "Delta", "Echo", "Foxtrot"])
+        try await expectNames(["Bravo", "Charlie"]) {
+            view.reloadCategory(categoryName: "Authors", searchString: "", libraryIds: [library.id], pageSize: 2)
+        }
+        try await expectNames(["Bravo", "Charlie", "Delta", "Echo"]) {
+            view.loadNextPageIfNeeded(currentItem: nil)
+        }
+        try await expectNames(["Alpha", "Bravo", "Delta", "Echo"]) {
+            try save(["Alpha", "Bravo", "Delta", "Echo", "Foxtrot"])
+        }
+        XCTAssertEqual(view.nextOffset, 4)
+        XCTAssertTrue(view.hasMore)
+        try await expectNames(["Alpha", "Bravo", "Delta", "Echo", "Foxtrot"]) {
+            view.loadNextPageIfNeeded(currentItem: nil)
+        }
+        XCTAssertFalse(view.hasMore)
+    }
+
+    func testVisibleCategoryRebindsToAReplacementDatabaseWithoutAnOldCacheWrite() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let library = fixture.library
+        let summary = LibraryInfoView.ViewModel()
+        let view = UnifiedCategoryViewModel(container: container)
+        defer { view.stopObserving(); summary.stopCategoryObserver() }
+        func seed(_ name: String, category: String) throws {
+            let item = LibraryCategoryItem(name: name, averageRating: 0, count: 1, url: name)
+            for categoryName in Set([category, "Authors"]) {
+                try container.categoryCacheRepository.saveLibraryCategoryResult(
+                    libraryId: library.id, categoryName: categoryName,
+                    result: .init(libraryId: library.id, categoryName: categoryName, items: [item],
+                                  generation: library.lastModified, totalNumber: 1)
+                )
+            }
+        }
+        try seed("Original", category: "Old category")
+        let loaded = expectation(description: "Original database")
+        let first = view.$unifiedCategoryResult.first { $0?.items.map(\.name) == ["Original"] }.sink { _ in loaded.fulfill() }
+        defer { first.cancel() }
+        summary.setupCategoryObserver()
+        view.reloadCategory(categoryName: "Authors", searchString: "")
+        await fulfillment(of: [loaded], timeout: 5)
+        let oldRealm = try XCTUnwrap(container.databaseService.realm)
+        let switched = expectation(description: "Category page rebound")
+        let summaries = expectation(description: "Summaries rebound")
+        let categoryObserver = view.$unifiedCategoryResult.first { $0?.items.map(\.name) == ["Replacement"] }
+            .sink { _ in switched.fulfill() }
+        let summaryObserver = summary.$availableCategories.first { $0.map(\.categoryName) == ["Authors", "New category"] }
+            .sink { _ in summaries.fulfill() }
+        defer { categoryObserver.cancel(); summaryObserver.cancel() }
+        try container.databaseService.openMainRealm(conf: .init(
+            inMemoryIdentifier: UUID().uuidString, schemaVersion: DatabaseSchema.version
+        ))
+        try seed("Replacement", category: "New category")
+        await fulfillment(of: [switched, summaries], timeout: 5)
+        withExtendedLifetime(oldRealm) {}
+    }
+
+    func testVisibleBrowseSearchUpdatesWhenASettledLibraryIsHidden() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let library = fixture.library
+        let criteria = fixture.criteria
+        let key = SearchCriteriaMergedKey(libraryIds: [library.id], criteria: criteria)
+        let view = UnifiedSearchViewModel(container: container)
+        defer { view.stopSearch() }
+        MockURLProtocol.requestHandler = Self.searchResponse
+        defer { MockURLProtocol.requestHandler = nil }
+        let loaded = expectation(description: "Initial result")
+        let ready = view.$unifiedSearchResult.first { $0?.books.map(\.id) == [456] }
+            .sink { _ in loaded.fulfill() }
+        defer { ready.cancel() }
+        view.startSearch(key: key)
+        await fulfillment(of: [loaded], timeout: 5)
+
+        let removed = expectation(description: "The selected library is empty once hidden")
+        let updates = view.$unifiedSearchResult.first { $0?.books.isEmpty == true && $0?.libraryIds == [library.id] }
+            .sink { _ in removed.fulfill() }
+        defer { updates.cancel() }
+        try container.libraryManager.hideLibrary(libraryId: library.id, serverID: library.server.id)
+        await fulfillment(of: [removed], timeout: 3)
+
+        view.stopSearch()
+        try container.libraryManager.restoreLibrary(libraryId: library.id, serverID: library.server.id)
+        let reopened = expectation(description: "Reopened page attaches to the restored library")
+        let reopenedUpdates = view.$unifiedSearchResult.first { $0?.books.map(\.id) == [456] }
+            .sink { _ in reopened.fulfill() }
+        defer { reopenedUpdates.cancel() }
+        XCTAssertEqual(view.unifiedSearchResult?.books, [])
+        view.startSearch(key: key)
+        await fulfillment(of: [reopened], timeout: 5)
+    }
+
+    func testReachabilityChangesRefreshVisibleSearchAndKeepTheOfflineCache() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let library = fixture.library
+        let key = SearchCriteriaMergedKey(libraryIds: [library.id], criteria: fixture.criteria)
+        let view = UnifiedSearchViewModel(container: container)
+        defer { view.stopSearch(); MockURLProtocol.requestHandler = nil }
+        MockURLProtocol.requestHandler = Self.searchResponse
+        let loaded = expectation(description: "Initial online search")
+        let initial = view.$unifiedSearchResult.first { $0?.books.map(\.id) == [456] }.sink { _ in loaded.fulfill() }
+        defer { initial.cancel() }
+        view.startSearch(key: key)
+        await fulfillment(of: [loaded], timeout: 5)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil
+            ))
+            return (response, Data())
+        }
+        let offline = expectation(description: "Offline search reports failure and retains cache")
+        let failures = view.$libraryStatuses.first {
+            $0[library.id]?.failure != nil && $0[library.id]?.fromCache == true
+        }.sink { _ in offline.fulfill() }
+        defer { failures.cancel() }
+        container.calibreServerInfoStaging = [:]
+        await fulfillment(of: [offline], timeout: 5)
+        XCTAssertEqual(view.unifiedSearchResult?.books.map(\.id), [456])
+
+        MockURLProtocol.requestHandler = { try Self.searchResponse($0, bookId: 457) }
+        let recovered = expectation(description: "Online source replaces cached offline results")
+        let newBooks = view.$unifiedSearchResult.first { $0?.books.map(\.id) == [457] }
+            .sink { _ in recovered.fulfill() }
+        defer { newBooks.cancel() }
+        try fixture.publishReachability(isPublic: true)
+        await fulfillment(of: [recovered], timeout: 5)
+        XCTAssertNil(view.libraryStatuses[library.id]?.failure)
+    }
+
+    func testVisibleCategoriesAndSummariesUpdateWhenOnlyLibraryMembershipChanges() async throws {
+        let fixture = try Fixture()
+        let container = fixture.container
+        let library = fixture.library
+        let cache = container.categoryCacheRepository
+        let item = LibraryCategoryItem(name: "Author", averageRating: 0, count: 1, url: "author")
+        try cache.saveLibraryCategoryResult(libraryId: library.id, categoryName: "Authors", result: .init(
+            libraryId: library.id, categoryName: "Authors", items: [item],
+            generation: library.lastModified, totalNumber: 1
+        ))
+
+        let summary = LibraryInfoView.ViewModel()
+        let category = UnifiedCategoryViewModel(container: container)
+        defer { category.stopObserving(); summary.stopCategoryObserver() }
+        let summaryLoaded = expectation(description: "Initial category summary")
+        let categoryLoaded = expectation(description: "Initial category items")
+        let summarySubscription = summary.$availableCategories.first { $0.map(\.categoryName) == ["Authors"] }
+            .sink { _ in summaryLoaded.fulfill() }
+        let categorySubscription = category.$unifiedCategoryResult.first { $0?.items.map(\.name) == ["Author"] }
+            .sink { _ in categoryLoaded.fulfill() }
+        defer { summarySubscription.cancel(); categorySubscription.cancel() }
+        summary.setupCategoryObserver()
+        category.reloadCategory(categoryName: "Authors", searchString: "")
+        await fulfillment(of: [summaryLoaded, categoryLoaded], timeout: 5)
+
+        let summaryCleared = expectation(description: "Hidden library leaves the summaries")
+        let categoryCleared = expectation(description: "Hidden library leaves the category items")
+        let summaryUpdates = summary.$availableCategories.first { $0.isEmpty }.sink { _ in summaryCleared.fulfill() }
+        let categoryUpdates = category.$unifiedCategoryResult.first { $0?.items.isEmpty == true }
+            .sink { _ in categoryCleared.fulfill() }
+        defer { summaryUpdates.cancel(); categoryUpdates.cancel() }
+        try container.libraryManager.hideLibrary(libraryId: library.id, serverID: library.server.id)
+        await fulfillment(of: [summaryCleared, categoryCleared], timeout: 3)
+        XCTAssertEqual(try cache.fetchLibraryCategoryResult(libraryId: library.id, categoryName: "Authors")?.items, [item])
+    }
+
     func testActiveLibraryScopeChangeRestartsSearchWithItsCacheVisible() async throws {
         try await assertSearchContinuesAfterScopeChange(replacementFails: false)
     }

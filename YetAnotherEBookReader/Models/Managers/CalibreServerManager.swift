@@ -74,8 +74,10 @@ class CalibreServerManager {
         serverBroadcaster.stream(initialValue: calibreServers)
     }
 
-    func serverInfoStagingSnapshots() -> AsyncStream<[String: CalibreServerInfo]> {
-        serverInfoStagingBroadcaster.stream(initialValue: calibreServerInfoStaging)
+    func serverInfoStagingSnapshots(
+        bufferingPolicy: AsyncStream<[String: CalibreServerInfo]>.Continuation.BufferingPolicy = .unbounded
+    ) -> AsyncStream<[String: CalibreServerInfo]> {
+        serverInfoStagingBroadcaster.stream(initialValue: calibreServerInfoStaging, bufferingPolicy: bufferingPolicy)
     }
 
     private func publishStateChange() {
