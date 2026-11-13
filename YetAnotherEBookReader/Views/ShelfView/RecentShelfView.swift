@@ -281,6 +281,9 @@ struct RecentShelfView: View {
                         },
                         secondaryButton: .cancel()
                     )
+                case .fileRemoval(let result):
+                    return Alert(title: Text("File Cleanup"), message: Text(result.message),
+                                 dismissButton: .default(Text("OK")))
                 }
             }
         }

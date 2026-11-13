@@ -160,6 +160,10 @@ class CalibreLibraryManager {
                 guard let fileName = $0 as? String else {
                     return
                 }
+                if fileName.hasPrefix(".dsreader-file-") {
+                    dirEnum.skipDescendants()
+                    return
+                }
                 if fileName.hasSuffix(".db") { return }
                 if fileName.hasSuffix(".db.lock") { return }
                 if fileName.hasSuffix(".db.note") { return }

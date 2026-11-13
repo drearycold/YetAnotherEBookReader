@@ -902,10 +902,83 @@ final class CalibreOnboardingUITests: XCTestCase {
         // Uses the existing test-host consent gate, with normal disk persistence and networking.
         app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/CalibreOnboardingValidation"
         if environment["YABR_CC3_LOCAL_FILE"] == "1" { app.launchEnvironment["YABR_CC3_LOCAL_FILE"] = "1" }
+        if environment["YABR_FI1_FAIL_OVERWRITE"] == "1" { app.launchEnvironment["YABR_FI1_FAIL_OVERWRITE"] = "1" }
         injectConfigurationSaveFailures = environment["YABR_SC3_SAVE_FAILURES"] == "1"
         if injectConfigurationSaveFailures { app.launchEnvironment["YABR_SC3_SAVE_FAILURES"] = "1" }
         app.launch()
         element("welcome.calibre")
+    }
+
+    func testLocalImportFailureCanRetryOverwriteAndSaveAsNew() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_FI1_FAIL_OVERWRITE"] != "1",
+                      "Requires the FI1 isolated file fixture")
+        element("welcome.browse").tap()
+        let browse = app.tabBars.buttons["Browse"]
+        if !browse.isSelected { browse.tap() }
+        element("Local Library").tap()
+        element("browse.local.import").tap()
+        func chooseFixture(_ folder: String) {
+            let selected = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", folder)).firstMatch
+            if !selected.waitForExistence(timeout: 3) {
+                let location = app.cells["DOC.sidebar.item.On My iPhone"].firstMatch
+                if location.exists { location.tap() }
+                let appFolder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "D.S.Reader")).firstMatch
+                if appFolder.waitForExistence(timeout: 2) { appFolder.tap() }
+                let incoming = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Incoming")).firstMatch
+                if incoming.waitForExistence(timeout: 5) { incoming.tap() }
+            }
+            XCTAssertTrue(selected.waitForExistence(timeout: 10), app.debugDescription)
+            selected.tap()
+            let file = app.cells.matching(
+                NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS[c] %@", "FI1 Sample", ".epub")
+            ).firstMatch
+            XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
+            file.tap()
+        }
+        func dismissImport() {
+            XCTAssertTrue(app.staticTexts["Imported, read now?"].waitForExistence(timeout: 15), app.debugDescription)
+            let cancel = app.buttons["Cancel"].firstMatch
+            if cancel.exists { cancel.tap() }
+            else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() }
+        }
+        func openLocalPicker() {
+            if !browse.isSelected { browse.tap() }
+            if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
+            element("browse.local.add").tap()
+        }
+        chooseFixture("Original")
+        dismissImport()
+        let oldRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.")).firstMatch
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 15), app.debugDescription)
+        let bookId = try XCTUnwrap(oldRow.identifier.dropFirst("shelf.book.".count).split(separator: "^").first)
+        openLocalPicker()
+        chooseFixture("Replacement")
+        element("Overwrite").tap()
+        element("Import Failed")
+        XCTAssertFalse(app.buttons["Read"].exists)
+        XCTAssertTrue(app.buttons["browse.book.\(bookId)"].exists)
+        capture("fi1-overwrite-failed")
+        element("Retry").tap()
+        let replacement = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND NOT identifier CONTAINS %@ AND label CONTAINS %@",
+            "shelf.book.", String(bookId), "FI1 Sample"
+        )).firstMatch
+        XCTAssertTrue(replacement.waitForExistence(timeout: 15), app.debugDescription)
+        if app.staticTexts["Imported, read now?"].exists { dismissImport() }
+        openLocalPicker()
+        chooseFixture("As New")
+        element("As a new book").tap()
+        let savedAsNew = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "shelf.book.", "FI1 Sample (1)"
+        )).firstMatch
+        XCTAssertTrue(savedAsNew.waitForExistence(timeout: 15), app.debugDescription)
+        if app.staticTexts["Imported, read now?"].exists { dismissImport() }
+        browse.tap()
+        if !browse.isSelected { browse.tap() }
+        if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
+        let count = app.staticTexts["2 / 2"].firstMatch
+        XCTAssertTrue(count.waitForExistence(timeout: 15), app.debugDescription)
+        capture("fi1-overwrite-retried-and-save-as-new")
     }
 
     func testBrowseKeepsCachedBooksThroughAnOfflineSearchAndReconnects() throws {

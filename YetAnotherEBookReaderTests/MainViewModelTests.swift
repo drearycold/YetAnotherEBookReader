@@ -189,6 +189,35 @@ import Combine
         try await verifyPickedEPUB(dismissBeforeSelection: false)
     }
 
+    func testFailedImportDoesNotPublishSuccessOrOpenExistingBook() async throws {
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.localLibrary)
+        let book = try XCTUnwrap(mockAppContainer.bookManager.booksInShelf.values.first {
+            $0.library.id == library.id
+        })
+        let result = BookImportInfo(url: URL(fileURLWithPath: "/tmp/failed.epub"),
+                                    bookId: book.id, error: .loadMetaFail)
+        let published = expectation(description: "A failed import cannot publish the book")
+        published.isInverted = true
+        let updates = mockAppContainer.calibreUpdates()
+        let observer = Task {
+            for await update in updates {
+                if case .book(let updated) = update, updated.inShelfId == book.inShelfId {
+                    published.fulfill()
+                    return
+                }
+            }
+        }
+        defer { observer.cancel() }
+        viewModel.activeTab = 2
+        viewModel.bookImportInfo = result
+        viewModel.handleImportedBook(result)
+        viewModel.openImportedBook()
+        XCTAssertEqual(viewModel.activeTab, 2)
+        XCTAssertTrue(viewModel.bookImportActionSheetPresenting)
+        XCTAssertNil(viewModel.activeReaderPresentation)
+        await fulfillment(of: [published], timeout: 0.25)
+    }
+
     func testPickerCanDismissBeforeItsSelectionCallback() async throws {
         try await verifyPickedEPUB(dismissBeforeSelection: true)
     }

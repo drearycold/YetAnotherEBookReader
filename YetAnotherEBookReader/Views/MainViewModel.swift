@@ -221,30 +221,31 @@ final class MainViewModel: ObservableObject {
     }
     
     func handleImportedBook(_ info: BookImportInfo) {
-        activeTab = 0
         bookImportActionSheetPresenting = false
-
-        if let localLibrary = container.libraryManager.localLibrary,
-           let bookId = info.bookId,
-           let book = container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-            container.publishCalibreUpdate(.book(book))
+        if info.error == nil {
+            activeTab = 0
+            if let localLibrary = container.libraryManager.localLibrary,
+               let bookId = info.bookId,
+               let book = container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
+                container.publishCalibreUpdate(.book(book))
+            }
         }
 
         bookImportActionSheetPresenting = true
     }
 
-    func importBookAsNew(url: URL, bookId: Int32?) {
-        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
+    func importBookAsNew(url: URL) {
+        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true)
         container.publishBookImport(result)
     }
 
-    func importBookOverwrite(url: URL, bookId: Int32?) {
-        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
+    func importBookOverwrite(url: URL) {
+        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false)
         container.publishBookImport(result)
     }
 
     func openImportedBook() {
-        guard let bookId = bookImportInfo?.bookId,
+        guard let info = bookImportInfo, info.error == nil, let bookId = info.bookId,
               let localLibrary = container.libraryManager.localLibrary else { return }
         let book = CalibreBook(id: bookId, library: localLibrary)
         guard let importedBook = container.bookManager.booksInShelf[book.inShelfId] ?? container.bookRepository.getBook(id: book.inShelfId) else { return }
@@ -256,6 +257,16 @@ final class MainViewModel: ObservableObject {
             source: .importResult,
             targetWorkspaceID: readerWorkspaceViewModel.id
         )
+    }
+
+    func retryImport(_ info: BookImportInfo) {
+        if info.overwrite {
+            importBookOverwrite(url: info.url)
+        } else if info.asNew {
+            importBookAsNew(url: info.url)
+        } else {
+            importBook(url: info.url)
+        }
     }
 
     func reportImportError() {

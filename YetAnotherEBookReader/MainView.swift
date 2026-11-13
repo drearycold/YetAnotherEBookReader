@@ -202,10 +202,12 @@ struct MainView: View {
                         }),
                         .cancel()])
             }
-            if bookImportInfo.error == nil, let bookId = bookImportInfo.bookId {
+            if bookImportInfo.error == nil, bookImportInfo.bookId != nil {
                 return ActionSheet(
                     title: Text("Importing"),
-                    message: Text("Imported, read now?"),
+                    message: Text(bookImportInfo.cleanupPending
+                        ? "Imported. Some files could not be cleaned up. Read now?"
+                        : "Imported, read now?"),
                     buttons: [
                         .default(Text("Read"), action: {
                             viewModel.openImportedBook()
@@ -220,13 +222,30 @@ struct MainView: View {
                     message: Text("Book of same file name already exists. Do you wish to overwrite existing one?"),
                     buttons: [
                         .default(Text("As a new book"), action: {
-                            viewModel.importBookAsNew(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
+                            viewModel.importBookAsNew(url: bookImportInfo.url)
                         }),
                         .destructive(Text("Overwrite"), action: {
-                            viewModel.importBookOverwrite(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
+                            viewModel.importBookOverwrite(url: bookImportInfo.url)
                         }),
                         .cancel()
                     ]
+                )
+            }
+            if bookImportInfo.error == .fileOpFail || bookImportInfo.error == .loadMetaFail {
+                return ActionSheet(
+                    title: Text("Import Failed"),
+                    message: Text(bookImportInfo.error == .loadMetaFail
+                        ? "The library change could not be saved." : "The file could not be imported."),
+                    buttons: [.default(Text("Retry")) { viewModel.retryImport(bookImportInfo) }, .cancel()]
+                )
+            }
+            if bookImportInfo.error == .recoveryRequired {
+                return ActionSheet(
+                    title: Text("Import Failed"),
+                    message: Text(bookImportInfo.recoveryFolder.map {
+                        "The previous file could not be restored. A recovery copy was kept in \($0)."
+                    } ?? "The import did not complete and the destination could not be rolled back. The original source was kept."),
+                    buttons: [.cancel(Text("Dismiss"))]
                 )
             }
             return ActionSheet(

@@ -252,3 +252,246 @@ final class CalibreBookManagerTests: XCTestCase {
         XCTAssertEqual(bookManager.readingBook?.id, 201)
     }
 }
+
+@MainActor
+final class LocalFileCommitTests: XCTestCase {
+    func testFailedOverwriteCopyKeepsThePreviousBook() throws {
+        try assertFailedOverwrite(move: false)
+    }
+
+    func testFailedOverwriteMoveKeepsThePreviousBook() throws {
+        try assertFailedOverwrite(move: true, failReplacement: true)
+    }
+
+    func testFailedRemovalKeepsTheBookAndItsFile() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        var files = CalibreBookManager.FileOperations()
+        files.remove = { _ in throw CocoaError(.fileWriteNoPermission) }
+        let manager = fixture.manager(files: files)
+        let signals = fixture.container.calibreUpdates()
+        let deleted = expectation(description: "Failed removal does not publish deleted")
+        deleted.isInverted = true
+        let observer = Task {
+            for await event in signals {
+                if case .deleted(let id) = event, id == fixture.oldBook.inShelfId {
+                    deleted.fulfill()
+                    return
+                }
+            }
+        }
+        defer { observer.cancel() }
+        XCTAssertEqual(manager.clearCache(book: fixture.oldBook, format: .PDF), .fileFailed)
+
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+        XCTAssertTrue(fixture.repository.getBook(id: fixture.oldBook.inShelfId)?.formats["PDF"]?.cached == true)
+        XCTAssertTrue(manager.booksInShelf[fixture.oldBook.inShelfId]?.formats["PDF"]?.cached == true)
+        await fulfillment(of: [deleted], timeout: 0.25)
+    }
+
+    func testPostCommitLibraryCleanupDoesNotRecreateDeletedRecords() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        var files = CalibreBookManager.FileOperations()
+        files.remove = { _ in throw CocoaError(.fileWriteNoPermission) }
+        let manager = fixture.manager(files: files)
+        try fixture.repository.commitBookFiles(saving: [], deleting: [fixture.oldBook.inShelfId])
+        manager.discardShelfBooks(in: [fixture.oldBook.library.id])
+
+        XCTAssertNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
+        XCTAssertNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+    }
+
+    func testFailedInstallRetainsTheMoveSource() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        try FileManager.default.removeItem(at: fixture.destination)
+        var files = CalibreBookManager.FileOperations()
+        files.move = { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        let manager = fixture.manager(files: files)
+
+        let result = manager.onOpenURL(url: fixture.source, doMove: true, doOverwrite: false, asNew: false)
+        XCTAssertEqual(result.error, .fileOpFail)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        XCTAssertEqual(try Data(contentsOf: fixture.source), fixture.newBytes)
+    }
+
+    func testStorageFailureRestoresTheOldFileAndCanRetry() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.manager()
+        fixture.repository.rejectCommit = true
+        let failed = manager.onOpenURL(url: fixture.source, doMove: true, doOverwrite: true, asNew: false)
+        XCTAssertEqual(failed.error, .loadMetaFail)
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.source), fixture.newBytes)
+        XCTAssertNotNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+        XCTAssertNotNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
+
+        fixture.repository.rejectCommit = false
+        let success = manager.onOpenURL(url: fixture.source, doMove: true, doOverwrite: true, asNew: false)
+        let bookId = try XCTUnwrap(success.bookId)
+        XCTAssertNil(success.error)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.source.path))
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.newBytes)
+        XCTAssertEqual(manager.calcLocalFileBookId(for: fixture.destination), bookId)
+        XCTAssertNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
+        XCTAssertNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+        XCTAssertNotNil(fixture.repository.getBook(library: fixture.oldBook.library, bookId: bookId))
+    }
+
+    func testFailedRestoreRetainsTheRecoveryCopy() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        fixture.repository.rejectCommit = true
+        var files = CalibreBookManager.FileOperations()
+        let replace = files.replace
+        files.replace = {
+            if $0.lastPathComponent == "previous" { throw CocoaError(.fileWriteNoPermission) }
+            try replace($0, $1)
+        }
+        let manager = fixture.manager(files: files)
+        let result = manager.onOpenURL(url: fixture.source, doMove: true, doOverwrite: true, asNew: false)
+        XCTAssertEqual(result.error, .recoveryRequired)
+        let folder = try XCTUnwrap(result.recoveryFolder)
+        let backup = fixture.destination.deletingLastPathComponent().appendingPathComponent(folder)
+            .appendingPathComponent("previous")
+        XCTAssertEqual(try Data(contentsOf: backup), fixture.oldBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.source), fixture.newBytes)
+        XCTAssertNotNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
+    }
+
+    func testMissingFileRemovalIsIdempotentAndStorageFailureRestoresExistingFile() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.manager()
+        fixture.repository.rejectCommit = true
+        XCTAssertEqual(manager.clearCache(book: fixture.oldBook, format: .PDF), .storageFailed)
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+        XCTAssertNotNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+        fixture.repository.rejectCommit = false
+        try FileManager.default.removeItem(at: fixture.destination)
+        XCTAssertEqual(manager.clearCache(book: fixture.oldBook, format: .PDF), .committed())
+        XCTAssertEqual(manager.clearCache(book: fixture.oldBook, format: .PDF), .committed())
+        XCTAssertNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
+        XCTAssertNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+    }
+
+    func testSameFileAndRepeatedImportDoNotCopyOrDeleteTheSource() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        var files = CalibreBookManager.FileOperations()
+        files.copy = { _, _ in XCTFail("The file is already at its destination"); throw CocoaError(.fileWriteNoPermission) }
+        files.remove = { _ in XCTFail("The file is already at its destination"); throw CocoaError(.fileWriteNoPermission) }
+        let manager = fixture.manager(files: files)
+
+        let first = manager.onOpenURL(url: fixture.destination, doMove: true, doOverwrite: false, asNew: false)
+        let second = manager.onOpenURL(url: fixture.destination, doMove: true, doOverwrite: false, asNew: false)
+        XCTAssertNil(first.error)
+        XCTAssertNil(second.error)
+        XCTAssertEqual(first.bookId, second.bookId)
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+        XCTAssertEqual(manager.booksInShelf.count, 1)
+    }
+
+    func testCleanupFailureReportsACommittedImportAndSaveAsNewKeepsBothBooks() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        var files = CalibreBookManager.FileOperations()
+        files.remove = { url in
+            if url.lastPathComponent.hasPrefix(".dsreader-file-") { throw CocoaError(.fileWriteNoPermission) }
+            try FileManager.default.removeItem(at: url)
+        }
+        let manager = fixture.manager(files: files)
+        XCTAssertEqual(manager.onOpenURL(url: fixture.source, doMove: false, doOverwrite: false, asNew: false).error,
+                       .destConflict)
+        let result = manager.onOpenURL(url: fixture.source, doMove: false, doOverwrite: false, asNew: true)
+        XCTAssertNil(result.error)
+        XCTAssertTrue(result.cleanupPending)
+        XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
+        let imported = fixture.destination.deletingLastPathComponent().appendingPathComponent("Sample (1).pdf")
+        XCTAssertEqual(try Data(contentsOf: imported), fixture.newBytes)
+        XCTAssertEqual(manager.booksInShelf.count, 2)
+        XCTAssertEqual(fixture.repository.getBook(library: fixture.oldBook.library, bookId: try XCTUnwrap(result.bookId))?
+            .formats["PDF"]?.filename, "Sample (1).pdf")
+    }
+
+    private func assertFailedOverwrite(move: Bool, failReplacement: Bool = false) throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        var files = CalibreBookManager.FileOperations()
+        if move {
+            files.move = { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        }
+        if failReplacement {
+            files.replace = { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        }
+        if !move {
+            files.copy = { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        }
+        let manager = fixture.manager(files: files)
+        let result = manager.onOpenURL(url: fixture.source, doMove: move, doOverwrite: true, asNew: false)
+
+        XCTAssertEqual(result.error, .fileOpFail)
+        XCTAssertEqual(try? Data(contentsOf: fixture.destination), fixture.oldBytes)
+        XCTAssertEqual(try Data(contentsOf: fixture.source), fixture.newBytes)
+        XCTAssertTrue(fixture.repository.getBook(id: fixture.oldBook.inShelfId)?.formats["PDF"]?.cached == true)
+        XCTAssertNotNil(manager.booksInShelf[fixture.oldBook.inShelfId])
+    }
+
+    private struct Fixture {
+        let directory: URL
+        let source: URL
+        let destination: URL
+        let oldBytes = Data("old PDF fixture".utf8)
+        let newBytes = Data("new PDF fixture".utf8)
+        let container: AppContainer
+        let repository: FailingCommitRepository
+        let oldBook: CalibreBook
+
+        @MainActor
+        init() throws {
+            container = MockAppContainerFactory.makeContainer()
+            let library = try XCTUnwrap(container.libraryManager.localLibrary)
+            repository = FailingCommitRepository(databaseService: container.databaseService, libraryResolver: container)
+            directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            let target = directory.appendingPathComponent("library", isDirectory: true)
+            let incoming = directory.appendingPathComponent("incoming", isDirectory: true)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)
+            source = incoming.appendingPathComponent("Sample.pdf")
+            destination = target.appendingPathComponent("Sample.pdf")
+            try oldBytes.write(to: destination)
+            try newBytes.write(to: source)
+            var book = CalibreBook(id: 42, library: library)
+            book.title = "Previous book"
+            book.inShelf = true
+            book.formats["PDF"] = FormatInfo(filename: "Sample.pdf", serverSize: UInt64(oldBytes.count),
+                                             serverMTime: .distantPast, cached: true,
+                                             cacheSize: UInt64(oldBytes.count), cacheMTime: .distantPast)
+            oldBook = book
+            repository.saveBook(book)
+        }
+
+        @MainActor
+        func manager(files: CalibreBookManager.FileOperations = .init()) -> CalibreBookManager {
+            let manager = CalibreBookManager(container: container, databaseService: container.databaseService,
+                                             bookRepository: repository, files: files,
+                                             localDirectory: destination.deletingLastPathComponent())
+            manager.booksInShelf[oldBook.inShelfId] = oldBook
+            return manager
+        }
+
+        func cleanup() { try? FileManager.default.removeItem(at: directory) }
+    }
+
+    private final class FailingCommitRepository: RealmBookRepository {
+        var rejectCommit = false
+
+        override func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws {
+            if rejectCommit { throw CocoaError(.fileWriteNoPermission) }
+            try super.commitBookFiles(saving: books, deleting: ids)
+        }
+    }
+}
