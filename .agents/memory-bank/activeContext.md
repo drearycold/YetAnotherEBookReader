@@ -2,10 +2,10 @@
 
 ## Current Focus
 
-**Local File Import and Removal Consistency (FI).** FI2 is implemented on
-`codex/local-file-consistency-fi2` from main `d55f3778`, which merged FI1
-in PR #154. FI3 is the remaining verification workstream. The earlier
-PDF investigation remains under Current Branch Notes.
+**Local File Import and Removal Consistency (FI).** FI3 is verified on
+`codex/local-file-consistency-fi3` from main `0c83b48f`, which merged
+FI2 in PR #155. The earlier PDF investigation remains under Current
+Branch Notes.
 
 ## Next Refactoring Direction: Local File Operations (2026-11-13)
 
@@ -146,9 +146,8 @@ overwrite failure with the old book still in Browse, Retry, As a
 new book, opening reader content from the result sheet, and closing
 the reader to a Browse list with two books.
 
-FI3 remains the broader EPUB, PDF and CBZ matrix, restart behavior,
-and additional native conflict and removal journeys. Logs and result
-bundles are in `/tmp/YabrFI2`.
+FI2 logs and result bundles are in `/tmp/YabrFI2`. FI3's broader
+format and restart matrix is recorded below.
 
 ### FI2 startup file identity follow-up
 
@@ -182,6 +181,102 @@ built successfully. Logs are `scan-identity-complete.log` and
 `scan-identity-catalyst.log` in `/tmp/YabrFI2`. The filename swap used
 the production scan on the simulator with isolated files and Realm.
 A native Files swap and full app restart were outside this run.
+
+## Local File Consistency FI3 (2026-11-13)
+
+FI3 starts from main `0c83b48f`, which merged FI2 in PR #155. Its
+native EPUB fixture found two issues. After a successful overwrite,
+FolioReader showed the original chapter under the replacement book's
+title. The loopback resource URL used the filename, and WebKit could
+reuse the old response. Local Folio resources now use a runtime name
+derived from the canonical book ID. Position, bookmark and highlight
+providers still resolve their inputs to the canonical repository ID.
+The filename remains accepted as a compatibility alias. Calibre book
+resource names keep their existing behavior.
+
+The second baseline saved an active reader snapshot, terminated the
+app, swapped two EPUBs and verified their SHA-256 hashes. Relaunch did
+not mount the reader. Bootstrap now signals completion after the
+shelf and local file reconciliation finish. The app restores readers
+when SwiftUI observes the ready state and the scene is active. The
+restored reader resolves the reconciled filename. The fixed fixture
+showed the same replacement EPUB before and after the swap and both
+book IDs in Browse afterward. The swap was performed by an isolated
+fixture while the app was stopped. The import itself used Files.
+
+FI1 retains its staged file install, throwing Realm commit and
+in-process compensation. FI2 serializes file work and publishes only
+committed changes, pins publication results to the current operation
+and file, and reconciles startup paths by content ID. FI3 adds coverage
+for removal retry and clearing one format on an existing multiformat
+row. Clearing that format preserves the other file, book, reading
+position and bookmark.
+
+The native Files, duplicate, overwrite, As New, actual reader content,
+relaunch, deletion and empty-library relaunch flow passed for EPUB,
+PDF and CBZ on iPhone 17 (iOS 26.5) and iPhone 7 (iOS 15.5). Both
+phones exercised overwrite failure and Retry for EPUB. iPhone 7 used
+the existing Readium PDF fallback. iPad mini passed the same EPUB
+journey at the largest accessibility text size. The iPad run used a
+full window. A narrow multitasking window was outside this run.
+
+Final iPhone 17 units ran 1,200 tests with 1,176 passing, two existing
+expected PDFKit failures, 22 skips and zero unexpected failures. Four
+normal UI journeys passed. Standard iOS Simulator Release and Mac
+Catalyst builds passed. The standard Release binary had no fixture
+markers. Real Calibre 9.18 passed 20 of 21 contracts. A read-only
+user's reading-position write returned HTTP 403. The fixed CI version
+is Calibre 9.11.0, whose local run is still unverified.
+
+Remaining verification includes physical devices, a manual rename in
+the Files app, power loss during file installation and Catalyst or
+Calibre Helper GUI interaction. The complete logs, result bundles,
+generated fixtures and screenshots are in `/tmp/YabrFI3`.
+
+
+### FI3 startup availability follow-up
+
+The red UI fixture held the real file worker immediately before the
+first startup hash. Its control endpoint confirmed the worker was
+waiting. The app still showed the full-screen database upgrade view
+and Settings never appeared. The fixture used a normal cold launch
+and an isolated persistent library.
+
+The database now exposes the main UI when Realm and the runtime
+repositories are ready. Local file reconciliation completes
+separately. The scene can show Settings and other tabs while the
+worker runs. Local Read, Preview, history and deletion are guarded
+until the scan finishes. A Files import submitted during the scan
+waits for the local library while retaining access to the source URL.
+A failed scan keeps unverified local files guarded. Files which could
+not be checked during an otherwise successful scan cannot be restored.
+
+Only an active scene attempts automatic restore. The session manager
+checks the verified path and content ID, consumes restoration once
+across scenes and yields to an explicit reader action. It releases
+the verified path inventory after restoration. File commits and
+publication parsing keep the FI1/FI2 ownership rules.
+
+The original fixture failed on iPhone 17 with the real scan held.
+On the fixed Release fixture, iPhone 17 and iPhone 7 each passed two
+native journeys. With no saved reader, Settings opened before
+releasing the scan. With a saved reader and two swapped EPUB files,
+Settings and foregrounding worked while the scan was held, a local
+shelf tap showed the file-check notice, and the correct EPUB opened
+after release. Closing the reader and foregrounding again did not
+restore it a second time. The swap used prepared fixture files and
+a real relaunch. The runner checked both hashes.
+
+The focused 210 tests passed, including failed-scan restoration,
+repeated restore across view models and manual reader precedence.
+The final full iPhone 17 suite ran 1,203 tests with 22 skips, two
+expected PDFKit failures and zero unexpected failures. Standard iOS
+Simulator Release and Mac Catalyst built successfully. Logs and
+result bundles are in `/tmp/YabrFI3/launch-review`. The device UI
+runs preceded minor final safety refinements, which the final unit
+suite and builds included. No narrow-window or real multi-scene
+UI run was performed for this follow-up.
+
 
 ## Cache Consistency CC1 (2026-11-12)
 

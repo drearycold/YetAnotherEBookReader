@@ -70,6 +70,7 @@ final class DatabaseBootstrapper {
         container.serverManager.populateServers()
         container.libraryManager.populateLibraries()
         let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library")
+        if scanLocalFiles && !isUITestingMockLibrary { container.libraryManager.beginStartupScan() }
         container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
             guard let container = container else { return }
 
@@ -92,8 +93,10 @@ final class DatabaseBootstrapper {
         if skip {
             container.publishCalibreUpdate(.shelf)
         } else {
-            container.libraryManager.populateLocalLibraryBooks(scan: scan) { [weak container] in
-                container?.publishCalibreUpdate(.shelf)
+            container.libraryManager.populateLocalLibraryBooks(scan: scan) { [weak container] result in
+                guard let container else { return }
+                if scan { container.libraryManager.finishStartupScan(result) }
+                container.publishCalibreUpdate(.shelf)
             }
         }
     }

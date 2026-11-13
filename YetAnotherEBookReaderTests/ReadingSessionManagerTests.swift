@@ -409,6 +409,7 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertTrue(persistenceStore.snapshots.isEmpty)
     }
 
+    @MainActor
     func testRestorePersistedReaderPresentationsUsesSavedReaderTypePosition() throws {
         let book = try makeRestorableBook(id: 321, title: "Restore Reader Type")
         var yabrPosition = TestFixtures.makeReadingPosition(
@@ -447,6 +448,7 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(restored.first?.readerInfo.position.lastReadPage, 12)
     }
 
+    @MainActor
     func testRestorePersistedReaderPresentationsSkipsInvalidSnapshotsAndCleansStore() throws {
         let validBook = try makeRestorableBook(id: 331, title: "Valid Restore Reader")
         let validID = UUID()
@@ -480,6 +482,56 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(persistenceStore.snapshots.first?.isActive, true)
     }
 
+    @MainActor
+    func testLocalReaderRestorationWaitsForVerifiedBindingAndRunsOnce() throws {
+        let book = try makeRestorableBook(id: 332, title: "Local Restore")
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        let snapshot = ReaderPresentationSnapshot(id: UUID(), bookInShelfId: book.inShelfId,
+                                                  format: .EPUB, readerType: .YabrEPUB, source: .shelf,
+                                                  isActive: true, order: 0)
+        persistenceStore.saveReaderPresentationSnapshots([snapshot])
+        let library = container.libraryManager
+        library.beginStartupScan()
+        XCTAssertTrue(manager.restorePersistedReaderPresentationsIfNeeded().isEmpty)
+        XCTAssertEqual(persistenceStore.snapshots, [snapshot])
+        library.finishStartupScan(.init(verifiedFiles: [url.standardizedFileURL: book.id]))
+        XCTAssertEqual(manager.restorePersistedReaderPresentationsIfNeeded().map(\.id), [snapshot.id])
+        XCTAssertTrue(manager.restorePersistedReaderPresentationsIfNeeded().isEmpty)
+    }
+
+    @MainActor
+    func testFailedStartupScanDoesNotRestoreAnUnverifiedLocalReader() throws {
+        let book = try makeRestorableBook(id: 333, title: "Unverified Restore")
+        persistenceStore.saveReaderPresentationSnapshots([
+            .init(id: UUID(), bookInShelfId: book.inShelfId, format: .EPUB, readerType: .YabrEPUB,
+                  source: .shelf, isActive: true, order: 0)
+        ])
+        let library = container.libraryManager
+        library.beginStartupScan()
+        library.finishStartupScan(nil)
+        XCTAssertNotNil(library.localFileAccessNotice(for: book))
+        XCTAssertTrue(manager.restorePersistedReaderPresentationsIfNeeded().isEmpty)
+    }
+
+    @MainActor
+    func testManualReaderOpenAndCloseWinsOverDeferredRestore() throws {
+        let book = try makeRestorableBook(id: 334, title: "Manual Restore Override")
+        let url = try XCTUnwrap(getSavedUrl(book: book, format: .EPUB))
+        let saved = ReaderPresentationSnapshot(id: UUID(), bookInShelfId: book.inShelfId,
+                                               format: .EPUB, readerType: .YabrEPUB, source: .shelf,
+                                               isActive: true, order: 0)
+        let library = container.libraryManager
+        library.beginStartupScan()
+        let presentation = manager.openReader(book: book, readerInfo: makeReaderInfo(book: book), source: .shelf)
+        manager.closeReader(id: presentation.id)
+        // Simulate a saved tab becoming available after the manual action.
+        persistenceStore.saveReaderPresentationSnapshots([saved])
+        library.finishStartupScan(.init(verifiedFiles: [url.standardizedFileURL: book.id]))
+        XCTAssertTrue(manager.restorePersistedReaderPresentationsIfNeeded().isEmpty)
+        XCTAssertTrue(persistenceStore.snapshots.isEmpty)
+    }
+
+    @MainActor
     func testRestorePersistedDuplicateReaderPresentationsDoesNotMergeTabs() throws {
         let book = try makeRestorableBook(id: 341, title: "Duplicate Restore Reader")
         let firstID = UUID()

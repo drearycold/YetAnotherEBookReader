@@ -110,6 +110,9 @@ class EpubFolioReaderContainer: FolioReaderContainer {
 
 extension EpubFolioReaderContainer: FolioReaderDelegate {
     func folioReader(_ folioReader: FolioReader, didFinishedLoading book: FRBook) {
+        if let calibreBook, calibreBook.library.server.isLocal, let readerInfo {
+            book.name = FolioReaderBookIdentity(book: calibreBook, readerInfo: readerInfo).folioReaderBookId + ".epub"
+        }
         let centerDelegate = MyFolioReaderCenterDelegate()
         centerDelegate.pageDidAppearHandler = { [weak self] page in
             self?.uiTestingPositionLabel?.text = "Page \(page.pageNumber)"

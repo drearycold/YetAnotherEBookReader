@@ -647,7 +647,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let completion = expectation(description: "Local scan completed")
         var completionCount = 0
         var completionWasOnMainThread = false
-        libraryManager.populateLocalLibraryBooks {
+        libraryManager.populateLocalLibraryBooks { _ in
             completionCount += 1
             completionWasOnMainThread = Thread.isMainThread
             completion.fulfill()

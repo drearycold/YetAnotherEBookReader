@@ -261,6 +261,10 @@ class BookDetailViewModel: ObservableObject {
         guard let container, pendingReading == nil,
               loadedBookId == nil || loadedBookId == book.inShelfId else { return }
         alertItem = nil
+        if let notice = container.libraryManager.localFileAccessNotice(for: book) {
+            alertItem = notice
+            return
+        }
 
         if let info = cachedReaderInfo(for: book) {
             if !book.inShelf { container.bookManager.addToShelf(book: book, formats: [info.format]) }
@@ -493,6 +497,10 @@ class BookDetailViewModel: ObservableObject {
         cancelRefresh()
         closePreview()
         guard let container, let reader = ReaderType.readers(for: format).first else { return false }
+        if let notice = container.libraryManager.localFileAccessNotice(for: book) {
+            alertItem = notice
+            return false
+        }
         guard formatInfo.cached, let url = getSavedUrl(book: book, format: format), fileExists(url) else {
             updateReadableFile()
             alertItem = AlertItem(id: "Cannot locate book file", msg: book.library.server.isLocal

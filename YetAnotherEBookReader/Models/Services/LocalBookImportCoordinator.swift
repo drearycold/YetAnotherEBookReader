@@ -70,6 +70,11 @@ final class LocalBookImportCoordinator: @unchecked Sendable {
         var replacedPaths = Set<URL>()
     }
 
+    struct ScanResult {
+        let verifiedFiles: [URL: Int32]
+        var unverifiedFiles: Set<URL> = []
+    }
+
     private struct FileVersion: Equatable, Sendable {
         let inode: UInt64
         let device: UInt64
@@ -161,9 +166,6 @@ final class LocalBookImportCoordinator: @unchecked Sendable {
     @MainActor
     func run(_ request: LocalBookImportRequest, scope: Scope, publish: @escaping Publish,
              coverCache: BookCoverCaching?) async -> BookImportInfo {
-        // Hold access from submission until the queued worker has finished all source I/O.
-        let accessed = request.url.startAccessingSecurityScopedResource()
-        defer { if accessed { request.url.stopAccessingSecurityScopedResource() } }
         return await enqueue(scope: scope, work: { [self] cancelled in
             importFile(request, scope: scope, cancelled: cancelled)
         }, finish: { [self] outcome in
@@ -196,16 +198,17 @@ final class LocalBookImportCoordinator: @unchecked Sendable {
     }
 
     @MainActor
-    func scan(scope: Scope, publish: @escaping Publish, coverCache: BookCoverCaching?) async {
+    func scan(scope: Scope, publish: @escaping Publish, coverCache: BookCoverCaching?) async -> ScanResult? {
         await enqueue(scope: scope, work: { [self] cancelled in
             scanFiles(scope: scope, cancelled: cancelled)
         }, finish: { [self] scan in
-            guard scope.isCurrent() else { return }
+            guard scope.isCurrent(), let scan else { return nil }
             retireEnrichments(bookIDs: scan.changes.removedIDs, paths: scan.changes.replacedPaths, coverCache: coverCache)
             publish(scan.changes)
             for publication in scan.publications {
                 startEnrichment(publication, scope: scope, publish: publish, coverCache: coverCache)
             }
+            return scan.result
         })
     }
 
@@ -300,7 +303,8 @@ final class LocalBookImportCoordinator: @unchecked Sendable {
             let existingBook = try book(sourceID, scope: scope)
             if let existingBook, existingBook.inShelf,
                let info = existingBook.formats[format.rawValue], info.cached, let filename = info.filename,
-               FileManager.default.isReadableFile(atPath: scope.directory.appendingPathComponent(filename).path) {
+               (sameFile && filename == destination.lastPathComponent
+                || localBookID(scope.directory.appendingPathComponent(filename)) == sourceID) {
                 return ImportOutcome(info: result, changes: Changes(savedBooks: [existingBook]))
             }
 
@@ -524,7 +528,8 @@ extension LocalBookImportCoordinator {
         let version: FileVersion
     }
 
-    private func scanFiles(scope: Scope, cancelled: () -> Bool) -> (changes: Changes, publications: [Publication]) {
+    private func scanFiles(scope: Scope, cancelled: () -> Bool)
+        -> (changes: Changes, publications: [Publication], result: ScanResult)? {
         var changes = Changes()
         var publications = [Publication]()
         let directory = scope.directory.standardizedFileURL
@@ -534,19 +539,35 @@ extension LocalBookImportCoordinator {
                 enumerationFailed = true
                 return false
             }
-        ) else { return (changes, publications) }
+        ) else { return nil }
 
         var inventory = [Int32: [Format: [ScannedFile]]]()
         var claimedPaths = Set<String>()
         var uncertainPaths = Set<String>()
         for case let url as URL in paths {
-            if cancelled() { return (Changes(), []) }
+            if cancelled() { return nil }
             if url.lastPathComponent.hasPrefix(".dsreader-file-") {
                 paths.skipDescendants()
                 continue
             }
             guard let format = Format(rawValue: url.pathExtension.uppercased()), format != .UNKNOWN else { continue }
             let filename = String(url.standardizedFileURL.path.dropFirst(directory.path.count + 1))
+            #if FI3_STARTUP_UI_TEST_FIXTURE
+            if ProcessInfo.processInfo.environment["YABR_FI3_HOLD_SCAN"] == "1",
+               UITestingConfiguration.skipsConsentPrompts(),
+               let directory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                                                           appropriateFor: nil, create: false) {
+                let entered = directory.appendingPathComponent(".fi3-scan-entered")
+                let release = directory.appendingPathComponent(".fi3-release-scan")
+                try? Data().write(to: entered)
+                // The worker waits for the harness, which owns the isolated app's container.
+                let deadline = Date().addingTimeInterval(120)
+                while !FileManager.default.fileExists(atPath: release.path) {
+                    guard !cancelled(), Date() < deadline else { return nil }
+                    Thread.sleep(forTimeInterval: 0.02)
+                }
+            }
+            #endif
             guard let version = try? FileVersion(url), let id = localBookID(url),
                   (try? FileVersion(url)) == version else {
                 uncertainPaths.insert(filename)
@@ -556,8 +577,9 @@ extension LocalBookImportCoordinator {
             inventory[id, default: [:]][format, default: []].append(file)
             claimedPaths.insert(filename)
         }
-        guard !enumerationFailed else { return (Changes(), []) }
+        guard !enumerationFailed, !cancelled() else { return nil }
 
+        var verifiedFiles = [URL: Int32]()
         do {
             let existingBooks = try repository.localFileBooks(scope: scope.storage)
             let existingByID = Dictionary(uniqueKeysWithValues: existingBooks.map { ($0.id, $0) })
@@ -573,6 +595,7 @@ extension LocalBookImportCoordinator {
                     let previous = found.formats[format.rawValue]
                     // Keep the recorded path only if the scan proved it contains this book.
                     let chosen = candidates.first { $0.filename == previous?.filename } ?? first
+                    verifiedFiles[chosen.url.standardizedFileURL] = id
                     guard previous?.filename != chosen.filename || previous?.cached != true
                           || previous?.cacheSize != chosen.version.size || previous?.cacheMTime != chosen.version.modified
                     else { continue }
@@ -653,9 +676,10 @@ extension LocalBookImportCoordinator {
             }
         } catch {
             logger.debug("Could not reconcile local library files")
-            return (Changes(), [])
+            return nil
         }
-        return (changes, publications)
+        let unverifiedFiles = Set(uncertainPaths.map { directory.appendingPathComponent($0).standardizedFileURL })
+        return (changes, publications, ScanResult(verifiedFiles: verifiedFiles, unverifiedFiles: unverifiedFiles))
     }
 
     @MainActor

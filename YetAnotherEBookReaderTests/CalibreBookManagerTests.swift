@@ -456,7 +456,10 @@ final class LocalFileCommitTests: XCTestCase {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         var files = LocalBookFileOperations()
-        files.remove = { _ in throw CocoaError(.fileWriteNoPermission) }
+        files.remove = { url in
+            if url == fixture.destination { throw CocoaError(.fileWriteNoPermission) }
+            try FileManager.default.removeItem(at: url)
+        }
         let manager = fixture.manager(files: files)
         let signals = fixture.container.calibreUpdates()
         let deleted = expectation(description: "Failed removal does not publish deleted")
@@ -477,6 +480,12 @@ final class LocalFileCommitTests: XCTestCase {
         XCTAssertTrue(fixture.repository.getBook(id: fixture.oldBook.inShelfId)?.formats["PDF"]?.cached == true)
         XCTAssertTrue(manager.booksInShelf[fixture.oldBook.inShelfId]?.formats["PDF"]?.cached == true)
         await fulfillment(of: [deleted], timeout: 0.25)
+        observer.cancel()
+
+        let retry = await fixture.manager().removeLocalFile(book: fixture.oldBook, format: .PDF)
+        XCTAssertEqual(retry, .committed())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        XCTAssertNil(fixture.repository.getBook(id: fixture.oldBook.inShelfId))
     }
 
     func testPostCommitLibraryCleanupDoesNotRecreateDeletedRecords() async throws {
@@ -591,6 +600,32 @@ final class LocalFileCommitTests: XCTestCase {
         XCTAssertEqual(first.bookId, second.bookId)
         XCTAssertEqual(try Data(contentsOf: fixture.destination), fixture.oldBytes)
         XCTAssertEqual(manager.booksInShelf.count, 1)
+    }
+
+    func testRemovingOneLocalFormatKeepsTheOtherFormatAndReadingState() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        try fixture.removeSeedBook()
+        let book = try await fixture.importEPUB(named: "Two Formats.epub", content: "Two Formats")
+        let epub = fixture.libraryDirectory.appendingPathComponent("Two Formats.epub")
+        let bytes = try Data(contentsOf: epub)
+        // Seed a second format on this record to exercise an existing multiformat Realm row.
+        try fixture.newBytes.write(to: fixture.destination)
+        var multi = book
+        multi.formats["PDF"] = FormatInfo(filename: fixture.destination.lastPathComponent,
+                                           serverSize: UInt64(fixture.newBytes.count), serverMTime: .distantPast,
+                                           cached: true, cacheSize: UInt64(fixture.newBytes.count), cacheMTime: .distantPast)
+        fixture.repository.saveBook(multi)
+        let manager = fixture.manager()
+        manager.booksInShelf[multi.inShelfId] = multi
+        let removed = await manager.removeLocalFile(book: multi, format: .PDF)
+        XCTAssertEqual(removed, .committed())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        XCTAssertEqual(try Data(contentsOf: epub), bytes)
+        XCTAssertEqual(fixture.repository.getBook(id: book.inShelfId)?.formats["PDF"]?.cached, false)
+        try assertIndexed(book, at: epub, fixture: fixture)
+        XCTAssertEqual(manager.booksInShelf[book.inShelfId]?.formats["EPUB"]?.cached, true)
+        try assertBrowseIDs([book.id], fixture: fixture)
     }
 
     func testCleanupFailureReportsACommittedImportAndSaveAsNewKeepsBothBooks() async throws {

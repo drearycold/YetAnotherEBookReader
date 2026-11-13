@@ -983,6 +983,230 @@ final class CalibreOnboardingUITests: XCTestCase {
         capture("fi1-overwrite-retried-and-save-as-new")
     }
 
+
+    func testLocalImportFormatsSurviveRestartAndDeletion() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipIf(environment["YABR_FI3_NATIVE"] != "1", "Requires isolated FI3 Files fixtures")
+        let format = try XCTUnwrap(environment["YABR_FI3_FORMAT"])
+        let originalID = try XCTUnwrap(environment["YABR_FI3_ORIGINAL_ID"])
+        let replacementID = try XCTUnwrap(environment["YABR_FI3_REPLACEMENT_ID"])
+        let asNewID = try XCTUnwrap(environment["YABR_FI3_AS_NEW_ID"])
+
+        openLocalLibrary()
+        importFI3Fixture(format, variant: "Original", empty: true)
+        element("Read").tap()
+        verifyFI3Reader(format, variant: "Original")
+        closeReaderWorkspace()
+
+        app.terminate()
+        app.launch()
+        openLocalLibrary()
+        verifyLocalBooks([originalID])
+        importFI3Fixture(format, variant: "Original")
+        element("Imported, read now?")
+        element("Cancel").tap()
+        openLocalLibrary()
+        verifyLocalBooks([originalID])
+
+        importFI3Fixture(format, variant: "Replacement")
+        element("Overwrite").tap()
+        if environment["YABR_FI1_FAIL_OVERWRITE"] == "1" {
+            element("Import Failed")
+            verifyLocalBooks([originalID])
+            element("Retry").tap()
+        }
+        element("Read").tap()
+        verifyFI3Reader(format, variant: "Replacement")
+        closeReaderWorkspace()
+        openLocalLibrary()
+        verifyLocalBooks([replacementID])
+
+        importFI3Fixture(format, variant: "As New")
+        element("As a new book").tap()
+        element("Read").tap()
+        verifyFI3Reader(format, variant: "As New")
+        app.terminate()
+        app.launch()
+        verifyFI3Reader(format, variant: "As New")
+        closeReaderWorkspace()
+        openLocalLibrary()
+        verifyLocalBooks([replacementID, asNewID])
+
+        deleteLocalBook(id: replacementID)
+        deleteLocalBook(id: asNewID)
+        openLocalLibrary()
+        element("browse.local.import")
+        app.terminate()
+        app.launch()
+        openLocalLibrary()
+        element("browse.local.import")
+    }
+
+    func testPersistedReaderOpensOriginalContentAfterExternalFilenameSwap() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_FI3_SWAP_CONTROL_URL"] == nil,
+                      "Requires the isolated FI3 file swap fixture")
+        openLocalLibrary()
+        importFI3Fixture("EPUB", variant: "Original", empty: true)
+        element("Imported, read now?")
+        element("Cancel").tap()
+        openLocalLibrary()
+        importFI3Fixture("EPUB", variant: "Replacement")
+        element("As a new book").tap()
+        element("Read").tap()
+        verifyFI3Reader("EPUB", variant: "Replacement")
+        app.terminate()
+        try configureFixture("swap", environmentKey: "YABR_FI3_SWAP_CONTROL_URL")
+        let holdsScan = ProcessInfo.processInfo.environment["YABR_FI3_SCAN_CONTROL_URL"] != nil
+        if holdsScan { app.launchEnvironment["YABR_FI3_HOLD_SCAN"] = "1" }
+        app.launch()
+        if holdsScan {
+            try configureFixture("entered", environmentKey: "YABR_FI3_SCAN_CONTROL_URL")
+            XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+            app.tabBars.buttons["Settings"].firstMatch.tap()
+            element("screen.settings")
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+            app.tabBars.buttons["Recent"].firstMatch.tap()
+            let id = try XCTUnwrap(ProcessInfo.processInfo.environment["YABR_FI3_REPLACEMENT_ID"])
+            let book = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.\(id)^")).firstMatch
+            XCTAssertTrue(book.waitForExistence(timeout: 15), app.debugDescription)
+            book.tap()
+            let notice = app.alerts["Checking Local Library"].firstMatch
+            XCTAssertTrue(notice.waitForExistence(timeout: 10), app.debugDescription)
+            notice.buttons["OK"].tap()
+            XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+            try configureFixture("release", environmentKey: "YABR_FI3_SCAN_CONTROL_URL")
+        }
+        verifyFI3Reader("EPUB", variant: "Replacement")
+        closeReaderWorkspace()
+        openLocalLibrary()
+        let environment = ProcessInfo.processInfo.environment
+        verifyLocalBooks([try XCTUnwrap(environment["YABR_FI3_ORIGINAL_ID"]),
+                          try XCTUnwrap(environment["YABR_FI3_REPLACEMENT_ID"])])
+        if holdsScan {
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertFalse(app.webViews["reader.folio.content"].exists)
+        }
+    }
+
+    func testStartupTabsAreUsableWhileLocalScanIsHeld() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_FI3_SCAN_CONTROL_URL"] == nil,
+                      "Requires an isolated local-file scan fixture")
+        openLocalLibrary()
+        importFI3Fixture("EPUB", variant: "Original", empty: true)
+        element("Imported, read now?")
+        element("Cancel").tap()
+        app.terminate()
+        app.launchEnvironment["YABR_FI3_HOLD_SCAN"] = "1"
+        app.launch()
+        try configureFixture("entered", environmentKey: "YABR_FI3_SCAN_CONTROL_URL")
+        defer { try? configureFixture("release", environmentKey: "YABR_FI3_SCAN_CONTROL_URL") }
+        let settings = app.tabBars.buttons["Settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), app.debugDescription)
+        settings.tap()
+        element("screen.settings")
+    }
+
+    private func openLocalLibrary() {
+        let welcome = app.descendants(matching: .any).matching(identifier: "welcome.browse").firstMatch
+        if welcome.exists { welcome.tap() }
+        let browse = app.tabBars.buttons["Browse"].firstMatch
+        XCTAssertTrue(browse.waitForExistence(timeout: 30), app.debugDescription)
+        if !browse.isSelected { browse.tap() }
+        if !browse.isSelected { browse.tap() }
+        if app.navigationBars["Library Browser"].exists { element("Local Library").tap() }
+        element("screen.browse.book-list")
+    }
+
+    private func importFI3Fixture(_ format: String, variant: String, empty: Bool = false) {
+        element(empty ? "browse.local.import" : "browse.local.add").tap()
+        let icon = CGVector(dx: 0.5, dy: 0.25)
+        func tapIcon(_ cell: XCUIElement) {
+            let image = cell.images.firstMatch
+            if image.isHittable { image.tap() }
+            else { cell.coordinate(withNormalizedOffset: icon).tap() }
+        }
+        func cell(_ name: String) -> XCUIElement {
+            app.cells.matching(NSPredicate(format: "label BEGINSWITH[c] %@", name)).firstMatch
+        }
+        let folder = cell("\(format) \(variant)")
+        if !folder.waitForExistence(timeout: 3) {
+            let location = app.cells.matching(NSPredicate(format: "identifier BEGINSWITH %@", "DOC.sidebar.item.On My ")).firstMatch
+            if location.exists { location.tap() }
+            let appFolder = cell("D.S.Reader FI3")
+            for _ in 0..<5 where !appFolder.isHittable {
+                let files = app.collectionViews["File View"].firstMatch
+                if files.exists { files.swipeUp() }
+            }
+            if appFolder.exists { tapIcon(appFolder) }
+            let incoming = cell("Incoming")
+            if incoming.waitForExistence(timeout: 5) { tapIcon(incoming) }
+        }
+        XCTAssertTrue(folder.waitForExistence(timeout: 12), app.debugDescription)
+        tapIcon(folder)
+        let file = cell("FI3 \(format)")
+        XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
+        tapIcon(file)
+    }
+
+    private func verifyLocalBooks(_ ids: [String]) {
+        for id in ids { element("browse.book.\(id)") }
+        let count = app.staticTexts["\(ids.count) / \(ids.count)"].firstMatch
+        XCTAssertTrue(count.waitForExistence(timeout: 15), app.debugDescription)
+    }
+
+    private func verifyFI3Reader(_ format: String, variant: String) {
+        if format == "EPUB" {
+            element("reader.folio.content")
+            let text = app.staticTexts["EPUB \(variant.uppercased()) BODY"].firstMatch
+            XCTAssertTrue(text.waitForExistence(timeout: 20), app.debugDescription)
+        } else {
+            let close = app.buttons.matching(NSPredicate(format: "label == 'Close'")).firstMatch
+            XCTAssertTrue(close.waitForExistence(timeout: 20), app.debugDescription)
+            let size = app.frame.size
+            // The comic label can cross the center on compact displays.
+            let point = CGPoint(x: size.width * 0.28, y: size.height * 0.32)
+            let expected: (Int, Int, Int)
+            switch variant {
+            case "Original": expected = (255, 176, 184)
+            case "Replacement": expected = (158, 214, 255)
+            default: expected = (175, 232, 158)
+            }
+            let rendered = NSPredicate { _, _ in
+                let image = XCUIScreen.main.screenshot().image
+                guard let pixels = image.cgImage,
+                      let sample = pixels.cropping(to: CGRect(x: point.x * image.scale, y: point.y * image.scale, width: 1, height: 1))
+                else { return false }
+                var rgba = [UInt8](repeating: 0, count: 4)
+                guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+                      let context = CGContext(data: &rgba, width: 1, height: 1, bitsPerComponent: 8,
+                                              bytesPerRow: 4, space: colorSpace,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                else { return false }
+                context.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+                return abs(Int(rgba[0]) - expected.0) < 40 && abs(Int(rgba[1]) - expected.1) < 40 &&
+                    abs(Int(rgba[2]) - expected.2) < 40
+            }
+            let visible = XCTNSPredicateExpectation(predicate: rendered, object: nil)
+            let outcome = XCTWaiter.wait(for: [visible], timeout: 30)
+            if outcome != .completed { capture("fi3-\(format)-\(variant)-render-timeout") }
+            XCTAssertEqual(outcome, .completed, app.debugDescription)
+        }
+        capture("fi3-\(format)-\(variant)-content")
+    }
+
+    private func deleteLocalBook(id: String) {
+        app.tabBars.buttons["Recent"].firstMatch.tap()
+        let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.options.\(id)^")).firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 15), app.debugDescription)
+        options.tap()
+        element("Delete").tap()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: options)
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 15), .completed, app.debugDescription)
+    }
+
     func testBrowseKeepsCachedBooksThroughAnOfflineSearchAndReconnects() throws {
         let control = "YABR_CC3_CONTROL_URL"
         try XCTSkipIf(ProcessInfo.processInfo.environment[control] == nil, "Requires the isolated Browse loopback fixture")

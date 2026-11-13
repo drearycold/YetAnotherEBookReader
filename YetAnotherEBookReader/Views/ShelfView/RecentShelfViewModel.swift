@@ -9,6 +9,7 @@ import UIKit
 import SwiftUI
 
 enum RecentShelfAlert: Identifiable {
+    case localLibraryCheck(AlertItem)
     case missingFormat(book: CalibreBook, format: Format)
     case downloadingFormat(book: CalibreBook, format: Format)
     case deleteConfirm(bookIds: Set<String>)
@@ -18,6 +19,8 @@ enum RecentShelfAlert: Identifiable {
     
     var id: String {
         switch self {
+        case .localLibraryCheck(let notice):
+            return notice.id
         case .missingFormat(let book, let format):
             return "missing-\(book.id)-\(format.rawValue)"
         case .downloadingFormat(let book, let format):
@@ -161,6 +164,10 @@ final class RecentShelfViewModel: ObservableObject {
         }
 
         guard let book = container.bookManager.booksInShelf[bookId] else { return }
+        if let notice = container.libraryManager.localFileAccessNotice(for: book) {
+            activeAlert = .localLibraryCheck(notice)
+            return
+        }
 
         let readerInfo = container.sessionManager.prepareBookReading(book: book)
 
@@ -186,6 +193,10 @@ final class RecentShelfViewModel: ObservableObject {
     }
 
     func openReader(book: CalibreBook, readerInfo: ReaderInfo) {
+        if let notice = container.libraryManager.localFileAccessNotice(for: book, format: readerInfo.format) {
+            activeAlert = .localLibraryCheck(notice)
+            return
+        }
         container.openReader(
             book: book,
             readerInfo: readerInfo,
@@ -195,6 +206,10 @@ final class RecentShelfViewModel: ObservableObject {
     }
 
     func openReader(book: CalibreBook, readerInfo: ReaderInfo, at position: BookDeviceReadingPosition) {
+        if let notice = container.libraryManager.localFileAccessNotice(for: book, format: readerInfo.format) {
+            activeAlert = .localLibraryCheck(notice)
+            return
+        }
         container.openReader(
             book: book,
             readerInfo: container.sessionManager.prepareBookReading(book: book, at: position, fallback: readerInfo),

@@ -373,6 +373,7 @@ class CalibreBookManager {
     func clearCache(inShelfId: String) async -> BookFileRemovalResult {
         guard let book = booksInShelf[inShelfId] else { return .committed() }
         if book.library.server.isLocal {
+            guard container?.libraryManager.localFileAccessNotice(for: book) == nil else { return .storageFailed }
             guard let scope = localImportScope(), scope.library.id == book.library.id else { return .storageFailed }
             return await localImports.remove(bookID: inShelfId, scope: scope, publish: localFilePublisher,
                                              coverCache: localCoverCache)
@@ -517,15 +518,23 @@ class CalibreBookManager {
         var result = BookImportInfo(request: request)
         guard request.url.isFileURL else { return result.with(error: .protocolUnsupported) }
         guard !request.overwrite || !request.asNew else { return result.with(error: .invalidArg) }
+        // An external Files URL can arrive before the startup worker has established the library.
+        let accessed = request.url.startAccessingSecurityScopedResource()
+        defer { if accessed { request.url.stopAccessingSecurityScopedResource() } }
+        if let libraryManager = container?.libraryManager, libraryManager.startupScan.isPending {
+            for await pending in libraryManager.startupScanChanges() where !pending { break }
+            guard !Task.isCancelled else { return result.with(error: .cancelled) }
+        }
         guard let scope = localImportScope() else { return result.with(error: .libraryAbsent) }
         return await localImports.run(request, scope: scope, publish: localFilePublisher,
                                       coverCache: localCoverCache)
     }
 
+    @discardableResult
     @MainActor
-    func scanLocalBooks() async {
-        guard let scope = localImportScope() else { return }
-        await localImports.scan(scope: scope, publish: localFilePublisher, coverCache: localCoverCache)
+    func scanLocalBooks() async -> LocalBookImportCoordinator.ScanResult? {
+        guard let scope = localImportScope() else { return nil }
+        return await localImports.scan(scope: scope, publish: localFilePublisher, coverCache: localCoverCache)
     }
 
     @MainActor
