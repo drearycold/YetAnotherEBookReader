@@ -38,6 +38,14 @@ class DatabaseService: ObservableObject {
         configurationLock.withLock { cacheConfiguration }
     }
 
+    /// Keep a short, synchronous write on the pinned database through its commit.
+    func withCurrentConfiguration<T>(_ id: UUID, _ write: () throws -> T) throws -> T {
+        try configurationLock.withLock {
+            guard cacheConfiguration?.id == id else { throw ImportError.cancelled }
+            return try write()
+        }
+    }
+
     func cacheConfigurationChanges() -> AsyncStream<Void> {
         cacheConfigurationBroadcaster.stream(initialValue: (), bufferingPolicy: .bufferingNewest(1))
     }

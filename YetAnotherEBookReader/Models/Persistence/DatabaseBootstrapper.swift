@@ -36,7 +36,7 @@ final class DatabaseBootstrapper {
     /// cannot be opened. On throw, the caller should leave the database runtime's
     /// main Realm nil so the upgrade UI stays visible.
     @MainActor
-    func bootstrap(realmConf: Realm.Configuration) throws {
+    func bootstrap(realmConf: Realm.Configuration, scanLocalFiles: Bool = true) throws {
         let bootstrapSignpost = AppPerformanceSignpost.begin("DatabaseBootstrap")
         defer {
             AppPerformanceSignpost.end("DatabaseBootstrap", bootstrapSignpost)
@@ -73,33 +73,29 @@ final class DatabaseBootstrapper {
         container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
             guard let container = container else { return }
 
-            if isUITestingMockLibrary {
-                if Thread.isMainThread {
-                    MainActor.assumeIsolated {
-                        container.publishCalibreUpdate(.shelf)
-                    }
-                } else {
-                    Task { @MainActor in
-                        container.publishCalibreUpdate(.shelf)
-                    }
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    Self.populateLocalLibrary(in: container, skip: isUITestingMockLibrary, scan: scanLocalFiles)
                 }
-                return
-            }
-
-            container.libraryManager.populateLocalLibraryBooks {
-                if Thread.isMainThread {
-                    MainActor.assumeIsolated {
-                        container.publishCalibreUpdate(.shelf)
-                    }
-                } else {
-                    Task { @MainActor in
-                        container.publishCalibreUpdate(.shelf)
-                    }
+            } else {
+                Task { @MainActor in
+                    Self.populateLocalLibrary(in: container, skip: isUITestingMockLibrary, scan: scanLocalFiles)
                 }
             }
         }
 
         migrateLegacyReadPosData()
+    }
+
+    @MainActor
+    private static func populateLocalLibrary(in container: AppContainerProtocol, skip: Bool, scan: Bool) {
+        if skip {
+            container.publishCalibreUpdate(.shelf)
+        } else {
+            container.libraryManager.populateLocalLibraryBooks(scan: scan) { [weak container] in
+                container?.publishCalibreUpdate(.shelf)
+            }
+        }
     }
 
     /// Background-task that copies legacy readPosData out of CalibreBookRealm

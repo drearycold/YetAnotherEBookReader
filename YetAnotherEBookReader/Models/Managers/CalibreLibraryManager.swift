@@ -81,25 +81,16 @@ class CalibreLibraryManager {
         calibreLibraries = tempLibraries
     }
 
-    func populateLocalLibraryBooks(completion: (() -> Void)? = nil) {
-        let finish = {
-            if Thread.isMainThread {
-                completion?()
-            } else {
-                DispatchQueue.main.async {
-                    completion?()
-                }
-            }
-        }
-
+    @MainActor
+    func populateLocalLibraryBooks(scan: Bool = true, completion: (() -> Void)? = nil) {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
-            finish()
+            completion?()
             return
         }
 
         let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         guard let container = self.container else {
-            finish()
+            completion?()
             return
         }
 
@@ -124,104 +115,32 @@ class CalibreLibraryManager {
             }
         }
 
+        guard let documentServer = container.serverManager.documentServer else {
+            completion?()
+            return
+        }
         let tmpLibrary = CalibreLibrary(
-            server: container.serverManager.documentServer!,
+            server: documentServer,
             key: localLibraryURL.lastPathComponent,
             name: localLibraryURL.lastPathComponent)
         localLibrary = calibreLibraries[tmpLibrary.id]
         if localLibrary == nil {
             calibreLibraries[tmpLibrary.id] = tmpLibrary
-            localLibrary = calibreLibraries[tmpLibrary.id]
+            localLibrary = tmpLibrary
             do {
-                try libraryRepository.saveLibrary(localLibrary!)
+                try libraryRepository.saveLibrary(tmpLibrary)
             } catch {
                 logger.error("Failed to update local library realm: \(error.localizedDescription)")
             }
         }
 
-        let booksInShelfSnapshot = container.bookManager.booksInShelf
-
-        // Offload file scanning and metadata loading to the background thread
-        let work = { [weak self] in
-            guard let self = self,
-                  let localLibrary = self.localLibrary,
-                  let documentServer = container.serverManager.documentServer
-            else {
-                finish()
-                return
-            }
-
-            guard let dirEnum = FileManager.default.enumerator(atPath: localLibraryURL.path) else {
-                finish()
-                return
-            }
-
-            dirEnum.forEach {
-                guard let fileName = $0 as? String else {
-                    return
-                }
-                if fileName.hasPrefix(".dsreader-file-") {
-                    dirEnum.skipDescendants()
-                    return
-                }
-                if fileName.hasSuffix(".db") { return }
-                if fileName.hasSuffix(".db.lock") { return }
-                if fileName.hasSuffix(".db.note") { return }
-                if fileName.hasSuffix(".db.management") { return }
-                if fileName.hasSuffix(".cv") { return }
-                if fileName.hasSuffix(".mx") { return }
-
-                self.logger.debug("populateLocalLibraryBooks \(fileName)")
-                if let localBaseUrl = documentServer.localBaseUrl {
-                    let fileURL = localBaseUrl.appendingPathComponent(localLibrary.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-                    container.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary, on: documentServer)
-                }
-            }
-
-            let booksInShelfValues = booksInShelfSnapshot.map { $0.value }
-            let removedBooks: [CalibreBook] = booksInShelfValues.compactMap { (book: CalibreBook) -> CalibreBook? in
-                guard book.library.server.isLocal else { return nil }
-                let existingFormats: [String] = book.formats.compactMap {
-                    guard let format = Format(rawValue: $0.key),
-                          let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
-
-                    var isDirectory : ObjCBool = false
-                    guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
-                        return nil
-                    }
-                    guard isDirectory.boolValue == false else {
-                        return nil
-                    }
-
-                    return $0.key
-                }
-
-                guard existingFormats.isEmpty else {
-                    return nil
-                }
-
-                return book
-            }
-
-            let publish = {
-                removedBooks.forEach {
-                    container.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
-                    self.logger.debug("populateLocalLibraryBooks removeFromShelf \($0.inShelfId)")
-                }
-                finish()
-            }
-
-            if Thread.isMainThread {
-                publish()
-            } else {
-                DispatchQueue.main.async(execute: publish)
-            }
+        guard scan else {
+            completion?()
+            return
         }
-
-        if NSClassFromString("XCTestCase") != nil {
-            work()
-        } else {
-            DispatchQueue.global(qos: .userInitiated).async(execute: work)
+        Task { @MainActor [weak container] in
+            await container?.bookManager.scanLocalBooks()
+            completion?()
         }
     }
 
@@ -360,13 +279,14 @@ class CalibreLibraryManager {
 
     @MainActor
     private func discardLibraries(_ ids: Set<String>) {
-        container?.bookManager.discardShelfBooks(in: ids)
+        if let localLibrary, ids.contains(localLibrary.id) { self.localLibrary = nil }
         for id in ids {
             librarySyncIDs.removeValue(forKey: id)
             calibreLibraries.removeValue(forKey: id)
             calibreLibraryInfoStaging.removeValue(forKey: id)
             librarySyncStatus.removeValue(forKey: id)
         }
+        container?.bookManager.discardShelfBooks(in: ids)
     }
 
     /// Refreshes what the app keeps about a library besides its books, which calibre is asked for

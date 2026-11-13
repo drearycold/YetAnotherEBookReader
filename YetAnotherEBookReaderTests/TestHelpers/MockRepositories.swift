@@ -232,16 +232,6 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
 }
 
 class MockBookRepository: BookRepositoryProtocol {
-    func commitBookFiles(saving books: [CalibreBook], deleting ids: Set<String>) throws {
-        for id in ids { deleteBook(id: id) }
-        for book in books { saveBook(book) }
-    }
-
-    func localBooks(library: CalibreLibrary, filename: String, format: Format) throws -> [CalibreBook] {
-        getAllBooksInShelf().filter {
-            $0.library.id == library.id && $0.formats[format.rawValue]?.filename == filename
-        }
-    }
     var primaryKeyBookParam: CalibreBook?
     var primaryKeyLibraryParam: CalibreLibrary?
     var primaryKeyBookIdParam: Int32?

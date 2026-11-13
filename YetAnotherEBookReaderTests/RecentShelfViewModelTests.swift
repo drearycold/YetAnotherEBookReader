@@ -53,9 +53,9 @@ import Combine
         viewModel.refreshShelf()
     }
     
-    func testDeleteBook() throws {
-        viewModel.deleteBook(bookId: "test-id")
-        viewModel.deleteBooks(bookIds: ["test-id-1", "test-id-2"])
+    func testDeleteBook() async throws {
+        await viewModel.deleteBook(bookId: "test-id")
+        await viewModel.deleteBooks(bookIds: ["test-id-1", "test-id-2"])
     }
     
     func testPrepareReading() throws {

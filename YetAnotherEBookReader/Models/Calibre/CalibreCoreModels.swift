@@ -14,7 +14,7 @@ enum BookAnnotation {
     }
 }
 
-struct CalibreServer: Hashable, Identifiable {
+struct CalibreServer: Hashable, Identifiable, Sendable {
     static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
     
     var id: String {
@@ -77,7 +77,7 @@ struct CalibreServer: Hashable, Identifiable {
 }
 
 
-struct CalibreLibrary: Hashable, Identifiable {
+struct CalibreLibrary: Hashable, Identifiable, Sendable {
     static let PLUGIN_DSREADER_HELPER = "DSReader Helper"
 
     static let PLUGIN_READING_POSITION = "Reading Position"

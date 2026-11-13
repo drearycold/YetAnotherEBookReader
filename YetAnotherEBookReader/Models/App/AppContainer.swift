@@ -260,7 +260,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         }
     }
 
-    private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
     private let readerOpenRequestBroadcaster = ManagerAsyncBroadcaster<ReaderOpenRequest>()
@@ -348,7 +347,14 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     lazy var serverManager = CalibreServerManager(container: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(container: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
     lazy var databaseBootstrapper = DatabaseBootstrapper(container: self)
-    lazy var bookManager = CalibreBookManager(container: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
+    lazy var bookManager: CalibreBookManager = {
+        let files = LocalBookFileOperations.live()
+        let localImports = LocalBookImportCoordinator(repository: bookRepository, files: files,
+                                                      loadMetadata: LocalPublicationMetadata.load)
+        return CalibreBookManager(container: self, databaseService: databaseService, bookRepository: bookRepository,
+                                  readingPositionRepository: readingPositionRepository, annotationRepository: annotationRepository,
+                                  files: files, localImports: localImports)
+    }()
 
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
@@ -402,20 +408,10 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     deinit {
         calibreUpdateBroadcaster.finish()
-        bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
         readerOpenRequestBroadcaster.finish()
         readerPresentationTransferBroadcaster.finish()
         probeTimerTask?.cancel()
-    }
-
-    @MainActor
-    func publishBookImport(_ info: BookImportInfo) {
-        bookImportBroadcaster.send(info)
-    }
-
-    func bookImportEvents() -> AsyncStream<BookImportInfo> {
-        bookImportBroadcaster.stream()
     }
 
     @MainActor
@@ -632,7 +628,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             if testRealmEnvironment == nil {
                 try? tryInitializeDatabase { _ in }
             }
-            try? initializeDatabase()
+            try? initializeDatabase(scanLocalFiles: testRealmEnvironment == nil)
 
             // If the bootstrap failed (e.g. file-descriptor exhaustion
             // in long test runs opening many in-memory Realms), the
@@ -818,13 +814,17 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     func initializeDatabase() throws {
+        try initializeDatabase(scanLocalFiles: true)
+    }
+
+    private func initializeDatabase(scanLocalFiles: Bool) throws {
         guard let realmConf = databaseService.realmConf else {
             defaultLog.error("initializeDatabase called without a Realm configuration")
             throw DatabaseBootstrapError.realmConfigurationMissing
         }
         do {
             try MainActor.assumeIsolated {
-                try databaseBootstrapper.bootstrap(realmConf: realmConf)
+                try databaseBootstrapper.bootstrap(realmConf: realmConf, scanLocalFiles: scanLocalFiles)
             }
         } catch {
             defaultLog.error("initializeDatabase failed: \(error.localizedDescription)")

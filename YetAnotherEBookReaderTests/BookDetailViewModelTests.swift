@@ -449,7 +449,7 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(manager.booksInShelf[book.inShelfId]?.title, entry.title)
         XCTAssertFalse(mockAppContainer.librarySyncStatus[book.library.id]?.del.contains(book.id) ?? true)
         await fulfillment(of: [notified], timeout: 2)
-        manager.clearCache(inShelfId: book.inShelfId)
+        await manager.clearCache(inShelfId: book.inShelfId)
         XCTAssertEqual(repository.getBook(id: book.inShelfId)?.title, entry.title,
                        "Clearing cache must not overwrite committed metadata with the old shelf snapshot")
     }
