@@ -727,8 +727,15 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
         cache["\(libraryId)-\(categoryName)"]
     }
 
-    func saveLibraryCategoryResult(libraryId: String, categoryName: String, result: LibraryCategoryResult) throws {
-        cache["\(libraryId)-\(categoryName)"] = result
+    func saveLibraryCategoryResult(
+        libraryId: String, categoryName: String, result: LibraryCategoryResult,
+        expecting: CacheWriteExpectation<LibraryCategoryResult>
+    ) throws {
+        let key = "\(libraryId)-\(categoryName)"
+        if cache[key] != result, case .previous(let expected) = expecting, cache[key] != expected {
+            throw CacheContextError.superseded
+        }
+        cache[key] = result
     }
 
     func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
@@ -824,7 +831,7 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
         return observeCategorySummariesBroadcaster.stream(initialValue: initial)
     }
 
-    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
+    func observeCategoryCacheUpdates(categoryName: String, libraryIds: Set<String>?) -> AsyncStream<Void> {
         observeCategoryCacheUpdatesCalled = true
         observeCategoryCacheUpdatesCategoryNameParam = categoryName
         let broadcaster = observeCategoryCacheUpdatesBroadcasters[categoryName] ?? {

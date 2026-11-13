@@ -7,7 +7,7 @@
 
 import Foundation
 
-protocol CategoryCacheRepository: Sendable {
+protocol CategoryCacheRepository: CacheRepository {
     func fetchLibraryCategoryResult(
         libraryId: String,
         categoryName: String
@@ -16,7 +16,8 @@ protocol CategoryCacheRepository: Sendable {
     func saveLibraryCategoryResult(
         libraryId: String,
         categoryName: String,
-        result: LibraryCategoryResult
+        result: LibraryCategoryResult,
+        expecting: CacheWriteExpectation<LibraryCategoryResult>
     ) throws
     
     func fetchCategorySummaries() throws -> [CategoryCacheSummary]
@@ -33,7 +34,7 @@ protocol CategoryCacheRepository: Sendable {
 
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]>
 
-    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void>
+    func observeCategoryCacheUpdates(categoryName: String, libraryIds: Set<String>?) -> AsyncStream<Void>
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws
 
@@ -41,4 +42,15 @@ protocol CategoryCacheRepository: Sendable {
         libraryId: String,
         activeCategoryNames: Set<String>
     ) throws
+}
+
+extension CategoryCacheRepository {
+    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
+        observeCategoryCacheUpdates(categoryName: categoryName, libraryIds: nil)
+    }
+
+    func saveLibraryCategoryResult(libraryId: String, categoryName: String, result: LibraryCategoryResult) throws {
+        try saveLibraryCategoryResult(libraryId: libraryId, categoryName: categoryName,
+                                      result: result, expecting: .unconditional)
+    }
 }

@@ -7,11 +7,63 @@
 
 import Foundation
 
+enum CacheContextError: Error, Equatable {
+    case databaseUnavailable
+    case superseded
+}
+
+/// Invalidated when a published library changes identity, connection, generation or visibility.
+final class CacheLibraryLifetime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var valid = true
+
+    func invalidate() { lock.withLock { valid = false } }
+
+    func checkCurrent() throws {
+        guard lock.withLock({ valid }) else { throw CacheContextError.superseded }
+    }
+}
+
+extension CalibreLibrary {
+    func hasSameCacheScope(as other: CalibreLibrary) -> Bool {
+        id == other.id && key == other.key && hidden == other.hidden && lastModified == other.lastModified
+            && categoryFields == other.categoryFields && customColumnInfos == other.customColumnInfos
+            && DSReaderHelperConnection(server) == DSReaderHelperConnection(other.server)
+    }
+}
+
+enum CacheWriteExpectation<Value: Sendable>: Sendable {
+    case unconditional
+    case previous(Value?)
+}
+
+struct SearchSourceState: Equatable, Sendable {
+    let generation: Date
+    let totalNumber: Int
+    let bookIds: [Int32]
+}
+
+protocol CacheRepository: Sendable {
+    func snapshot() throws -> Self
+    func scoped(to library: CalibreLibrary, lifetime: CacheLibraryLifetime?) throws -> Self
+    func checkCurrent() throws
+}
+
+extension CacheRepository {
+    func snapshot() throws -> Self { self }
+    func scoped(to library: CalibreLibrary, lifetime: CacheLibraryLifetime?) throws -> Self { self }
+    func checkCurrent() throws {}
+}
+
 struct LibrarySourceSearchResult: Equatable, Sendable {
     var generation: Date
     var totalNumber: Int
     var bookIds: [Int32]
     var books: [CalibreBook]
+
+    var sourceState: SearchSourceState {
+        SearchSourceState(generation: generation, totalNumber: totalNumber, bookIds: bookIds)
+    }
     
     init(
         generation: Date = Date(timeIntervalSince1970: 0),
@@ -76,9 +128,9 @@ struct LocalLibrarySearchResult: Equatable, Sendable {
     }
 }
 
-protocol SearchCacheRepository: Sendable {
+protocol SearchCacheRepository: CacheRepository {
     func fetchLibraryCachedResult(
-        libraryId: String,
+        library: CalibreLibrary,
         search: String,
         sortBy: SortCriteria,
         sortAsc: Bool,
@@ -92,7 +144,8 @@ protocol SearchCacheRepository: Sendable {
         sortAsc: Bool,
         filters: [String: Set<String>],
         sourceUrl: String,
-        result: LibrarySourceSearchResult
+        result: LibrarySourceSearchResult,
+        expecting: CacheWriteExpectation<SearchSourceState>
     ) throws
 
     func fetchBooks(
@@ -110,6 +163,21 @@ protocol SearchCacheRepository: Sendable {
     func writeMetadataEntries(
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
-        json: NSDictionary?
+        json: NSDictionary?,
+        retainingExisting: Set<Int32>
     ) throws
+}
+
+extension SearchCacheRepository {
+    func writeMetadataEntries(library: CalibreLibrary, entries: [String: CalibreBookEntry?], json: NSDictionary?) throws {
+        try writeMetadataEntries(library: library, entries: entries, json: json, retainingExisting: [])
+    }
+
+    func saveLibrarySourceResult(
+        libraryId: String, search: String, sortBy: SortCriteria, sortAsc: Bool, filters: [String: Set<String>],
+        sourceUrl: String, result: LibrarySourceSearchResult
+    ) throws {
+        try saveLibrarySourceResult(libraryId: libraryId, search: search, sortBy: sortBy, sortAsc: sortAsc,
+                                    filters: filters, sourceUrl: sourceUrl, result: result, expecting: .unconditional)
+    }
 }

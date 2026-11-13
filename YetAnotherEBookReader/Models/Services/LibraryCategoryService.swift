@@ -16,7 +16,12 @@ actor LibraryCategoryService {
         self.repository = repository
     }
     
-    func fetchAndCacheCategory(library: CalibreLibrary, category: CalibreLibraryCategory) async throws -> LibraryCategoryResult {
+    func fetchAndCacheCategory(
+        library: CalibreLibrary, category: CalibreLibraryCategory, cache: CategoryCacheRepository? = nil
+    ) async throws -> LibraryCategoryResult {
+        try Task.checkCancellation()
+        let database = try (cache ?? repository.snapshot())
+        let cache = try database.scoped(to: library, lifetime: service.cacheLifetime(for: library))
         guard let serverUrl = service.getServerUrlByReachability(server: library.server) else {
             throw URLError(.cannotFindHost)
         }
@@ -25,10 +30,9 @@ actor LibraryCategoryService {
         let libraryId = library.id
         
         // Check if we already have a fresh cache
-        if let existing = try? repository.fetchLibraryCategoryResult(libraryId: libraryId, categoryName: categoryName) {
-            if existing.generation >= library.lastModified {
-                return existing
-            }
+        let existing = try cache.fetchLibraryCategoryResult(libraryId: libraryId, categoryName: categoryName)
+        if let existing, existing.generation >= library.lastModified {
+            return existing
         }
         
         var items: [LibraryCategoryItem] = []
@@ -36,6 +40,8 @@ actor LibraryCategoryService {
         let limit = 10000 // page limit
         
         while true {
+            try Task.checkCancellation()
+            try cache.checkCurrent()
             guard var urlComponents = URLComponents(string: category.url) else {
                 throw URLError(.badURL)
             }
@@ -83,7 +89,10 @@ actor LibraryCategoryService {
                     totalNumber: result.total_num
                 )
                 
-                try repository.saveLibraryCategoryResult(libraryId: libraryId, categoryName: categoryName, result: finalResult)
+                try Task.checkCancellation()
+                try cache.saveLibraryCategoryResult(libraryId: libraryId, categoryName: categoryName,
+                                                    result: finalResult, expecting: .previous(existing))
+                try cache.checkCurrent()
                 return finalResult
             }
             

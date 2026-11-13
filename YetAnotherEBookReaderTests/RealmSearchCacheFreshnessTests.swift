@@ -60,7 +60,8 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
     func testSearchCacheReadsCurrentSourcesAndBookValuesForTheRequestedCriteria() throws {
         let fixture = try Fixture()
         let store = fixture.store
-        let libraryId = fixture.library.id
+        let library = fixture.library
+        let libraryId = library.id
         let otherLibraryId = fixture.otherLibrary.id
         let filters: [String: Set<String>] = ["Tags": ["Fiction"]]
         let otherFilters: [String: Set<String>] = ["Tags": ["History"]]
@@ -103,7 +104,7 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
                 realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key)?.title
             },
             read: { _ in
-                try store.fetchLibraryCachedResult(libraryId: libraryId, search: "story", sortBy: .Title,
+                try store.fetchLibraryCachedResult(library: library, search: "story", sortBy: .Title,
                                                    sortAsc: true, filters: filters)
             }
         )
@@ -122,9 +123,9 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
         XCTAssertEqual(snapshots[1]?.sources[base]?.books.count, 0)
         XCTAssertEqual(snapshots[1]?.sources[alternate]?.books.count, 0)
 
-        let otherCriteria = try store.fetchLibraryCachedResult(libraryId: libraryId, search: "story",
+        let otherCriteria = try store.fetchLibraryCachedResult(library: library, search: "story",
                                                                sortBy: .Title, sortAsc: true, filters: otherFilters)
-        let otherLibrary = try store.fetchLibraryCachedResult(libraryId: otherLibraryId, search: "story",
+        let otherLibrary = try store.fetchLibraryCachedResult(library: fixture.otherLibrary, search: "story",
                                                               sortBy: .Title, sortAsc: true, filters: filters)
         XCTAssertEqual(otherCriteria?.sources[base]?.bookIds, [21])
         XCTAssertEqual(otherLibrary?.sources[base]?.bookIds, [31])
@@ -203,11 +204,235 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
 
         try autoreleasepool {
             let configuration = Realm.Configuration(fileURL: file, readOnly: true, schemaVersion: DatabaseSchema.version)
-            let store = RealmSearchCacheStore(config: configuration, databaseService: fixture.database,
-                                             librarySnapshotProvider: fixture)
+            let store = RealmSearchCacheStore(config: configuration, databaseService: fixture.database)
             let books = try store.fetchBooks(library: fixture.library, bookIds: [book.id])
             XCTAssertEqual(books[book.id]?.id, book.id)
         }
+    }
+
+    func testCacheWithoutConfigurationDoesNotUseTheDefaultRealm() throws {
+        let fixture = try Fixture()
+        let previousDefault = Realm.Configuration.defaultConfiguration
+        Realm.Configuration.defaultConfiguration = fixture.configuration
+        defer { Realm.Configuration.defaultConfiguration = previousDefault }
+
+        let library = fixture.library
+        let book = CalibreBook(id: 456, library: library)
+        fixture.books.saveBook(book)
+        let store = RealmSearchCacheStore(databaseService: DatabaseService())
+        XCTAssertThrowsError(try store.fetchBooks(library: library, bookIds: [book.id])) {
+            XCTAssertEqual($0 as? CacheContextError, .databaseUnavailable)
+        }
+        XCTAssertThrowsError(try store.fetchCategorySummaries()) {
+            XCTAssertEqual($0 as? CacheContextError, .databaseUnavailable)
+        }
+        XCTAssertThrowsError(try store.saveLibrarySourceResult(
+            libraryId: library.id, search: "sentinel", sortBy: .Title, sortAsc: true,
+            filters: [:], sourceUrl: "source", result: .init(totalNumber: 1, bookIds: [book.id])
+        )) { XCTAssertEqual($0 as? CacheContextError, .databaseUnavailable) }
+        XCTAssertEqual(fixture.database.realm?.objects(CalibreLibrarySearchObject.self).count, 0)
+    }
+
+    func testStaleSourcePreflightDoesNotSkipARequiredSave() throws {
+        let fixture = try Fixture()
+        let store = fixture.store
+        let library = fixture.library
+        let save: @Sendable ([Int32]) throws -> Void = { ids in
+            try store.saveLibrarySourceResult(
+                libraryId: library.id, search: "story", sortBy: .Title, sortAsc: true,
+                filters: [:], sourceUrl: "source", result: .init(totalNumber: ids.count, bookIds: ids)
+            )
+        }
+        try save([1])
+
+        let results = try readAcrossCommits(
+            configuration: fixture.configuration,
+            commits: [{ try save([2]) }],
+            readState: { realm in
+                guard let source = realm.objects(CalibreLibrarySearchObject.self).first?.sources["source"] ?? nil
+                else { return [Int32]() }
+                return Array(source.bookIds)
+            },
+            read: { _ in
+                try save([1])
+                return try store.fetchLibraryCachedResult(
+                    library: library, search: "story", sortBy: .Title, sortAsc: true, filters: [:]
+                )?.sources["source"]?.bookIds
+            }
+        )
+        XCTAssertEqual(results[0], [1])
+    }
+
+    func testStaleSourcePreflightDoesNotDuplicateACriteriaRow() throws {
+        let fixture = try Fixture()
+        let store = fixture.store
+        let library = fixture.library
+        let save: @Sendable (String) throws -> Void = { source in
+            try store.saveLibrarySourceResult(
+                libraryId: library.id, search: "story", sortBy: .Title, sortAsc: true,
+                filters: ["Tags": ["Fiction"]], sourceUrl: source, result: .init(totalNumber: 1, bookIds: [1])
+            )
+        }
+
+        _ = try readAcrossCommits(
+            configuration: fixture.configuration,
+            commits: [{ try save("base") }],
+            readState: { realm in realm.objects(CalibreLibrarySearchObject.self).count },
+            read: { _ in try save("public") }
+        )
+        let realm = try XCTUnwrap(fixture.database.realm)
+        realm.refresh()
+        let rows = realm.objects(CalibreLibrarySearchObject.self)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(Set(try XCTUnwrap(rows.first).sources.keys), ["base", "public"])
+    }
+
+    func testOldSearchAnswerDoesNotOverwriteAnotherCommitOrRecreateTheSource() throws {
+        let fixture = try Fixture()
+        let library = fixture.library
+        let store = fixture.store
+        let scoped = try store.scoped(to: library, lifetime: nil)
+        let initial = LibrarySourceSearchResult(generation: Date(timeIntervalSince1970: 1), totalNumber: 1, bookIds: [1])
+        let newer = LibrarySourceSearchResult(generation: Date(timeIntervalSince1970: 2), totalNumber: 1, bookIds: [2])
+        let late = LibrarySourceSearchResult(generation: initial.generation, totalNumber: 1, bookIds: [3])
+        try store.saveLibrarySourceResult(libraryId: library.id, search: "story", sortBy: .Title, sortAsc: true,
+                                          filters: [:], sourceUrl: "base", result: initial)
+
+        let errors: [CacheContextError?] = try readAcrossCommits(
+            configuration: fixture.configuration,
+            commits: [
+                {
+                    try store.saveLibrarySourceResult(libraryId: library.id, search: "story", sortBy: .Title,
+                                                      sortAsc: true, filters: [:], sourceUrl: "base", result: newer)
+                },
+                {
+                    let realm = try XCTUnwrap(fixture.database.realm)
+                    try realm.write { realm.delete(realm.objects(CalibreLibrarySearchObject.self)) }
+                }
+            ],
+            readState: { realm in
+                (realm.objects(CalibreLibrarySearchObject.self).first?.sources["base"] ?? nil)?.generation
+            },
+            read: { _ in
+                do {
+                    try scoped.saveLibrarySourceResult(libraryId: library.id, search: "story", sortBy: .Title,
+                                                       sortAsc: true, filters: [:], sourceUrl: "base", result: late,
+                                                       expecting: .previous(initial.sourceState))
+                    return nil
+                } catch let error as CacheContextError { return error }
+            }
+        )
+        XCTAssertEqual(errors, [.superseded, .superseded])
+        XCTAssertNil(try store.fetchLibraryCachedResult(library: library, search: "story", sortBy: .Title,
+                                                        sortAsc: true, filters: [:]))
+    }
+
+    func testOldCategoryAnswerAndMetadataDoNotReplaceNewerCommittedValues() throws {
+        let fixture = try Fixture()
+        let library = fixture.library
+        let store = fixture.store
+        let scoped = try store.scoped(to: library, lifetime: nil)
+        let category = LibraryCategoryResult(libraryId: library.id, categoryName: "Tags", items: [],
+                                             generation: Date(timeIntervalSince1970: 2), totalNumber: 1)
+        let lateCategory = LibraryCategoryResult(libraryId: library.id, categoryName: "Tags", items: [],
+                                                 generation: Date(timeIntervalSince1970: 1), totalNumber: 0)
+        var newer = CalibreBookEntry()
+        newer.title = "Current"
+        newer.last_modified = "2026-01-02T00:00:00+00:00"
+        var older = newer
+        older.title = "Late"
+        older.last_modified = "2026-01-01T00:00:00+00:00"
+        let late = older
+        let key = CalibreBook(id: 456, library: library).inShelfId
+
+        let results = try readAcrossCommits(
+            configuration: fixture.configuration,
+            commits: [{
+                try store.saveLibraryCategoryResult(libraryId: library.id, categoryName: "Tags", result: category)
+                try store.writeMetadataEntries(library: library, entries: ["456": newer], json: nil)
+            }],
+            readState: { realm in realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key)?.title },
+            read: { _ in
+                let conflict: CacheContextError?
+                do {
+                    try scoped.saveLibraryCategoryResult(libraryId: library.id, categoryName: "Tags",
+                                                         result: lateCategory, expecting: .previous(nil))
+                    conflict = nil
+                } catch let error as CacheContextError { conflict = error }
+                try scoped.writeMetadataEntries(library: library, entries: ["456": late], json: nil)
+                return (conflict, try scoped.fetchBooks(library: library, bookIds: [456])[456]?.title)
+            }
+        )
+        XCTAssertEqual(results[0].0, .superseded)
+        XCTAssertEqual(results[0].1, "Current")
+        XCTAssertEqual(try store.fetchLibraryCategoryResult(libraryId: library.id, categoryName: "Tags"), category)
+    }
+
+    func testLibraryRecreationRejectsOldMetadataAndSearchWrites() throws {
+        let fixture = try Fixture()
+        let library = fixture.library
+        let store = fixture.store
+        let scoped = try store.scoped(to: library, lifetime: nil)
+        let key = library.id
+        let results = try readAcrossCommits(
+            configuration: fixture.configuration,
+            commits: [{
+                let realm = try XCTUnwrap(fixture.database.realm)
+                let row = try XCTUnwrap(realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: key))
+                try realm.write {
+                    realm.delete(row)
+                    realm.add(library.makeRealmObject())
+                }
+            }],
+            readState: { realm in realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: key)?.id },
+            read: { _ in
+                let book = CalibreBook(id: 456, library: library)
+                let changes: [() throws -> Void] = [
+                    { try scoped.writeMetadataEntries(library: library, entries: ["456": CalibreBookEntry()], json: nil) },
+                    {
+                        try scoped.saveLibrarySourceResult(
+                            libraryId: key, search: "", sortBy: .Title, sortAsc: true, filters: [:], sourceUrl: "base",
+                            result: .init(totalNumber: 1, bookIds: [book.id], books: [book]), expecting: .previous(nil)
+                        )
+                    }
+                ]
+                return try changes.map { change -> CacheContextError? in
+                    do { try change(); return nil }
+                    catch let error as CacheContextError { return error }
+                }
+            }
+        )
+        XCTAssertEqual(results[0], [.superseded, .superseded])
+        XCTAssertTrue(try store.fetchBooks(library: library, bookIds: [456]).isEmpty)
+        XCTAssertNil(try store.fetchLibraryCachedResult(library: library, search: "", sortBy: .Title,
+                                                        sortAsc: true, filters: [:]))
+    }
+
+    func testSearchCacheMapsEachServerUsingTheCapturedLibraryValue() throws {
+        let fixture = try Fixture()
+        let store = fixture.store
+        let first = fixture.library
+        let second = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: first.key, name: first.name)
+        for (library, title) in [(first, "First book"), (second, "Second book")] {
+            var book = CalibreBook(id: 456, library: library)
+            book.title = title
+            try store.saveLibrarySourceResult(libraryId: library.id, search: "", sortBy: .Title, sortAsc: true,
+                                              filters: [:], sourceUrl: "source",
+                                              result: .init(totalNumber: 1, bookIds: [book.id], books: [book]))
+        }
+        let cache = try store.snapshot()
+        let firstBook = try cache.fetchLibraryCachedResult(
+            library: first, search: "", sortBy: .Title, sortAsc: true, filters: [:]
+        )?.sources["source"]?.books.first
+        var capturedSecond = second
+        capturedSecond.server.name = "Captured server name"
+        let secondBook = try cache.fetchLibraryCachedResult(
+            library: capturedSecond, search: "", sortBy: .Title, sortAsc: true, filters: [:]
+        )?.sources["source"]?.books.first
+        XCTAssertEqual(firstBook?.title, "First book")
+        XCTAssertEqual(secondBook?.title, "Second book")
+        XCTAssertEqual(secondBook?.library.server.uuid, second.server.uuid)
+        XCTAssertEqual(secondBook?.library.server.name, "Captured server name")
     }
 
     private func readUpdatedCategory<Value: Sendable>(
@@ -243,13 +468,13 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
         return results[0]
     }
 
-    private final class Fixture: LibraryResolver, CalibreLibrarySnapshotProviding {
+    private final class Fixture: LibraryResolver {
         let database = DatabaseService()
         let configuration = Realm.Configuration(inMemoryIdentifier: UUID().uuidString, schemaVersion: DatabaseSchema.version)
         let library: CalibreLibrary
         let otherLibrary: CalibreLibrary
         let calibreLibraries: [String: CalibreLibrary]
-        lazy var store = RealmSearchCacheStore(databaseService: database, librarySnapshotProvider: self)
+        lazy var store = RealmSearchCacheStore(databaseService: database)
         lazy var books = RealmBookRepository(databaseService: database, libraryResolver: self)
 
         init() throws {
@@ -258,6 +483,12 @@ final class RealmSearchCacheFreshnessTests: XCTestCase {
             otherLibrary = TestFixtures.makeLibrary(server: server, key: "other", name: "Other Fixture")
             calibreLibraries = [library.id: library, otherLibrary.id: otherLibrary]
             try database.openMainRealm(conf: configuration)
+            let realm = try XCTUnwrap(database.realm)
+            try realm.write {
+                realm.add(server.makeRealmObject())
+                realm.add(library.makeRealmObject())
+                realm.add(otherLibrary.makeRealmObject())
+            }
         }
 
         func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {

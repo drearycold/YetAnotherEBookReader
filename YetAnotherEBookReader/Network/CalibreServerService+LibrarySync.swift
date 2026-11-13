@@ -106,8 +106,11 @@ extension CalibreServerService {
         }
     }
 
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], getAnnotations: Bool = false, searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
-        let serverUrl = getServerUrlByReachability(server: library.server) ?? URL(fileURLWithPath: "/realm")
+    func buildBooksMetadataTask(
+        library: CalibreLibrary, books: [CalibreBook], getAnnotations: Bool = false,
+        searchTask: CalibreLibrarySearchTask? = nil, serverURL: URL? = nil
+    ) -> CalibreBooksTask? {
+        let serverUrl = serverURL ?? getServerUrlByReachability(server: library.server) ?? URL(fileURLWithPath: "/realm")
 
         let bookIds = books.map { $0.id.description }
 

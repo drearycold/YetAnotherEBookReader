@@ -90,6 +90,7 @@ enum SearchError: Error, Equatable, Sendable {
     case database(String)
     case invalidState(String)
     case cancelled
+    case superseded
 
     var message: String {
         switch self {
@@ -99,6 +100,8 @@ enum SearchError: Error, Equatable, Sendable {
             return message
         case .cancelled:
             return "Cancelled"
+        case .superseded:
+            return "The search context changed."
         }
     }
 }
@@ -117,7 +120,7 @@ struct LibrarySearchStatus: Equatable, Sendable {
 
     /// The error to show: a search cancelled because another replaced it didn't fail.
     var failure: SearchError? {
-        error == .cancelled ? nil : error
+        error == .cancelled || error == .superseded ? nil : error
     }
 }
 

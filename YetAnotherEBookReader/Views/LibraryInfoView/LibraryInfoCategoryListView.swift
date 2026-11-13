@@ -125,6 +125,7 @@ struct CategoryDetailView: View {
         }
         .onDisappear {
             filterReloadTask?.cancel()
+            categoryViewModel.stopObserving()
             if viewModel.categoriesSelected == nil {
                 viewModel.categoryName = ""
             }

@@ -354,14 +354,14 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(repository: self.activityLogRepository), config: self, database: self.databaseService)
     private lazy var defaultSearchCacheStore = RealmSearchCacheStore(
-        databaseService: self.databaseService,
-        librarySnapshotProvider: self
+        databaseService: self.databaseService
     )
     lazy var searchCacheRepository: SearchCacheRepository = self.defaultSearchCacheStore
     lazy var librarySearchService = LibrarySearchService(
         service: self.calibreServerService,
         repository: self.searchCacheRepository,
-        onMetadataAnswers: { @MainActor [weak self] library, missing, present in
+        onMetadataAnswers: { @MainActor [weak self] library, missing, present, cache in
+            guard !Task.isCancelled, (try? cache.checkCurrent()) != nil else { return }
             self?.bookManager.recordMetadataAnswers(library: library, missing: missing, present: present)
         }
     )

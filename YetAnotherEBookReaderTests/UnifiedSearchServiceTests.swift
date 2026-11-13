@@ -1865,7 +1865,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
     }
     
     func fetchLibraryCachedResult(
-        libraryId: String,
+        library: CalibreLibrary,
         search: String,
         sortBy: SortCriteria,
         sortAsc: Bool,
@@ -1873,6 +1873,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
     ) throws -> LibraryCachedResult? {
         lock.lock()
         defer { lock.unlock() }
+        let libraryId = library.id
         let key = makeKey(libraryId: libraryId, search: search, sortBy: sortBy, sortAsc: sortAsc, filters: filters)
         guard var cached = _cachedLibraryResults[key] else { return nil }
         let storedBooks = _booksByLibrary[libraryId] ?? [:]
@@ -1898,9 +1899,11 @@ class MockSearchCacheRepository: SearchCacheRepository {
         sortAsc: Bool,
         filters: [String: Set<String>],
         sourceUrl: String,
-        result: LibrarySourceSearchResult
+        result: LibrarySourceSearchResult,
+        expecting: CacheWriteExpectation<SearchSourceState>
     ) throws {
         lock.lock()
+        defer { lock.unlock() }
         let key = makeKey(libraryId: libraryId, search: search, sortBy: sortBy, sortAsc: sortAsc, filters: filters)
         var cached = _cachedLibraryResults[key] ?? LibraryCachedResult(
             libraryId: libraryId,
@@ -1910,6 +1913,10 @@ class MockSearchCacheRepository: SearchCacheRepository {
             filters: filters,
             sources: [:]
         )
+        let current = cached.sources[sourceUrl]?.sourceState
+        if current != result.sourceState, case .previous(let expected) = expecting, current != expected {
+            throw CacheContextError.superseded
+        }
         cached.sources[sourceUrl] = result
         _cachedLibraryResults[key] = cached
 
@@ -1920,8 +1927,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
             }
             _booksByLibrary[libraryId] = books
         }
-        
-        lock.unlock()
+
     }
 
     func fetchBooks(
@@ -1953,13 +1959,15 @@ class MockSearchCacheRepository: SearchCacheRepository {
     func writeMetadataEntries(
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
-        json: NSDictionary?
+        json: NSDictionary?,
+        retainingExisting: Set<Int32>
     ) throws {
         lock.lock()
         defer { lock.unlock() }
         var books = _booksByLibrary[library.id] ?? [:]
         entries.forEach { key, entry in
             guard let entry = entry, let bookId = Int32(key) else { return }
+            if books[bookId] == nil, retainingExisting.contains(bookId) { return }
             var book = books[bookId] ?? CalibreBook(id: bookId, library: library)
             let root = json?[key] as? NSDictionary ?? NSDictionary()
             book.applyMetadataValue(CalibreBookMetadataValue(entry: entry, root: root))

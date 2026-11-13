@@ -2,10 +2,10 @@
 
 ## Current Focus
 
-**Search and Category Cache Consistency (CC).** CC1 is implemented and
-verified on `codex/cache-consistency-cc1` from main `ce5f25ae`, which
-includes SC1–SC3 through PR #150. CC2 is next. The earlier PDF investigation
-remains under Current Branch Notes.
+**Search and Category Cache Consistency (CC).** CC2 is implemented and
+verified on `codex/cache-consistency-cc2` from main `b72b5f18`, which includes
+CC1 through PR #151. CC3 is next. The earlier PDF investigation remains
+under Current Branch Notes.
 
 ## Cache Consistency CC1 (2026-11-12)
 
@@ -48,25 +48,101 @@ using the existing package pins. Native Import and Browse UI journeys
 were outside this verification. Logs and result bundles are in
 `/tmp/YabrCC1`.
 
+## Cache Consistency CC2 (2026-11-12)
+
+The database service publishes a cache configuration with an epoch under
+its existing lock. A prepared operation carries that configuration and
+epoch across suspensions. Clearing or replacing the runtime configuration
+retires the epoch, including a switch away and back. The cache reports
+an unavailable configuration before opening a Realm. Explicit configurations
+still work for isolated, in-memory and immutable reads. CC1's synchronous
+refresh and detached value mapping remain the read boundary.
+
+Search passes the captured library into result mapping. The cache store
+no longer looks up the mutable manager dictionary. Search binds the
+selected URL for the listing, metadata batches, cache source and result.
+A library-bound request checks its saved library row, key, visibility,
+generation and connection. The network service's locked snapshot also
+retires the library lifetime when the published scope changes, including
+hide and restore with the same final values. Only active libraries are
+eligible for merged results. A fresh request can still read prior source
+rows, including the any-source fallback for a network failure.
+
+The Realm write transaction resolves the criteria row and current source
+before deciding whether to create, replace or cancel the write. A delayed
+source or category answer compares the cache state read before its
+request with the state in the transaction. An intervening change retires
+that answer. An identical result cancels an empty write. Metadata updates
+compare dated entries and skip books deleted after the request captured
+their presence. A scoped source save cannot reinsert detached book copies.
+Schema 151, source keys, criteria encoding and package pins are unchanged.
+
+Category paging retains its original database and library scope and
+checks them before appending. An observer uses its bound database and
+scope, drops notifications from a retired database and is canceled
+when the view leaves. A new reload opens a new query. Unavailable
+storage, superseded requests and network failures are distinct inside
+the services. Search uses its existing criteria and request generation
+to discard late results.
+
+On main `b72b5f18`, the fixed-thread baseline showed two criteria rows
+where one should hold both sources, and a stale identical-source check
+skipped a required save. The two cases produced three assertions in
+`/tmp/YabrCC2/repository-red.log`. The unconfigured control already threw
+in that environment. The final fixture asserts the explicit unavailable
+error and checks the sentinel has no added rows.
+
+The focused suite passed 244 tests, including CC1's eight cases, RH2
+freshness, delayed responses across database and connection changes,
+hide and restore, per-book deletion, source selection, observer
+reconfiguration and library/criteria isolation. The first full run
+found that two Calibre fixtures persisted the same endpoint in a
+shared test Realm. Both now remove their registrations. The final iPhone
+17 suite recorded 1,156 tests, with one opt-in PDF benchmark skipped,
+two existing expected PDFKit failures and zero unexpected failures.
+All 21 contract tests ran against isolated Calibre 9.11 and passed.
+Both native Browse journeys passed on iPhone 17 with the test library,
+covering search, sort, book detail, categories and filters. The import
+regression ran at the service level. The iOS Simulator Release and Mac
+Catalyst builds passed. Logs and result bundles are in `/tmp/YabrCC2`.
+
+### CC2 review follow-up
+
+If a library's scope changes while a search is in flight and the library
+is still active, the same search prepares a fresh request for that library.
+It maps and publishes any valid cache before the replacement answers, and
+reads the current cache again if the replacement fails on the network.
+Other libraries keep their requests and results. A search can replace
+each library's request once. A second change settles with the latest
+eligible cache. Hidden or removed libraries, canceled criteria and
+retired database configurations cannot start a replacement.
+
+Two barrier tests reproduced the original blank result on the CC2
+worktree, with one request per test and ten failed assertions in
+`/tmp/YabrCC2/scope-restart-red.log`. After the fix, 104 focused tests
+passed, including CC1 freshness, cache-first and fallback tests. The
+six new cases passed three consecutive runs, including a cache update
+committed during a replacement that then failed with HTTP 503.
+Logs are `/tmp/YabrCC2/scope-restart-focused.log` and
+`/tmp/YabrCC2/scope-restart-repeated.log`. The full suite and native
+Browse results above were recorded before this follow-up.
+
 ## Cache Consistency Follow-up
 
-CC2 should make database and library query context explicit and stable
-across concurrency boundaries, including unavailable configuration,
-library removal and connection changes. The cache store still reads a
-mutable library provider while it is `@unchecked Sendable`, and the
-Realm opener can fall back to a default configuration. DatabaseService
-configuration access already has a lock from AL3. Characterize write
-preconditions and source-save preflight before changing cache generation
-or commit behavior. CC3 should verify invalidation, observation and native
-Browse and offline behavior across interleaved updates.
+CC3 should verify invalidation and observation across interleaved
+library and book changes, pagination, import and deletion, offline
+switching, and native Browse. CC2 binds a page or observer to its
+configuration and scope. A database switch stops delivery from the
+retired observer, and the next reload registers on the new database.
+Exercise changes in active library membership that do not themselves
+modify cache rows, and native import and offline switching.
 
 Keep the V2 actors, value snapshots and repository boundaries, including
 criteria isolation, limit expansion, cache generation checks, empty
-library IDs meaning all active libraries, early cache display, and
-any-source cache fallback on network failure. The two June unified-search
+library IDs meaning all active libraries, early cache display and
+any-source fallback on network failure. The two June unified-search
 analysis files describe the removed V1 pipeline. The old unresolved
 actor-runtime trap has no established connection to the stale read.
-Maintain schema 151 unless separately justified by a persistence change.
 
 ## Server Configuration SC3 (2026-11-12)
 

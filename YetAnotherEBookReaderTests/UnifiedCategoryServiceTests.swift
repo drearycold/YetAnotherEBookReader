@@ -294,7 +294,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         let result2 = LibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Tags", items: [item2, item3], generation: Date(), totalNumber: 2)
         try repository.saveLibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Tags", result: result2)
 
-        let merged = await unifiedCategoryService.mergeCategory(categoryName: "Tags", searchString: "")
+        let merged = try await unifiedCategoryService.mergeCategory(categoryName: "Tags", searchString: "")
 
         XCTAssertEqual(merged.itemsCount, 2)
         XCTAssertEqual(merged.items[0].name, "Tag A")
@@ -328,7 +328,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         )
         try repository.saveLibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Tags", result: result2)
 
-        let merged = await unifiedCategoryService.mergeCategory(
+        let merged = try await unifiedCategoryService.mergeCategory(
             categoryName: "Tags",
             searchString: "",
             libraryIds: [mockLibrary1.id]
@@ -369,7 +369,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
             )
         )
 
-        let firstPage = await unifiedCategoryService.mergeCategoryPage(
+        let firstPage = try await unifiedCategoryService.mergeCategoryPage(
             categoryName: "Authors",
             searchString: "",
             offset: 0,
@@ -384,7 +384,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(firstPage.items.first?.averageRating, 3.0)
         XCTAssertEqual(firstPage.items.first?.libraryItems.count, 2)
 
-        let secondPage = await unifiedCategoryService.mergeCategoryPage(
+        let secondPage = try await unifiedCategoryService.mergeCategoryPage(
             categoryName: "Authors",
             searchString: "",
             offset: firstPage.nextOffset,
@@ -425,7 +425,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
             )
         )
 
-        let scopedPage = await unifiedCategoryService.mergeCategoryPage(
+        let scopedPage = try await unifiedCategoryService.mergeCategoryPage(
             categoryName: "Authors",
             searchString: "author",
             libraryIds: [mockLibrary1.id],

@@ -93,6 +93,9 @@ struct LibraryInfoView: View {
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
         }
+        .onDisappear {
+            viewModel.stopCategoryObserver()
+        }
         .onChange(of: libraryToBrowse) { libraryID in
             if libraryID == nil { preparedBrowseLibraryID = nil }
         }

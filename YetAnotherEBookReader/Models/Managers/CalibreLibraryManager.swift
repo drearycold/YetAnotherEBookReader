@@ -375,11 +375,22 @@ class CalibreLibraryManager {
     /// `isSync` covers the summary only. The categories can take long to refresh, and a category
     /// the user refreshes meanwhile (`UnifiedCategoryViewModel`) syncs again rather than waiting.
     @MainActor
-    func syncLibrary(request: CalibreSyncLibraryRequest) async {
+    func syncLibrary(request: CalibreSyncLibraryRequest, cache suppliedCache: CategoryCacheRepository? = nil) async {
         guard let container,
               var library = try? currentLibrary(id: request.library.id, serverID: request.library.server.id),
               !library.hidden, librarySyncStatus[library.id]?.isSync != true else { return }
         let libraryID = library.id
+        let cache: CategoryCacheRepository
+        do {
+            cache = try (suppliedCache ?? container.categoryCacheRepository.snapshot())
+            try cache.checkCurrent()
+        } catch {
+            var status = librarySyncStatus[libraryID] ?? .init(library: library)
+            status.isError = true
+            status.msg = "Library refresh failed. Try refreshing again."
+            librarySyncStatus[libraryID] = status
+            return
+        }
         let syncID = UUID()
         let connection = DSReaderHelperConnection(library.server)
         let key = library.key
@@ -393,6 +404,7 @@ class CalibreLibraryManager {
         func isCurrent() -> Bool {
             librarySyncIDs[libraryID] == syncID && calibreLibraries[libraryID]?.key == key
                 && container.calibreServers[connection.serverID].map(DSReaderHelperConnection.init) == connection
+                && (try? cache.checkCurrent()) != nil
         }
         defer {
             if librarySyncIDs[libraryID] == syncID {
@@ -426,7 +438,9 @@ class CalibreLibraryManager {
             let categories = try await service.getLibraryCategories(library: library)
             guard isCurrent(), !Task.isCancelled else { return }
             library = try applyCategoryFields(of: categories, to: library)
-            categoryError = await refreshCategoryCaches(container: container, library: library, categories: categories, isCurrent: isCurrent)
+            categoryError = await refreshCategoryCaches(
+                container: container, library: library, categories: categories, cache: cache, isCurrent: isCurrent
+            )
         } catch {
             logger.error("Could not refresh the library categories")
             categoryError = "Category refresh failed. Try refreshing again."
@@ -506,16 +520,21 @@ class CalibreLibraryManager {
         container: AppContainerProtocol,
         library: CalibreLibrary,
         categories: [CalibreLibraryCategory],
+        cache: CategoryCacheRepository,
         isCurrent: () -> Bool
     ) async -> String? {
         let activeCategories = categories.filter { $0.is_category }
         let activeCategoryNames = Set(activeCategories.map(\.name))
 
         do {
-            try container.categoryCacheRepository.removeLibraryCategoryResultsNotIn(
+            let lifetime = try container.calibreServerService.cacheLifetime(for: library)
+            let scoped = try cache.scoped(to: library, lifetime: lifetime)
+            try scoped.removeLibraryCategoryResultsNotIn(
                 libraryId: library.id,
                 activeCategoryNames: activeCategoryNames
             )
+        } catch CacheContextError.superseded {
+            return nil
         } catch {
             logger.error("Could not prune stale library categories")
             return "Category refresh failed. Try refreshing again."
@@ -527,8 +546,13 @@ class CalibreLibraryManager {
             do {
                 _ = try await container.libraryCategoryService.fetchAndCacheCategory(
                     library: library,
-                    category: category
+                    category: category,
+                    cache: cache
                 )
+            } catch CacheContextError.superseded {
+                return nil
+            } catch is CancellationError {
+                return nil
             } catch {
                 logger.error("Could not refresh a library category")
                 firstError = "Category refresh failed. Try refreshing again."
