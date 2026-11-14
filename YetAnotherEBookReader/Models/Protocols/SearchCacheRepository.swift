@@ -20,7 +20,14 @@ final class CacheLibraryLifetime: @unchecked Sendable {
     func invalidate() { lock.withLock { valid = false } }
 
     func checkCurrent() throws {
-        guard lock.withLock({ valid }) else { throw CacheContextError.superseded }
+        try withCurrent {}
+    }
+
+    func withCurrent<T>(_ body: () throws -> T) throws -> T {
+        try lock.withLock {
+            guard valid else { throw CacheContextError.superseded }
+            return try body()
+        }
     }
 }
 
@@ -165,7 +172,8 @@ protocol SearchCacheRepository: CacheRepository {
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
         json: NSDictionary?,
-        retainingExisting: Set<Int32>
+        retainingExisting: Set<Int32>,
+        metadataBaseline: [Int32: Date]
     ) throws
 }
 
@@ -174,8 +182,10 @@ extension SearchCacheRepository {
         AsyncStream { $0.finish() }
     }
 
-    func writeMetadataEntries(library: CalibreLibrary, entries: [String: CalibreBookEntry?], json: NSDictionary?) throws {
-        try writeMetadataEntries(library: library, entries: entries, json: json, retainingExisting: [])
+    func writeMetadataEntries(library: CalibreLibrary, entries: [String: CalibreBookEntry?], json: NSDictionary?,
+                              retainingExisting: Set<Int32> = []) throws {
+        try writeMetadataEntries(library: library, entries: entries, json: json, retainingExisting: retainingExisting,
+                                 metadataBaseline: [:])
     }
 
     func saveLibrarySourceResult(

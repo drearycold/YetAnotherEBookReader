@@ -21,7 +21,7 @@ enum Format: String, CaseIterable, Identifiable, Codable, Sendable {
     var ext: String { self.rawValue.lowercased() }
 }
 
-struct FormatInfo: Codable {
+struct FormatInfo: Codable, Equatable {
     var selected: Bool?
     var filename: String?
     var serverSize: UInt64

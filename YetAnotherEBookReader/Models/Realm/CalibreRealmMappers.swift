@@ -198,8 +198,17 @@ extension CalibreBookRealm {
         self.readPosData = nil
     }
 
-    func applyMetadataEntry(_ entry: CalibreBookEntry, root: NSDictionary) {
-        applyMetadataValue(CalibreBookMetadataValue(entry: entry, root: root))
+    func canApplyMetadata(_ metadata: CalibreBookMetadataValue, since baseline: Date?) -> Bool {
+        let hasDatedMetadata = lastModified > Date(timeIntervalSince1970: 0)
+        if let remoteDate = metadata.lastModified {
+            if hasDatedMetadata, remoteDate < lastModified { return false }
+            if remoteDate > lastModified { return true }
+        } else if hasDatedMetadata {
+            return false
+        }
+        // Equal and undated answers can update a row whose metadata has not changed
+        // since the request. A newer server timestamp wins across overlapping writes.
+        return baseline.map { $0 == lastUpdated } ?? true
     }
 
     func applyMetadataValue(_ metadata: CalibreBookMetadataValue) {

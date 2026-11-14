@@ -1960,7 +1960,8 @@ class MockSearchCacheRepository: SearchCacheRepository {
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
         json: NSDictionary?,
-        retainingExisting: Set<Int32>
+        retainingExisting: Set<Int32>,
+        metadataBaseline: [Int32: Date]
     ) throws {
         lock.lock()
         defer { lock.unlock() }

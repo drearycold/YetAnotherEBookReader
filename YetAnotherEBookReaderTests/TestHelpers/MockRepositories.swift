@@ -260,7 +260,7 @@ class MockBookRepository: BookRepositoryProtocol {
     var persistMetadataEntriesCalled = false
     var persistMetadataEntriesLibraryParam: CalibreLibrary?
     var persistMetadataEntriesBookIdsParam: [Int32]?
-    var persistMetadataEntriesReturn = BookMetadataPersistenceResult()
+    var persistMetadataEntriesReturn = [Int32: BookMetadataPersistenceResult]()
 
     var observeBookCalled = false
     var observeBookIdParam: String?
@@ -329,15 +329,11 @@ class MockBookRepository: BookRepositoryProtocol {
     }
 
     func persistMetadataEntries(
-        library: CalibreLibrary,
-        bookIds: [Int32],
-        entries: [String: CalibreBookEntry?],
-        json: NSDictionary,
-        includeAnnotationBooks: Bool
-    ) -> BookMetadataPersistenceResult {
+        scope: BookMetadataRefreshScope, bookIDs: [Int32], answers: [Int32: BookMetadataAnswer]
+    ) throws -> [Int32: BookMetadataPersistenceResult] {
         persistMetadataEntriesCalled = true
-        persistMetadataEntriesLibraryParam = library
-        persistMetadataEntriesBookIdsParam = bookIds
+        persistMetadataEntriesLibraryParam = scope.library
+        persistMetadataEntriesBookIdsParam = bookIDs
         return persistMetadataEntriesReturn
     }
 

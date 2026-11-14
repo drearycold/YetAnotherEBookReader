@@ -641,10 +641,11 @@ final class CalibreServerServiceTests: XCTestCase {
         }
 
         let result = await service.getAnnotations(task: task)
-        if case .httpStatus(let statusCode, _) = result.error {
+        XCTAssertNil(result.error)
+        if case .httpStatus(let statusCode, _) = result.annotationsError {
             XCTAssertEqual(statusCode, 500)
         } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: result.error))")
+            XCTFail("Expected annotation HTTP error, but got \(String(describing: result.annotationsError))")
         }
     }
 

@@ -116,12 +116,12 @@ struct CalibreBookEntry: Codable {
     var category_urls: [String: [String: String]] = [:]
 }
 
-struct CalibreBookMetadataFormatValue {
+struct CalibreBookMetadataFormatValue: Sendable {
     var serverSize: UInt64
     var serverMTime: Date
 }
 
-struct CalibreBookMetadataValue {
+struct CalibreBookMetadataValue: Sendable {
     var title: String
     var publisher: String
     var series: String
@@ -136,7 +136,12 @@ struct CalibreBookMetadataValue {
     var rating: Int
     var identifiers: [String: String]
     var comments: String
-    var userMetadatas: [String: Any]
+    private let userMetadataData: Data?
+
+    var userMetadatas: [String: Any] {
+        guard let userMetadataData else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: userMetadataData) as? [String: Any]) ?? [:]
+    }
 
     init(entry: CalibreBookEntry, root: NSDictionary) {
         let parserOne = ISO8601DateFormatter()
@@ -150,7 +155,7 @@ struct CalibreBookMetadataValue {
         seriesIndex = entry.series_index ?? 0.0
         pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
         timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp)
-        lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified)
+        lastModified = parseLastModified(entry.last_modified)
         authors = entry.authors
         tags = entry.tags
         formats = entry.format_metadata.reduce(into: [:]) { partialResult, formatEntry in
@@ -162,20 +167,20 @@ struct CalibreBookMetadataValue {
             )
         }
         size = 0
-        rating = Int(entry.rating * 2)
+        rating = Int(exactly: (entry.rating * 2).rounded(.towardZero)) ?? 0
         identifiers = entry.identifiers
         comments = entry.comments ?? ""
 
-        userMetadatas = [:]
-        if let userMetadata = root["user_metadata"] as? NSDictionary {
-            userMetadatas = userMetadata.reduce(into: [:]) {
-                guard let dict = $1.value as? NSDictionary,
-                      let label = dict["label"] as? String,
-                      let value = dict["#value#"] else {
-                    return
-                }
-                $0[label] = value
-            }
+        let values = (root["user_metadata"] as? NSDictionary)?.reduce(into: [String: Any]()) {
+            guard let dict = $1.value as? NSDictionary,
+                  let label = dict["label"] as? String,
+                  let value = dict["#value#"] else { return }
+            $0[label] = value
+        }
+        if let values, !values.isEmpty {
+            userMetadataData = try? JSONSerialization.data(withJSONObject: values)
+        } else {
+            userMetadataData = nil
         }
     }
 

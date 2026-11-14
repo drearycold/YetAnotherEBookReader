@@ -26,8 +26,11 @@ struct CalibreBooksMetadataRequest {
 /// The answer for one book in this request; independent of the service's legacy global status.
 enum BookMetadataRefreshResult: Equatable {
     case updated
+    case unchanged
     case unavailable
+    case localBookMissing
     case failed(String)
+    case superseded
     case cancelled
 }
 
@@ -55,13 +58,28 @@ struct CalibreBooksTask {
     var searchCriteria: SearchCriteria?
     var searchTask: CalibreLibrarySearchTask?
     
-    var booksUpdated = Set<Int32>()
-    var booksError = Set<Int32>()
-    var booksDeleted = Set<Int32>()
-    var booksInShelf = [CalibreBook]()
-    var booksAnnotation = [CalibreBook]()
+    var invalidMetadataIDs = Set<Int32>()
 
     var error: CalibreAPIError? = nil
+    var annotationsError: CalibreAPIError? = nil
+
+    var metadataAnswers: [Int32: BookMetadataAnswer] {
+        var answers: [Int32: BookMetadataAnswer] = [:]
+        for id in books {
+            if invalidMetadataIDs.contains(id) {
+                answers[id] = .invalid
+            } else if let answer = booksMetadataEntry?[id.description] {
+                switch answer {
+                case .none:
+                    answers[id] = .unavailable
+                case .some(let entry):
+                    let root = booksMetadataJSON?[id.description] as? NSDictionary ?? [:]
+                    answers[id] = .metadata(.init(entry: entry, root: root))
+                }
+            }
+        }
+        return answers
+    }
 }
 
 struct CalibreLibraryProbeTask {

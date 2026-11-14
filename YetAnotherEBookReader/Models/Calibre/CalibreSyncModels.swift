@@ -170,11 +170,26 @@ struct CalibreLibrarySummary: Equatable {
     var customColumnInfos: [String: CalibreCustomColumnInfo]? = nil
 }
 
-struct BookMetadataPersistenceResult {
-    var booksUpdated = Set<Int32>()
-    var booksDeleted = Set<Int32>()
-    var booksInShelf = [CalibreBook]()
-    var booksAnnotation = [CalibreBook]()
+enum BookMetadataAnswer: Sendable {
+    case metadata(CalibreBookMetadataValue)
+    case unavailable
+    case invalid
+}
+
+/// These values describe rows as seen in a completed transaction.
+enum BookMetadataPersistenceResult {
+    case updated(CalibreBook)
+    case unchanged(confirmedPresent: CalibreBook?)
+    case unavailable(CalibreBook)
+    case unanswered
+    case invalid
+    case localBookMissing
+    case superseded
+}
+
+enum BookMetadataStorageError: Error {
+    case unavailable
+    case writeFailed
 }
 
 struct CalibreLibraryCategory: Codable {

@@ -2,10 +2,118 @@
 
 ## Current Focus
 
-**Local File Import and Removal Consistency (FI).** FI3 is verified on
-`codex/local-file-consistency-fi3` from main `0c83b48f`, which merged
-FI2 in PR #155. The earlier PDF investigation remains under Current
-Branch Notes.
+**Book Metadata Refresh and Sync Coordination (BS1)** is on
+`codex/book-metadata-refresh-bs1`, based on `694d44e5` after FI3 PR #156.
+The earlier PDF investigation remains under Current Branch Notes.
+
+## Book Refresh and Sync Direction (2026-11-14)
+
+The remote book refresh pipeline serves Book Detail, shelf refresh and
+reader-close sync. It coordinates batches, metadata persistence, shelf
+reconciliation, position and annotation merges, and follow-up uploads.
+Browse keeps its own CC-scoped writer and shares metadata version checks.
+
+BS2 should give retries and follow-up sync/uploads a clear owner and bounded
+lifetime, with aggregate busy state for overlapping operations. Distinguish
+metadata refresh, local merge and remote upload outcomes without making a
+failed upload undo committed metadata or local annotations. BS3 should verify
+Book Detail, shelf and reader-close flows end to end and complete the relevant
+Calibre contracts.
+
+Reuse BookMetadataSyncWorker, the existing position/highlight/bookmark merge
+algorithms, AL diagnostics, CC context patterns and SC commit-result rules.
+Preserve BD1's committed-value reconciliation after cancellation, 200-book
+batching, null-versus-missing response semantics, local files/history,
+bookmark-title and highlight-UUID merge rules, and all three reader engines.
+Do not introduce a new cloud-sync protocol or durable outbox by default.
+Calibre 9.18's read-only position HTTP 403 and CI's pinned 9.11 behavior are
+versioned contract evidence.
+
+### BS1 refresh context and commit result
+
+The manager starts a refresh from the canonical library and a single source
+URL. The book repository pins the database epoch, library lifetime and Realm
+row identities for the entire request. Batches deduplicate IDs before the
+200-book limit. The queue opens the pinned configuration on its own thread
+and validates the saved server, library and book rows in the transaction.
+Replacing a database retires its epoch even if it returns. Hiding, removing
+or replacing a connection retires the published library lifetime. Fresh
+requests can continue to use previously saved metadata.
+
+Each response reports a committed metadata snapshot, a retained newer
+snapshot, explicit null, a missing key, an invalid entry, a missing local
+record or a superseded result. Unavailable database and failed write are
+separate storage errors. Results are returned after the transaction commits.
+The shared metadata writer compares Calibre timestamps with microsecond
+precision and uses the existing `lastUpdated` value to protect against equal
+or undated answers after an intervening commit. Dated metadata takes
+precedence over an undated answer. Writes merge only metadata into the
+current row. Explicit null marks that server answer in Settings and keeps
+the book, files, history and annotations.
+
+The manager rereads the current rows before reconciling the shelf and
+publishes after a successful write. Cancellation before enqueue skips the
+write. Cancellation after enqueue lets a current transaction finish and
+publishes its values before returning cancelled. Metadata is reconciled
+before optional annotation fetch/merge. The worker uses the pinned metadata
+database for annotations and the existing per-server position database.
+Follow-up POSTs check the same scope before transport. Failed HTTP/decoding
+batches report their per-book outcomes directly. BS2 owns retry policy, upload
+task lifetimes, and aggregation of library busy state. Schema 151 is retained.
+
+The three baseline scenarios in `/tmp/YabrBS1/red.log` failed 11 assertions.
+They reproduced a write into a replacement database, a stale shelf answer
+overwriting Browse metadata, and loss of valid answers in a mixed batch.
+The rollback fixtures throw from an active Realm write after mutations and
+check that no metadata or null marker escapes. The manager fixture checks
+the shelf, Settings status and update stream. Other regressions use
+transport gates and queue boundaries for replacement and restoration of
+databases, credentials, libraries and book rows. They cover reversed
+answers within one millisecond, duplicate IDs, a 201-book interrupted
+request, original BD1 cancellation, and reader-close position and
+bookmark merges.
+
+The final iPhone 17 unit run recorded 1,219 tests: 1,216 passed, two existing
+expected PDFKit failures and one opt-in PDF benchmark skipped. All 21
+contracts ran and passed against Calibre 9.11.0. The iOS Simulator Release
+and Mac Catalyst builds passed with the locked packages. Logs and result
+bundles are in `/tmp/YabrBS1`.
+
+The isolated iPhone 17 Release app also passed the native Book Detail
+journey against the local Calibre 9.18 fixture through the existing proxy:
+HTTP 503 and retry, explicit null, cached EPUB reading, closing the reader
+and returning from History. The UI driver now checks the current Clear EPUB
+Download label. The 9.18 fixture covers local reading and the refresh UI;
+the Digest and restricted-user checks use the separate 9.11.0 contracts.
+
+#### BS1 review regressions
+
+An annotation response held until Recent rendered the committed title
+reproduced stale progress and sort order even though the new position was
+in Realm. The position repository now reports whether it actually changed
+the server's position Realm. The manager publishes a second shelf event
+after a committed position change for a still-shelved book in the same
+scope. Cancellation before merge and a retired database both leave the
+positions and shelf publication alone. Cancellation after a valid position
+commit still lets the shelf reflect that commit.
+
+A held equal-version answer used to clear a newer explicit null in Settings.
+When the row changed during the request and the answer is rejected, the
+persistence result carries no availability confirmation. A later answer
+against the current row can confirm presence while retaining a newer local
+metadata version. The fixture checks the null marker, cached file bytes,
+and the subsequent confirmation.
+
+A scoped Browse write during a shelf refresh reproduced a new persisted
+title and an old Recent title and author category. A retained row now
+triggers a shelf update when its shelf values differ. The fixtures read
+the production Recent and Discover snapshots and verify that an unchanged
+retained row emits no update. The initial red run also exposed leftover
+fixture shelf entries in one control. The revised fixtures seed only the
+books they use. Evidence is in `/tmp/YabrBS1/review-red.log`,
+`review-final.xcresult` and `review-shelf-output.xcresult`.
+The review passed 241 focused tests, a six-case rerun covering Recent and
+Discover output and both scope controls, and a Mac Catalyst build.
 
 ## Next Refactoring Direction: Local File Operations (2026-11-13)
 

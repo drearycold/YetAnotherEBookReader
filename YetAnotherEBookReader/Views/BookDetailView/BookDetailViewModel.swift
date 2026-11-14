@@ -242,10 +242,10 @@ class BookDetailViewModel: ObservableObject {
             }
             self.applyBookUpdate(updatedBook, container: container)
             switch results[book.id] ?? .failed("The server did not return this book's details.") {
-            case .updated: self.refreshState = .synced
+            case .updated, .unchanged: self.refreshState = .synced
             case .unavailable: self.refreshState = .unavailable
             case .failed(let message): self.refreshState = .failed(message)
-            case .cancelled: self.refreshState = .idle
+            case .localBookMissing, .cancelled, .superseded: self.refreshState = .idle
             }
             self.updateFormatStates()
         }

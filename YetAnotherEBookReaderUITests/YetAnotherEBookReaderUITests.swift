@@ -2372,7 +2372,7 @@ final class CalibreOnboardingUITests: XCTestCase {
         waitForReadLabel("Download and Read")
         element("book-detail.download-only").tap()
         waitForReadLabel("Read")
-        XCTAssertTrue(app.buttons["Clear Downloaded Files"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.buttons["Clear EPUB Download"].waitForExistence(timeout: 3), app.debugDescription)
         XCTAssertTrue(app.buttons["Refresh Book Details"].waitForExistence(timeout: 3), app.debugDescription)
 
         try configureFixture("failed", environmentKey: "YABR_DETAIL_REFRESH_CONTROL_URL")
