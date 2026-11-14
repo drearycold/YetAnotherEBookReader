@@ -358,6 +358,8 @@ final class CalibreServerContractTests: XCTestCase {
     func testABookCalibreDoesNotHaveIsReportedDeleted() async throws {
         let missingId = Int32.random(in: 900_000 ..< 1_000_000)
         let bookManager = container.bookManager
+        try container.serverManager.addServer(server: library.server, libraries: [library])
+        defer { XCTAssertNoThrow(try container.serverManager.removeServer(server: library.server)) }
         for id in [book.id, missingId] {
             var shelved = CalibreBook(id: id, library: library)
             shelved.inShelf = true

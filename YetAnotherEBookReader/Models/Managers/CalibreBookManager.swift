@@ -79,6 +79,7 @@ class CalibreBookManager {
     let readingPositionRepository: ReadingPositionRepositoryProtocol
     let annotationRepository: AnnotationRepositoryProtocol
     private let metadataSyncWorker: BookMetadataSyncWorker
+    @MainActor private var metadataStatusOwners: [String: UUID] = [:]
 
     init(
         container: AppContainerProtocol? = nil,
@@ -390,8 +391,8 @@ class CalibreBookManager {
     }
 
     func addedCache(book: CalibreBook, format: Format) {
-        guard var formatInfo = book.formats[format.rawValue] else { return }
-        var newBook = book
+        var newBook = bookRepository.getBook(id: book.inShelfId) ?? book
+        guard var formatInfo = newBook.formats[format.rawValue] else { return }
 
         if let cacheInfo = getCacheInfo(book: newBook, format: format),
            let cacheMTime = cacheInfo.1 {
@@ -458,6 +459,7 @@ class CalibreBookManager {
     @MainActor
     func discardShelfBooks(in libraryIDs: Set<String>) {
         let books = booksInShelf.values.filter { libraryIDs.contains($0.library.id) }
+        booksAnnotation = booksAnnotation.filter { !libraryIDs.contains($0.value.library.id) }
         var localPaths = Set<URL>()
         for book in books {
             if book.library.server.isLocal, let cover = book.coverURL { localCoverCache?.removeCover(for: cover) }
@@ -616,221 +618,283 @@ class CalibreBookManager {
     @discardableResult
     @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async -> [Int32: BookMetadataRefreshResult] {
-        // A long list, such as a large shelf's, goes in batches: calibre refuses a long request line.
-        if request.books.count > CalibreServerService.booksMetadataBatchSize {
-            var results = [Int32: BookMetadataRefreshResult]()
-            for batch in request.books.chunks(size: CalibreServerService.booksMetadataBatchSize) {
-                let batchResults = await getBooksMetadata(request: .init(library: request.library, books: batch, getAnnotations: request.getAnnotations))
-                results.merge(batchResults) { _, new in new }
+        var seen = Set<Int32>()
+        let ids = request.books.filter { seen.insert($0).inserted }
+        guard !ids.isEmpty else { return [:] }
+        if Task.isCancelled { return metadataResults(ids, .cancelled) }
+
+        guard let container else { return metadataResults(ids, .failed("Server unavailable")) }
+        guard let library = container.calibreLibraries[request.library.id], !library.server.isLocal else {
+            return metadataResults(ids, .superseded)
+        }
+        let service = container.calibreServerService
+        let scope: BookMetadataRefreshScope
+        do {
+            guard let lifetime = try service.cacheLifetime(for: library) else { throw CacheContextError.superseded }
+            guard let source = service.getServerUrlByReachability(server: library.server), source.isHTTP else {
+                throw CalibreAPIError.serverUnreachable
             }
-            return results
+            scope = try bookRepository.prepareMetadataRefresh(
+                library: library, source: source, bookIDs: ids, lifetime: lifetime)
+        } catch {
+            return metadataResults(ids, metadataFailure(error))
         }
 
-        container?.librarySyncStatus[request.library.id]?.isUpd = true
-        defer { container?.librarySyncStatus[request.library.id]?.isUpd = false }
-        let cancelled = Dictionary(uniqueKeysWithValues: Set(request.books).map { ($0, BookMetadataRefreshResult.cancelled) })
-        guard !Task.isCancelled else { return cancelled }
-
-        let books = request.books.map { bookId -> CalibreBook in
-            let book = CalibreBook(id: bookId, library: request.library)
-            if let book = self.booksInShelf[book.inShelfId] {
-                return book
-            }
-            if let book = self.booksAnnotation[book.inShelfId] {
-                return book
-            }
-            if request.getAnnotations,
-               let book = self.getBook(for: book.inShelfId) {
-                return book
-            }
-            return book
-        }
-
-        guard let calibreServerService = container?.calibreServerService else {
-            return Dictionary(uniqueKeysWithValues: Set(request.books).map { ($0, .failed("Server unavailable")) })
-        }
-
-        var task = calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) ?? CalibreBooksTask(request: request)
-
-        let fetchSignpost = AppPerformanceSignpost.begin("MetadataHTTPFetch", "Library: \(request.library.id), Books: \(books.count)")
-        task = await calibreServerService.getBooksMetadata(task: task)
-
-        if !Task.isCancelled, task.request.getAnnotations {
-            task = await calibreServerService.getAnnotations(task: task)
-        }
-
-        var annotationCount = 0
-        if let annotationsResult = task.booksAnnotationsEntry {
-            for (_, entry) in annotationsResult {
-                annotationCount += (entry.annotations_map.bookmark?.count ?? 0)
-                annotationCount += (entry.annotations_map.highlight?.count ?? 0)
-            }
-        }
-        AppPerformanceSignpost.end("MetadataHTTPFetch", fetchSignpost, "Library: \(request.library.id), Books: \(books.count), Annotations: \(annotationCount)")
-        guard !Task.isCancelled else { return cancelled }
-
-        let metadataPersistenceResult = await withCheckedContinuation { (continuation: CheckedContinuation<BookMetadataPersistenceResult, Never>) in
-            DatabaseService.metadataWriteQueue.async {
-                guard let entries = task.booksMetadataEntry,
-                      let json = task.booksMetadataJSON else {
-                    continuation.resume(returning: BookMetadataPersistenceResult())
-                    return
-                }
-
-                let saveSignpost = AppPerformanceSignpost.begin("MetadataRealmSave", "Library: \(task.library.id), Books: \(task.books.count)")
-                let result = self.bookRepository.persistMetadataEntries(
-                    library: task.library,
-                    bookIds: task.books,
-                    entries: entries,
-                    json: json,
-                    includeAnnotationBooks: task.annotationsData != nil
-                )
-                AppPerformanceSignpost.end("MetadataRealmSave", saveSignpost, "Library: \(task.library.id), Books: \(task.books.count)")
-                continuation.resume(returning: result)
-            }
-        }
-        // Once queued, the GCD write completes even if its caller cancels. Reconcile its
-        // committed values and publish the result before reporting cancellation, otherwise
-        // a later shelf mutation can save an old snapshot over the refreshed metadata.
-        task.booksUpdated.formUnion(metadataPersistenceResult.booksUpdated)
-        task.booksDeleted.formUnion(metadataPersistenceResult.booksDeleted)
-        task.booksInShelf.append(contentsOf: metadataPersistenceResult.booksInShelf)
-        task.booksAnnotation.append(contentsOf: metadataPersistenceResult.booksAnnotation)
-
-        task.booksInShelf.forEach { newBook in
-            self.booksInShelf[newBook.inShelfId] = newBook
-        }
-        task.booksAnnotation.forEach { newBook in
-            self.booksAnnotation[newBook.inShelfId] = newBook
-        }
-
-        if !Task.isCancelled, task.request.getAnnotations, let annotationsResult = task.booksAnnotationsEntry {
-            var jobs = [BookMetadataSyncWorker.SyncJob]()
-
-            for book in task.booksInShelf {
-                for (formatKey, _) in book.formats {
-                    guard let format = Format(rawValue: formatKey),
-                          let entry = annotationsResult["\(book.id):\(formatKey)"]
-                    else { continue }
-                    jobs.append(
-                        BookMetadataSyncWorker.SyncJob(
-                            book: book,
-                            format: format,
-                            entry: entry,
-                            needUpload: true
-                        )
-                    )
-                }
-            }
-
-            for book in task.booksAnnotation {
-                for (formatKey, _) in book.formats {
-                    guard let format = Format(rawValue: formatKey),
-                          let entry = annotationsResult["\(book.id):\(formatKey)"]
-                    else { continue }
-                    jobs.append(
-                        BookMetadataSyncWorker.SyncJob(
-                            book: book,
-                            format: format,
-                            entry: entry,
-                            needUpload: false
-                        )
-                    )
-                }
-            }
-
-            let outcome = await metadataSyncWorker.executeSync(jobs: jobs)
-            if !Task.isCancelled {
-                // Trigger uploads for positions
-                for posUpload in outcome.positionsToUpload {
-                    for pos in posUpload.entries {
-                        do {
-                            let setTask = try calibreServerService.buildSetLastReadPositionTask(
-                                library: task.library,
-                                bookId: posUpload.book.id,
-                                format: posUpload.format,
-                                entry: pos
-                            )
-                            Task {
-                                await calibreServerService.setLastReadPositionByTask(task: setTask)
-                            }
-                        } catch {
-                            logger.error("Failed to build set last read position task: \(error.localizedDescription)")
-                        }
-                    }
-                }
-
-                // Trigger uploads for annotations
-                for annUpload in outcome.annotationsToUpload {
-                    do {
-                        let updateTask = try calibreServerService.buildUpdateAnnotationsTask(
-                            library: task.library,
-                            bookId: annUpload.book.id,
-                            format: annUpload.format,
-                            highlights: annUpload.highlights,
-                            bookmarks: annUpload.bookmarks
-                        )
-                        Task {
-                            await calibreServerService.updateAnnotationByTask(task: updateTask)
-                        }
-                    } catch {
-                        logger.error("Failed to build update annotations task: \(error.localizedDescription)")
-                    }
+        // Only the latest refresh can clear its published busy flag. Counting all
+        // overlapping work and owning follow-up tasks are separate from this flag.
+        let operation = UUID()
+        metadataStatusOwners[library.id] = operation
+        container.librarySyncStatus[library.id]?.isUpd = true
+        defer {
+            if metadataStatusOwners[library.id] == operation {
+                metadataStatusOwners.removeValue(forKey: library.id)
+                if container.librarySyncStatus[library.id]?.isUpd == true {
+                    container.librarySyncStatus[library.id]?.isUpd = false
                 }
             }
         }
 
-        let booksHandled = task.booksUpdated.union(task.booksError).union(task.booksDeleted)
+        var results: [Int32: BookMetadataRefreshResult] = [:]
+        for batch in ids.chunks(size: CalibreServerService.booksMetadataBatchSize) {
+            let batchResults = await refreshMetadataBatch(batch, scope: scope, service: service,
+                                                          getAnnotations: request.getAnnotations)
+            results.merge(batchResults) { _, new in new }
+        }
+        return results
+    }
 
-        recordMetadataAnswers(library: task.library, missing: task.booksDeleted, failed: task.booksError, present: task.booksUpdated)
-
-        if !Task.isCancelled, task.booksError.isEmpty == false {
-            let booksRetry = task.books.filter { booksHandled.contains($0) == false }
-
-            if booksRetry.isEmpty == false {
-                booksRetry.chunks(size: max(booksRetry.count / 16, 1)).forEach { chunk in
-                    Task {
-                        await self.getBooksMetadata(request: .init(library: task.library, books: chunk, getAnnotations: task.request.getAnnotations))
-                    }
-                }
-            }
+    @MainActor
+    private func refreshMetadataBatch(_ ids: [Int32], scope: BookMetadataRefreshScope, service: CalibreServerService,
+                                      getAnnotations: Bool) async -> [Int32: BookMetadataRefreshResult] {
+        if Task.isCancelled { return metadataResults(ids, .cancelled) }
+        let library = scope.library
+        let requestedBooks: [Int32: CalibreBook]
+        do {
+            requestedBooks = try bookRepository.metadataRefreshBooks(scope, bookIDs: ids)
+        } catch {
+            return metadataResults(ids, metadataFailure(error))
         }
 
-        container?.librarySyncStatus[task.library.id]?.isUpd = false
+        let books = ids.compactMap { requestedBooks[$0] }
+        var results = metadataResults(ids, .localBookMissing)
+        guard !books.isEmpty else { return results }
+        let bookIDs = books.map(\.id)
+        guard let request = service.buildBooksMetadataTask(
+            library: library, books: books, getAnnotations: getAnnotations, serverURL: scope.source)
+        else { return results.merging(metadataResults(bookIDs, .failed("Invalid book refresh URL."))) { _, new in new } }
 
-        if request.books.count == 1, let bookId = request.books.first {
-            // The main Realm may not have advanced to the background commit yet.
-            // Publish the committed value already used to reconcile the shelf when available.
-            let committedBook = task.booksInShelf.first { $0.id == bookId }
-                ?? task.booksAnnotation.first { $0.id == bookId }
-            if let book = committedBook ?? self.getBook(
-                for: bookRepository.primaryKey(library: task.library, bookId: bookId)
-            ) {
-                await container?.publishCalibreUpdate(.book(book))
-            }
-        } else if !task.booksInShelf.isEmpty {
-            await container?.publishCalibreUpdate(.shelf)
-        }
-
-        return Dictionary(uniqueKeysWithValues: Set(request.books).map { id in
-            let result: BookMetadataRefreshResult
-            if Task.isCancelled {
-                result = .cancelled
-            } else if task.booksDeleted.contains(id) {
-                result = .unavailable
-            } else if let error = task.error {
-                if case .httpStatus(let status, _) = error {
-                    result = .failed("The server could not refresh book details (HTTP \(status)). Please try again.")
-                } else {
-                    result = .failed(error.localizedDescription)
-                }
-            } else if task.booksUpdated.contains(id), !task.booksError.contains(id) {
-                result = .updated
-            } else {
-                result = .failed("The server did not return this book's details.")
-            }
-            return (id, result)
+        let fetch = AppPerformanceSignpost.begin("MetadataHTTPFetch", "Library: \(library.id), Books: \(books.count)")
+        let repository = bookRepository
+        let task = await service.getBooksMetadata(task: request, checkCurrent: {
+            try repository.checkMetadataRefresh(scope, bookID: nil)
         })
+        AppPerformanceSignpost.end("MetadataHTTPFetch", fetch, "Library: \(library.id), Books: \(books.count)")
+        do {
+            try bookRepository.checkMetadataRefresh(scope, bookID: nil)
+        } catch {
+            return metadataResults(ids, metadataFailure(error))
+        }
+        if Task.isCancelled { return metadataResults(ids, .cancelled) }
+        let payload = task.metadataAnswers
+        // A queued transaction is independent of caller cancellation. Its
+        // committed values still have to reach the shelf and observers.
+        if Task.isCancelled { return metadataResults(ids, .cancelled) }
+        do {
+            let persisted = try await withCheckedThrowingContinuation { continuation in
+                DatabaseService.metadataWriteQueue.async {
+                    let save = AppPerformanceSignpost.begin("MetadataRealmSave", "Library: \(library.id), Books: \(bookIDs.count)")
+                    defer { AppPerformanceSignpost.end("MetadataRealmSave", save, "Library: \(library.id), Books: \(bookIDs.count)") }
+                    continuation.resume(with: Result {
+                        try repository.persistMetadataEntries(scope: scope, bookIDs: bookIDs, answers: payload)
+                    })
+                }
+            }
+            let current = try bookRepository.metadataRefreshBooks(scope, bookIDs: bookIDs)
+            try scope.checkCurrent(in: databaseService)
+            let syncIDs = reconcileMetadataRefresh(library: library, ids: bookIDs, persisted: persisted,
+                current: current, fetchError: task.error, includeAnnotations: getAnnotations, results: &results)
+
+            if !Task.isCancelled, getAnnotations, !syncIDs.isEmpty {
+                await syncRefreshedBookAnnotations(syncIDs, scope: scope, service: service)
+            }
+        } catch {
+            let failure = metadataFailure(error)
+            if failure == .superseded { return metadataResults(ids, failure) }
+            results.merge(metadataResults(bookIDs, failure)) { _, new in new }
+        }
+        return Task.isCancelled ? metadataResults(ids, .cancelled) : results
+    }
+
+    @MainActor
+    private func reconcileMetadataRefresh(
+        library: CalibreLibrary, ids: [Int32], persisted: [Int32: BookMetadataPersistenceResult],
+        current: [Int32: CalibreBook], fetchError: CalibreAPIError?, includeAnnotations: Bool,
+        results: inout [Int32: BookMetadataRefreshResult]
+    ) -> [Int32] {
+        var present = Set<Int32>()
+        var missing = Set<Int32>()
+        var failed = Set<Int32>()
+        var updated = [CalibreBook]()
+        var retainedShelfChanged = false
+        var syncIDs = [Int32]()
+
+        for id in ids {
+            guard let book = current[id] else {
+                results[id] = .localBookMissing
+                continue
+            }
+            switch persisted[id] {
+            case .updated(let committed):
+                results[id] = .updated
+                if book.lastUpdated == committed.lastUpdated && book.lastModified == committed.lastModified {
+                    present.insert(id)
+                }
+                updated.append(book)
+                syncIDs.append(id)
+            case .unchanged(let confirmed):
+                results[id] = .unchanged
+                if let confirmed, book.lastUpdated == confirmed.lastUpdated, book.lastModified == confirmed.lastModified {
+                    present.insert(id)
+                }
+                retainedShelfChanged = retainedShelfChanged || shelfSnapshotChanged(for: book)
+                syncIDs.append(id)
+            case .unavailable(let committed):
+                if book.lastUpdated == committed.lastUpdated && book.lastModified == committed.lastModified {
+                    missing.insert(id)
+                    results[id] = .unavailable
+                } else {
+                    results[id] = .superseded
+                }
+            case .unanswered:
+                failed.insert(id)
+                results[id] = fetchError.map { metadataFailure($0) } ?? .failed("The server did not return this book's details.")
+                continue
+            case .invalid:
+                failed.insert(id)
+                results[id] = .failed("The server returned invalid details for this book.")
+                continue
+            case .localBookMissing:
+                results[id] = .localBookMissing
+                continue
+            case .superseded, nil:
+                results[id] = .superseded
+                continue
+            }
+
+            if readingBook?.inShelfId == book.inShelfId { readingBook = book }
+            if book.inShelf {
+                booksInShelf[book.inShelfId] = book
+                if booksAnnotation[book.inShelfId] != nil { booksAnnotation.removeValue(forKey: book.inShelfId) }
+            } else {
+                booksInShelf.removeValue(forKey: book.inShelfId)
+                if includeAnnotations || booksAnnotation[book.inShelfId] != nil {
+                    booksAnnotation[book.inShelfId] = book
+                }
+            }
+        }
+
+        recordMetadataAnswers(library: library, missing: missing, failed: failed, present: present)
+        if ids.count == 1, let book = updated.first {
+            container?.publishCalibreUpdate(.book(book))
+        } else if retainedShelfChanged || updated.contains(where: \.inShelf) {
+            container?.publishCalibreUpdate(.shelf)
+        }
+        return syncIDs
+    }
+
+    @MainActor
+    private func shelfSnapshotChanged(for book: CalibreBook) -> Bool {
+        guard let previous = booksInShelf[book.inShelfId] else { return book.inShelf }
+        let previousAuthors = previous.authors.isEmpty ? ["Unknown"] : previous.authors
+        let authors = book.authors.isEmpty ? ["Unknown"] : book.authors
+        return !book.inShelf || previous.title != book.title || previousAuthors.prefix(3) != authors.prefix(3)
+            || previous.lastModified != book.lastModified || previous.lastUpdated != book.lastUpdated
+            || previous.coverURL != book.coverURL || previous.formats != book.formats
+    }
+
+    @MainActor
+    private func syncRefreshedBookAnnotations(_ ids: [Int32], scope: BookMetadataRefreshScope,
+                                              service: CalibreServerService) async {
+        guard let latest = try? bookRepository.metadataRefreshBooks(scope, bookIDs: ids),
+              !latest.isEmpty,
+              let task = service.buildBooksMetadataTask(library: scope.library, books: Array(latest.values),
+                                                        getAnnotations: true, serverURL: scope.source) else { return }
+        let repository = bookRepository
+        let response = await service.getAnnotations(task: task, checkCurrent: {
+            try repository.checkMetadataRefresh(scope, bookID: nil)
+        })
+        guard !Task.isCancelled, let entries = response.booksAnnotationsEntry, !entries.isEmpty,
+              (try? bookRepository.checkMetadataRefresh(scope, bookID: nil)) != nil else { return }
+
+        let jobs = latest.values.flatMap { book in
+            book.formats.keys.compactMap { key -> BookMetadataSyncWorker.SyncJob? in
+                guard let format = Format(rawValue: key),
+                      let entry = entries["\(book.id):\(key)"] ?? entries["\(book.id):\(key.lowercased())"] else { return nil }
+                return .init(book: book, format: format, entry: entry, needUpload: book.inShelf)
+            }
+        }
+        let outcome = await metadataSyncWorker.executeSync(jobs: jobs, refresh: (scope, repository))
+        let changedIDs = latest.values.filter { outcome.changedPositionShelfIDs.contains($0.inShelfId) }.map(\.id)
+        if !changedIDs.isEmpty,
+           let current = try? repository.metadataRefreshBooks(scope, bookIDs: changedIDs),
+           current.values.contains(where: \.inShelf) {
+            container?.publishCalibreUpdate(.shelf)
+        }
+        guard !Task.isCancelled else { return }
+
+        // The queued upload checks the original scope again when it begins.
+        for upload in outcome.positionsToUpload {
+            for entry in upload.entries {
+                Task {
+                    guard (try? repository.checkMetadataRefresh(scope, bookID: upload.book.id)) != nil else { return }
+                    do {
+                        let task = try service.buildSetLastReadPositionTask(library: scope.library, bookId: upload.book.id,
+                            format: upload.format, entry: entry, serverURL: scope.source)
+                        await service.setLastReadPositionByTask(task: task, checkCurrent: {
+                            try repository.checkMetadataRefresh(scope, bookID: upload.book.id)
+                        })
+                    } catch {
+                        logger.error("Could not start a position upload: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        for upload in outcome.annotationsToUpload {
+            Task {
+                guard (try? repository.checkMetadataRefresh(scope, bookID: upload.book.id)) != nil else { return }
+                do {
+                    let task = try service.buildUpdateAnnotationsTask(library: scope.library, bookId: upload.book.id,
+                        format: upload.format, highlights: upload.highlights, bookmarks: upload.bookmarks,
+                        serverURL: scope.source)
+                    await service.updateAnnotationByTask(task: task, checkCurrent: {
+                        try repository.checkMetadataRefresh(scope, bookID: upload.book.id)
+                    })
+                } catch {
+                    logger.error("Could not start an annotation upload: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func metadataResults(_ ids: [Int32], _ result: BookMetadataRefreshResult) -> [Int32: BookMetadataRefreshResult] {
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, result) })
+    }
+
+    private func metadataFailure(_ error: Error) -> BookMetadataRefreshResult {
+        switch error {
+        case CacheContextError.superseded:
+            return .superseded
+        case BookMetadataStorageError.unavailable:
+            return .failed("Book storage is unavailable. Please try again.")
+        case let error as CalibreAPIError:
+            if case .httpStatus(let status, _) = error {
+                return .failed("The server could not refresh book details (HTTP \(status)). Please try again.")
+            }
+            return .failed(error.localizedDescription)
+        default:
+            logger.error("Metadata persistence failed: \(error.localizedDescription)")
+            return .failed("Could not save book details. Please try again.")
+        }
     }
 
     func getBook(for primaryKey: String) -> CalibreBook? {
@@ -842,7 +906,7 @@ class CalibreBookManager {
     }
 
     /// Records what an `ajax/books` answer said about each book, for Settings to list:
-    /// - `missing`: its entry came back null (`BookRepository.persistMetadataEntries`), as calibre
+    /// - `missing`: its entry came back null, as calibre
     ///   answers for a book it doesn't have and for one out of a restricted user's reach. Nothing
     ///   is deleted locally, as a shelf book's files and positions are still the user's.
     /// - `failed`: its entry couldn't be read.
@@ -856,7 +920,7 @@ class CalibreBookManager {
         let previous = (status.del, status.err)
         status.del.subtract(present)
         status.del.formUnion(missing)
-        status.err.subtract(present)
+        status.err.subtract(present.union(missing))
         status.err.formUnion(failed)
         guard (status.del, status.err) != previous else { return }
         container.librarySyncStatus[library.id] = status

@@ -301,6 +301,7 @@ actor LibrarySearchService {
         for batch in bookIds.chunks(size: CalibreServerService.booksMetadataBatchSize) {
             try Task.checkCancellation()
             try cache.checkCurrent()
+            let before = try cache.fetchBooks(library: library, bookIds: batch)
             guard let metadataTask = service.buildBooksMetadataTask(
                 library: library,
                 books: batch.map { CalibreBook(id: $0, library: library) },
@@ -323,20 +324,29 @@ actor LibrarySearchService {
                 }
                 continue
             }
+            if !completedTask.invalidMetadataIDs.isEmpty {
+                complete = false
+            }
             try cache.writeMetadataEntries(
                 library: library,
                 entries: entries,
                 json: completedTask.booksMetadataJSON,
-                retainingExisting: retainingExisting
+                retainingExisting: retainingExisting.union(before.keys),
+                metadataBaseline: before.mapValues(\.lastUpdated)
             )
 
             if let onMetadataAnswers {
                 var missing = Set<Int32>()
                 var present = Set<Int32>()
+                let nullIDs = entries.compactMap { key, entry in entry == nil ? Int32(key) : nil }
+                let after = try cache.fetchBooks(library: library, bookIds: nullIDs)
                 for (key, entry) in entries {
                     guard let bookId = Int32(key) else { continue }
                     if entry == nil {
-                        missing.insert(bookId)
+                        if before[bookId]?.lastUpdated == after[bookId]?.lastUpdated,
+                           before[bookId]?.lastModified == after[bookId]?.lastModified {
+                            missing.insert(bookId)
+                        }
                     } else {
                         present.insert(bookId)
                     }

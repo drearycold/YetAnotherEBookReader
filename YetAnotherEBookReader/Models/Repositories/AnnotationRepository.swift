@@ -32,9 +32,30 @@ protocol AnnotationRepositoryProtocol {
     /// upload to it.
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry]
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int
+    func mergeRemoteAnnotations(for book: CalibreBook, format: Format, entry: CalibreBookAnnotationsMap,
+                                configuration: DatabaseService.CacheConfiguration?) throws -> RemoteAnnotationMerge
+}
+
+struct RemoteAnnotationMerge {
+    var highlights: [CalibreBookAnnotationHighlightEntry] = []
+    var bookmarks: [CalibreBookAnnotationBookmarkEntry] = []
+    var needsUpload = false
 }
 
 extension AnnotationRepositoryProtocol {
+    func mergeRemoteAnnotations(for book: CalibreBook, format: Format, entry: CalibreBookAnnotationsMap,
+                                configuration: DatabaseService.CacheConfiguration?) throws -> RemoteAnnotationMerge {
+        let pending = syncHighlights(entries: entry.highlight ?? [], forBookId: book.bookPrefId)
+        let bookmarks = format.bookmarkPosType.map {
+            syncBookmarks(entries: entry.bookmark ?? [], forBookId: book.bookPrefId, posType: $0)
+        } ?? []
+        let needsUpload = pending > 0 || !bookmarks.isEmpty
+        let highlights = needsUpload
+            ? getHighlights(forBookId: book.bookPrefId, excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() }
+            : []
+        return .init(highlights: highlights, bookmarks: bookmarks, needsUpload: needsUpload)
+    }
+
     /// Moves `readerName`'s highlights stored under `fromBookId` to `toBookId`.
     /// From June 2026 YabrPDF saved new highlights under the book's shelf
     /// identity instead of its annotation id, so they were never read back.
@@ -227,6 +248,31 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     }
     
     // MARK: - Remote Sync (Calibre Server Merges)
+    func mergeRemoteAnnotations(for book: CalibreBook, format: Format, entry: CalibreBookAnnotationsMap,
+                                configuration: DatabaseService.CacheConfiguration?) throws -> RemoteAnnotationMerge {
+        let realm: Realm
+        if let configuration {
+            // BookRepository owns the transaction on this thread.
+            realm = try Realm(configuration: configuration.configuration)
+            guard realm.isInWriteTransaction else { throw BookMetadataStorageError.writeFailed }
+        } else {
+            guard let current = getRealm(forBookId: book.bookPrefId) else { throw BookMetadataStorageError.unavailable }
+            realm = current
+        }
+        let id = book.bookPrefId
+        let pending = syncHighlights(entries: entry.highlight ?? [], forBookId: id, using: realm)
+        let bookmarks = format.bookmarkPosType.map {
+            syncBookmarks(entries: entry.bookmark ?? [], forBookId: id, posType: $0, using: realm)
+        } ?? []
+        let needsUpload = pending > 0 || !bookmarks.isEmpty
+        let highlights = needsUpload
+            ? realm.objects(BookHighlightRealm.self).filter("bookId == %@", id).compactMap {
+                $0.toDomain().toCalibreBookAnnotationHighlightEntry()
+            }
+            : []
+        return .init(highlights: highlights, bookmarks: bookmarks, needsUpload: needsUpload)
+    }
+
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry] {
         guard let realm = getRealm(forBookId: bookId) else { return [] }
         return syncBookmarks(entries: entries, forBookId: bookId, posType: posType, using: realm)

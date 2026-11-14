@@ -9,7 +9,7 @@ import XCTest
 import RealmSwift
 @testable import YetAnotherEBookReader
 
-final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
+final class RealmBookRepositoryTests: XCTestCase, LibraryResolver, ServerResolver {
     private var databaseService: DatabaseService!
     private var repository: RealmBookRepository!
     private var realmConfig: Realm.Configuration!
@@ -19,6 +19,10 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
     func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
         let key = "\(serverUUID)_\(libraryName)"
         return resolvedLibraries[key]
+    }
+
+    func server(forUUID uuid: String) -> CalibreServer? {
+        resolvedLibraries.values.first(where: { $0.server.id == uuid })?.server
     }
     
     override func setUpWithError() throws {
@@ -152,25 +156,15 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
             )
         ]
 
-        let result = repository.persistMetadataEntries(
-            library: library,
-            bookIds: [book.id],
-            entries: [book.id.description: entry],
-            json: [
-                book.id.description: [
-                    "user_metadata": [
-                        "#genre": [
-                            "label": "Genre",
-                            "#value#": "Reference"
-                        ]
-                    ]
-                ]
-            ],
-            includeAnnotationBooks: false
-        )
+        let scope = try metadataScope(for: book)
+        let root: NSDictionary = ["user_metadata": ["#genre": ["label": "Genre", "#value#": "Reference"]]]
+        let result = try repository.persistMetadataEntries(scope: scope, bookIDs: [book.id],
+            answers: [book.id: .metadata(.init(entry: entry, root: root))])
 
-        XCTAssertEqual(result.booksUpdated, [book.id])
-        XCTAssertEqual(result.booksInShelf.first?.title, "Updated Metadata Title")
+        guard case .updated(let committed) = result[book.id] else { return XCTFail("Missing committed update") }
+        XCTAssertEqual(committed.title, "Updated Metadata Title")
+        XCTAssertTrue(committed.inShelf)
+        XCTAssertEqual(committed.userMetadatas["Genre"] as? String, "Reference")
         XCTAssertEqual(repository.getBook(id: book.inShelfId)?.publisher, "Metadata Publisher")
     }
     
@@ -187,19 +181,59 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         book.lastSynced = Date(timeIntervalSince1970: 0)
         repository.saveBook(book)
 
-        let result = repository.persistMetadataEntries(
-            library: library,
-            bookIds: [book.id],
-            entries: [book.id.description: nil],
-            json: [:],
-            includeAnnotationBooks: false
-        )
-
-        XCTAssertEqual(result.booksDeleted, [book.id])
-        XCTAssertEqual(result.booksUpdated, [])
+        let scope = try metadataScope(for: book)
+        let result = try repository.persistMetadataEntries(scope: scope, bookIDs: [book.id], answers: [book.id: .unavailable])
+        guard case .unavailable(let committed) = result[book.id] else { return XCTFail("Missing explicit null answer") }
+        XCTAssertTrue(committed.inShelf)
         let kept = try XCTUnwrap(repository.getBook(id: book.inShelfId))
         XCTAssertTrue(kept.inShelf)
         XCTAssertFalse(kept.needsMetadataRefresh)
+    }
+
+    func testMetadataRefreshRequiresAConfiguredDatabase() throws {
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
+        let unconfigured = RealmBookRepository(databaseService: DatabaseService(), libraryResolver: self)
+        let url = try XCTUnwrap(URL(string: library.server.baseUrl))
+        XCTAssertThrowsError(try unconfigured.prepareMetadataRefresh(
+            library: library, source: url, bookIDs: [1], lifetime: CacheLibraryLifetime())) { error in
+            XCTAssertEqual(error as? BookMetadataStorageError, .unavailable)
+        }
+    }
+
+    func testMetadataCommitFailureRollsBackEveryRowWithoutReturningSnapshots() throws {
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
+        let book = TestFixtures.makeBook(id: 301, library: library)
+        var other = TestFixtures.makeBook(id: 302, library: library)
+        other.lastModified = Date(timeIntervalSince1970: 1_000)
+        repository.saveBook(book)
+        repository.saveBook(other)
+        let scope = try metadataScope(for: book, additionalIDs: [other.id])
+        let failing = FailingMetadataCommitRepository(databaseService: databaseService, libraryResolver: self)
+        var entry = CalibreBookEntry()
+        entry.title = "Rolled back"
+        failing.beforeFailure = { realm in
+            XCTAssertTrue(realm.isInWriteTransaction)
+            XCTAssertEqual(realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: book.inShelfId)?.title, entry.title)
+            XCTAssertEqual(realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: other.inShelfId)?.lastSynced,
+                           other.lastModified)
+        }
+        XCTAssertThrowsError(try failing.persistMetadataEntries(scope: scope, bookIDs: [book.id, other.id],
+            answers: [book.id: .metadata(.init(entry: entry, root: [:])), other.id: .unavailable])) { error in
+            XCTAssertEqual(error as? BookMetadataStorageError, .writeFailed)
+        }
+        let persisted = try repository.metadataRefreshBooks(scope, bookIDs: [book.id, other.id])
+        XCTAssertEqual(persisted[book.id]?.title, book.title)
+        XCTAssertEqual(persisted[other.id]?.lastSynced, other.lastSynced)
+        XCTAssertFalse(databaseService.realm?.isInWriteTransaction ?? true)
+    }
+
+    private func metadataScope(for book: CalibreBook, additionalIDs: [Int32] = []) throws -> BookMetadataRefreshScope {
+        let library = book.library
+        resolvedLibraries["\(library.server.id)_\(library.name)"] = library
+        try RealmServerRepository(databaseService: databaseService).saveServer(library.server)
+        try RealmLibraryRepository(databaseService: databaseService, serverResolver: self).saveLibrary(library)
+        return try repository.prepareMetadataRefresh(library: library, source: XCTUnwrap(URL(string: library.server.baseUrl)),
+            bookIDs: [book.id] + additionalIDs, lifetime: CacheLibraryLifetime())
     }
 
     func testResetBooks() throws {
@@ -259,5 +293,14 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertEqual(observedBooks[0]?.title, "Initial Title")
         XCTAssertEqual(observedBooks[1]?.id, book.id)
         XCTAssertEqual(observedBooks[1]?.title, "Updated Title")
+    }
+}
+
+private final class FailingMetadataCommitRepository: RealmBookRepository {
+    var beforeFailure: (Realm) -> Void = { _ in }
+
+    override func commitMetadataWrite(in realm: Realm) throws {
+        beforeFailure(realm)
+        throw BookMetadataStorageError.writeFailed
     }
 }

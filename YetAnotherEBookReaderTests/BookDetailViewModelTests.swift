@@ -484,6 +484,92 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(result[123], .failed("The server could not refresh book details (HTTP 503). Please try again."))
     }
 
+    func testAnnotationFailureKeepsSuccessfullyCommittedBookMetadata() async throws {
+        var book = try makeDownloadReadBook()
+        book.inShelf = true
+        book.formats["EPUB"]?.cached = true
+        mockAppContainer.bookManager.updateBook(book: book)
+        configureMetadataResponse(body: "{}")
+        let log = MockURLProtocol.answer(["/ajax/books/lib1": #"{"123":\#(try metadataJSON(title: "Saved despite failed annotations"))}"#])
+
+        let result = await mockAppContainer.bookManager.getBooksMetadata(
+            request: .init(library: book.library, books: [book.id], getAnnotations: true))
+
+        XCTAssertEqual(result[book.id], .updated)
+        XCTAssertEqual(mockAppContainer.bookManager.booksInShelf[book.inShelfId]?.title, "Saved despite failed annotations")
+        XCTAssertEqual(mockAppContainer.bookRepository.getBook(id: book.inShelfId)?.title, "Saved despite failed annotations")
+        XCTAssertEqual(log.unexpected, ["/book-get-annotations/lib1/123-EPUB"])
+        XCTAssertFalse(mockAppContainer.librarySyncStatus[book.library.id]?.err.contains(book.id) ?? false)
+    }
+
+    func testFailedMetadataCommitPublishesNoSuccessAndKeepsOldShelf() async throws {
+        let book = try makeDownloadReadBook()
+        configureMetadataResponse(body: #"{"123":\#(try metadataJSON(title: "Uncommitted title"))}"#)
+        let repository = PausingMetadataBookRepository(databaseService: mockAppContainer.databaseService,
+            libraryResolver: mockAppContainer)
+        repository.failCommit = true
+        let manager = CalibreBookManager(container: mockAppContainer,
+            databaseService: mockAppContainer.databaseService, bookRepository: repository)
+        var shelved = book
+        shelved.inShelf = true
+        manager.updateBook(book: shelved)
+        mockAppContainer.librarySyncStatus[book.library.id] = .init(library: book.library, del: [book.id])
+        let stream = mockAppContainer.calibreUpdates()
+        let notifications = Task { @MainActor in
+            var updated = [String]()
+            for await event in stream {
+                if case .book(let snapshot) = event { updated.append(snapshot.title) }
+                if case .shelf = event { return updated }
+            }
+            return updated
+        }
+        let results = await manager.getBooksMetadata(
+            request: .init(library: book.library, books: [book.id], getAnnotations: false))
+        mockAppContainer.publishCalibreUpdate(.shelf)
+        let updated = await notifications.value
+
+        XCTAssertEqual(results[book.id], .failed("Could not save book details. Please try again."))
+        XCTAssertTrue(updated.isEmpty)
+        XCTAssertEqual(mockAppContainer.librarySyncStatus[book.library.id]?.del, [book.id])
+        XCTAssertEqual(manager.booksInShelf[book.inShelfId]?.title, book.title)
+        XCTAssertEqual(repository.getBook(id: book.inShelfId)?.title, book.title)
+    }
+
+    func testQueuedMetadataWriteCannotSurviveDatabaseSwitchAwayAndBack() async throws {
+        let book = try makeDownloadReadBook()
+        let database = mockAppContainer.databaseService
+        let original = try XCTUnwrap(database.realm)
+        configureMetadataResponse(body: #"{"123":\#(try metadataJSON(title: "Retired request"))}"#)
+        let queued = expectation(description: "Write work entered metadata queue")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let repository = PausingMetadataBookRepository(databaseService: database, libraryResolver: mockAppContainer)
+        repository.atBoundary = {
+            queued.fulfill()
+            _ = release.wait(timeout: .now() + 10)
+        }
+        let manager = CalibreBookManager(container: mockAppContainer, databaseService: database, bookRepository: repository)
+        let refresh = Task { await manager.getBooksMetadata(
+            request: .init(library: book.library, books: [book.id], getAnnotations: false)) }
+        await fulfillment(of: [queued], timeout: 10)
+        try database.openMainRealm(conf: .init(inMemoryIdentifier: UUID().uuidString, schemaVersion: DatabaseSchema.version))
+        try database.openMainRealm(conf: original.configuration)
+        release.signal()
+
+        let result = await refresh.value
+        XCTAssertEqual(result[book.id], .superseded)
+        database.refreshMainRealm()
+        XCTAssertEqual(repository.getBook(id: book.inShelfId)?.title, book.title)
+        withExtendedLifetime(original) {}
+    }
+
+    private func metadataJSON(title: String) throws -> String {
+        var entry = CalibreBookEntry()
+        entry.title = title
+        entry.last_modified = "2026-11-14T00:00:00.123456Z"
+        return String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+    }
+
     func testManagerReturnsCancelledForCancelledRequest() async throws {
         let request = CalibreBooksMetadataRequest(library: mockCalibreBook.library, books: [123], getAnnotations: false)
         let manager = mockAppContainer.bookManager
@@ -2483,13 +2569,17 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
 private final class PausingMetadataBookRepository: RealmBookRepository {
     var blockAfterCommit = false
     var atBoundary: () -> Void = {}
+    var failCommit = false
 
-    override func persistMetadataEntries(library: CalibreLibrary, bookIds: [Int32],
-                                        entries: [String: CalibreBookEntry?], json: NSDictionary,
-                                        includeAnnotationBooks: Bool) -> BookMetadataPersistenceResult {
+    override func commitMetadataWrite(in realm: Realm) throws {
+        if failCommit { throw BookMetadataStorageError.writeFailed }
+        try super.commitMetadataWrite(in: realm)
+    }
+
+    override func persistMetadataEntries(scope: BookMetadataRefreshScope, bookIDs: [Int32],
+                                        answers: [Int32: BookMetadataAnswer]) throws -> [Int32: BookMetadataPersistenceResult] {
         if !blockAfterCommit { atBoundary() }
-        let result = super.persistMetadataEntries(library: library, bookIds: bookIds,
-            entries: entries, json: json, includeAnnotationBooks: includeAnnotationBooks)
+        let result = try super.persistMetadataEntries(scope: scope, bookIDs: bookIDs, answers: answers)
         if blockAfterCommit { atBoundary() }
         return result
     }

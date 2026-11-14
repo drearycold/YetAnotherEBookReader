@@ -9,6 +9,11 @@ import Foundation
 import RealmSwift
 import OSLog
 
+struct RemotePositionMerge {
+    let entriesToUpload: [CalibreBookLastReadPositionEntry]
+    let didChange: Bool
+}
+
 protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
     @MainActor func observePositions(for book: CalibreBook) -> AsyncStream<[BookDeviceReadingPosition]>
@@ -22,9 +27,14 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, server: CalibreServer?) -> [CalibreBookLastReadPositionEntry]
+    func mergeRemotePositions(entries: [CalibreBookLastReadPositionEntry], for book: CalibreBook) throws -> RemotePositionMerge
 }
 
 extension ReadingPositionRepositoryProtocol {
+    func mergeRemotePositions(entries: [CalibreBookLastReadPositionEntry], for book: CalibreBook) throws -> RemotePositionMerge {
+        .init(entriesToUpload: syncPositions(entries: entries, for: book), didChange: false)
+    }
+
     func getPosition(forBookId bookId: String, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
         getPosition(forBookId: bookId, server: nil, policy: policy)
     }
@@ -325,10 +335,16 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, server: CalibreServer?) -> [CalibreBookLastReadPositionEntry] {
         guard let realm = getRealm(server: server) else { return [] }
-        return syncPositions(entries: lastReadPositions, forBookId: bookId, using: realm)
+        return (try? syncPositions(entries: lastReadPositions, forBookId: bookId, using: realm).entriesToUpload) ?? []
     }
 
-    private func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, using realm: Realm) -> [CalibreBookLastReadPositionEntry] {
+    func mergeRemotePositions(entries: [CalibreBookLastReadPositionEntry], for book: CalibreBook) throws -> RemotePositionMerge {
+        // This is the per-server Realm, independent of the active metadata database.
+        guard let realm = getRealm(server: book.library.server) else { throw BookMetadataStorageError.unavailable }
+        return try syncPositions(entries: entries, forBookId: book.bookPrefId, using: realm)
+    }
+
+    private func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, using realm: Realm) throws -> RemotePositionMerge {
         let state = AppPerformanceSignpost.begin("PositionMerge", "Entries: \(lastReadPositions.count)")
         defer {
             AppPerformanceSignpost.end("PositionMerge", state, "Entries: \(lastReadPositions.count)")
@@ -396,8 +412,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 positions.max(by: { $0.epoch < $1.epoch })
             }
 
+        var didChange = false
         if !uniquePositionsToSave.isEmpty {
-            let changesBlock = {
+            let changesBlock = { () -> Bool in
                 var realmsToDelete = [BookDeviceReadingPositionRealm]()
                 var realmsToAdd = [BookDeviceReadingPositionRealm]()
 
@@ -420,17 +437,16 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 for newObj in realmsToAdd {
                     realm.add(newObj)
                 }
+                return !realmsToDelete.isEmpty || !realmsToAdd.isEmpty
             }
 
             if realm.isInWriteTransaction {
-                changesBlock()
+                didChange = changesBlock()
             } else {
-                try? realm.write {
-                    changesBlock()
-                }
+                didChange = try realm.write(changesBlock)
             }
         }
 
-        return tasks
+        return .init(entriesToUpload: tasks, didChange: didChange)
     }
 }

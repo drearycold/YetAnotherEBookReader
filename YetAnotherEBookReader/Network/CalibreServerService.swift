@@ -286,9 +286,11 @@ final class CalibreServerService {
         _ kind: ActivityLogKind, request: URLRequest, server: CalibreServer,
         libraryId: String? = nil, bookIds: Set<Int32> = [], timeout: Double = 600,
         qos: DispatchQoS.QoSClass = .default, resultError: (T) -> Error? = { _ in nil },
+        checkCurrent: () throws -> Void = {},
         parse: (Data, HTTPURLResponse) throws -> T
     ) async throws -> T {
         try await withActivity(kind, request: request, libraryId: libraryId, bookIds: bookIds, resultError: resultError) { activity in
+            try checkCurrent()
             let (data, response) = try await validatedData(for: request, server: server, timeout: timeout, qos: qos, activity: activity)
             return try parse(data, response)
         }

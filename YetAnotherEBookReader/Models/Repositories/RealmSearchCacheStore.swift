@@ -327,7 +327,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         library: CalibreLibrary,
         entries: [String: CalibreBookEntry?],
         json: NSDictionary?,
-        retainingExisting: Set<Int32>
+        retainingExisting: Set<Int32>,
+        metadataBaseline: [Int32: Date]
     ) throws {
         let library = try scopedLibrary(library)
         let realm = try openRealm()
@@ -343,8 +344,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 let key = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: id.description)
                 let existing = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key)
                 if existing == nil, retainingExisting.contains(id) { continue }
-                if libraryScope != nil, let existing, let modified = metadata.lastModified,
-                   existing.lastModified > modified {
+                if libraryScope != nil, let existing,
+                   !existing.canApplyMetadata(metadata, since: metadataBaseline[id]) {
                     continue
                 }
                 let book = existing ?? CalibreBookRealm()

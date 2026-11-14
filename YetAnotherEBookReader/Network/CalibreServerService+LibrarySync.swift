@@ -75,7 +75,8 @@ extension CalibreServerService {
         }
     }
 
-    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) async -> CalibreBooksTask {
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default,
+                          checkCurrent: () throws -> Void = {}) async -> CalibreBooksTask {
         guard let metadataUrl = task.metadataUrl,
               metadataUrl.isHTTP,
               task.books.isEmpty == false else {
@@ -90,14 +91,14 @@ extension CalibreServerService {
                     // A null entry answers for a deleted or restricted book. A missing key
                     // leaves that book unanswered even if the other results can be used.
                     let answered = result.books.allSatisfy { result.booksMetadataEntry?.index(forKey: $0.description) != nil }
-                    return answered ? nil : CalibreAPIError.unsupportedPayload
-                }
+                    return answered && result.invalidMetadataIDs.isEmpty ? nil : CalibreAPIError.unsupportedPayload
+                }, checkCurrent: checkCurrent
             ) { data, response in
                 try requireJSON(response)
                 var resultTask = task
                 resultTask.data = data
                 resultTask.response = response
-                return applyBooksMetadataPayload(data, to: resultTask)
+                return try applyBooksMetadataPayload(data, to: resultTask)
             }
         } catch {
             var resultTask = task
@@ -155,32 +156,36 @@ extension CalibreServerService {
         )
     }
 
-    private func applyBooksMetadataPayload(_ data: Data, to task: CalibreBooksTask) -> CalibreBooksTask {
+    private func applyBooksMetadataPayload(_ data: Data, to task: CalibreBooksTask) throws -> CalibreBooksTask {
         var task = task
-
+        let root: Any
         do {
-            task.booksMetadataJSON = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+            root = try JSONSerialization.jsonObject(with: data)
         } catch {
-            task.error = .decoding(error)
+            throw CalibreAPIError.decoding(error)
         }
-
-        do {
-            task.booksMetadataEntry = try JSONDecoder().decode([String: CalibreBookEntry?].self, from: data)
-        } catch let error as DecodingError {
-            if case .keyNotFound(_, let context) = error,
-               let first = context.codingPath.first, let bookId = Int32(first.stringValue), bookId > 0 {
-                task.booksError.insert(bookId)
-            } else if task.books.count == 1 {
-                task.booksError.formUnion(task.books)
-            }
-            task.error = .decoding(error)
-        } catch {
-            if task.books.count == 1 {
-                task.booksError.formUnion(task.books)
-            }
-            task.error = .decoding(error)
+        guard let json = root as? NSDictionary else {
+            throw CalibreAPIError.unsupportedPayload
         }
-
+        let decoder = JSONDecoder()
+        var entries: [String: CalibreBookEntry?] = [:]
+        for id in Set(task.books) {
+            let key = id.description
+            guard let value = json[key] else { continue }
+            if value is NSNull {
+                entries.updateValue(nil, forKey: key)
+                continue
+            }
+            do {
+                guard let root = value as? NSDictionary else { throw CalibreAPIError.unsupportedPayload }
+                let entry = try decoder.decode(CalibreBookEntry.self, from: JSONSerialization.data(withJSONObject: root))
+                entries[key] = entry
+            } catch {
+                task.invalidMetadataIDs.insert(id)
+            }
+        }
+        task.booksMetadataJSON = json
+        task.booksMetadataEntry = entries
         return task
     }
 }

@@ -8,10 +8,10 @@
 import Foundation
 
 func parseLastModified(_ lastModified: String) -> Date? {
-    let parserOne = ISO8601DateFormatter()
-    parserOne.formatOptions = .withInternetDateTime
-    let parserTwo = ISO8601DateFormatter()
-    parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    
-    return parserTwo.date(from: lastModified) ?? parserOne.date(from: lastModified)
+    // ISO8601DateFormatter truncates fractions to milliseconds. Calibre can
+    // change metadata more than once within that interval.
+    if let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(lastModified) {
+        return date
+    }
+    return ISO8601DateFormatter().date(from: lastModified)
 }
