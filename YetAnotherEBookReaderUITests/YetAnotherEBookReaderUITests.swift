@@ -901,12 +901,19 @@ final class CalibreOnboardingUITests: XCTestCase {
         app = XCUIApplication(bundleIdentifier: bundleID)
         // Uses the existing test-host consent gate, with normal disk persistence and networking.
         app.launchEnvironment["XCTestConfigurationFilePath"] = "/tmp/CalibreOnboardingValidation"
+        if let format = environment["YABR_BS3_FORMAT"], let reader = environment["YABR_BS3_READER"] {
+            let preferred = environment["YABR_BS3_PREFERRED_READER"] ?? reader
+            app.launchArguments += ["-io.github.yabr.KEY_DEFAULTS_PREFERRED_FORMAT", format,
+                                    "-io.github.yabr.KEY_DEFAULTS_PREFERRED_READER_\(format)", preferred]
+        }
         if environment["YABR_CC3_LOCAL_FILE"] == "1" { app.launchEnvironment["YABR_CC3_LOCAL_FILE"] = "1" }
         if environment["YABR_FI1_FAIL_OVERWRITE"] == "1" { app.launchEnvironment["YABR_FI1_FAIL_OVERWRITE"] = "1" }
         injectConfigurationSaveFailures = environment["YABR_SC3_SAVE_FAILURES"] == "1"
         if injectConfigurationSaveFailures { app.launchEnvironment["YABR_SC3_SAVE_FAILURES"] = "1" }
         app.launch()
-        element("welcome.calibre")
+        if environment["YABR_BS3_PEER_DEVICE"] == nil {
+            element("welcome.calibre")
+        }
     }
 
     func testLocalImportFailureCanRetryOverwriteAndSaveAsNew() throws {
@@ -2359,6 +2366,210 @@ final class CalibreOnboardingUITests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxX, window.maxX + 1, file: file, line: line)
     }
 
+    /// Requires the BS3 book fixture and the authenticated loopback proxy.
+    func testRemoteReaderPositionClosesAndResumes() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["YABR_BS3_FORMAT"] != nil, "Requires the BS3 native book fixture")
+        let format = try XCTUnwrap(environment["YABR_BS3_FORMAT"])
+        let reader = try XCTUnwrap(environment["YABR_BS3_READER"])
+        let bookID = try XCTUnwrap(environment["YABR_BS3_BOOK"])
+        let library = try XCTUnwrap(environment["YABR_BS3_LIBRARY"])
+        let expectedExisting = Int(environment["YABR_BS3_EXISTING_DEVICES"] ?? "0")
+        let base = try XCTUnwrap(URL(string: singleURL))
+        let endpoint = base.appendingPathComponent("book-get-annotations/\(library)/\(bookID)-\(format)")
+        let previous = try remoteReaderPositions(endpoint, bookID: bookID, format: format)
+            .filter { $0.device != environment["YABR_BS3_LOCAL_DEVICE"] }
+        XCTAssertEqual(previous.count, expectedExisting)
+
+        connect(name: "BS3 Reader Server", url: singleURL)
+        waitForEnabled(element("server.connection.confirm"))
+        element("server.connection.confirm").tap()
+        openBS3Book(bookID)
+        waitForReadLabel("Download and Read")
+        element("book-detail.read").tap()
+        let initial = waitForBS3Page(format: format, reader: reader, matching: { _ in true })
+        if previous.isEmpty { XCTAssertEqual(initial, 1) }
+        else { XCTAssertGreaterThan(initial, 1, "A fresh app should open at the synced position") }
+        let target = app.coordinate(withNormalizedOffset: .init(dx: 0.88, dy: 0.46))
+        if reader == "YabrEPUB" {
+            app.collectionViews["reader.folio.screen"].firstMatch.swipeLeft()
+        } else if reader == "YabrPDF" {
+            let next = app.buttons["Right"]
+            if !next.isHittable {
+                app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.45)).tap()
+            }
+            XCTAssertTrue(next.waitForExistence(timeout: 10), app.debugDescription)
+            next.tap()
+        } else if reader == "ReadiumEPUB" {
+            let navigation = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ OR label == %@", "list.bullet", "List")).firstMatch
+            if !navigation.isHittable {
+                app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.45)).tap()
+            }
+            XCTAssertTrue(navigation.waitForExistence(timeout: 10), app.debugDescription)
+            navigation.tap()
+            let chapter = app.buttons["BS3 Chapter \(initial + 1)"]
+            XCTAssertTrue(chapter.waitForExistence(timeout: 10), app.debugDescription)
+            chapter.tap()
+        } else if reader == "ReadiumPDF" {
+            target.tap()
+        } else {
+            target.withOffset(.init(dx: -8, dy: 0)).press(forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: .init(dx: 0.15, dy: 0.46)))
+        }
+        let advanced = waitForBS3Page(format: format, reader: reader, matching: { $0 > initial })
+        capture("bs3-\(reader)-advanced")
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+        let sent = try waitForRemoteReaderPosition(endpoint, bookID: bookID, format: format,
+                                                   excluding: Set(previous.map(\.device)),
+                                                   page: reader == "YabrEPUB" || reader == "YabrPDF" ? advanced : nil)
+        XCTAssertTrue(sent.cfi.contains("vndYabr_readerName=\(reader)"), sent.cfi)
+        XCTAssertTrue(sent.cfi.contains("vndYabr_epoch="))
+        let synced = try remoteReaderPositions(endpoint, bookID: bookID, format: format)
+        XCTAssertEqual(synced.count, previous.count + 1)
+        for existing in previous {
+            XCTAssertEqual(synced.first(where: { $0.device == existing.device })?.cfi, existing.cfi)
+        }
+        element("book-detail.history").tap()
+        element("screen.reading-history")
+        element("reading-history.session")
+        element("reading-history.position")
+        capture("bs3-\(reader)-history")
+        back()
+        waitForReadLabel("Read")
+        element("book-detail.read").tap()
+        XCTAssertEqual(waitForBS3Page(format: format, reader: reader, matching: { $0 == advanced }), advanced)
+        capture("bs3-\(reader)-resumed")
+        closeReaderWorkspace()
+        waitForReadLabel("Read")
+    }
+
+    private func openBS3Book(_ id: String) {
+        element("screen.browse.book-list")
+        let identifier = id == "1" ? "browse.book.mock" : "browse.book.\(id)"
+        let row = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        let listed = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "browse.book.")).firstMatch
+        if !listed.waitForExistence(timeout: 8) {
+            // Reopen the selected library if onboarding overlapped its first summary.
+            app.tabBars.buttons["Recent"].tap()
+            app.tabBars.buttons["Browse"].tap()
+        }
+        XCTAssertTrue(listed.waitForExistence(timeout: 10), app.debugDescription)
+        for _ in 0..<5 where !row.exists || !row.isHittable { app.swipeUp() }
+        element(identifier).tap()
+    }
+
+    private struct NativePosition: Decodable {
+        let device: String
+        let cfi: String
+    }
+
+    /// Reuses the first device's installation after a second device has read the same EPUB.
+    func testRemoteReaderReceivesTheSecondDeviceAndKeepsItsOwnResume() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["YABR_BS3_PEER_DEVICE"] != nil, "Requires both BS3 native devices")
+        let peer = try XCTUnwrap(environment["YABR_BS3_PEER_DEVICE"])
+        let bookID = try XCTUnwrap(environment["YABR_BS3_BOOK"])
+        let ownPage = try XCTUnwrap(Int(environment["YABR_BS3_OWN_PAGE"] ?? ""))
+        app.tabBars.buttons["Recent"].tap()
+        let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.options.\(bookID)^")).firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 20), app.debugDescription)
+        options.tap()
+        let details = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "shelf.book.details.\(bookID)^")).firstMatch
+        XCTAssertTrue(details.waitForExistence(timeout: 10), app.debugDescription)
+        details.tap()
+        element("book-detail.refresh").tap()
+        XCTAssertTrue(app.staticTexts["In Sync with Server"].waitForExistence(timeout: 20), app.debugDescription)
+        element("book-detail.history").tap()
+        element("screen.reading-history")
+        let peerHeading = app.staticTexts["On \(peer)"]
+        for _ in 0..<3 where !peerHeading.exists { app.swipeUp() }
+        XCTAssertTrue(peerHeading.waitForExistence(timeout: 10), app.debugDescription)
+        capture("bs3-two-native-devices")
+        back()
+        waitForReadLabel("Read")
+        element("book-detail.read").tap()
+        XCTAssertEqual(waitForBS3Page(format: "EPUB", matching: { $0 == ownPage }), ownPage)
+        closeReaderWorkspace()
+    }
+
+    private struct NativeAnnotations: Decodable {
+        let last_read_positions: [NativePosition]
+    }
+
+    private func remoteReaderPositions(_ url: URL, bookID: String, format: String) throws -> [NativePosition] {
+        let returned = expectation(description: "Calibre returned positions")
+        var value: Result<[NativePosition], Error>?
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            value = Result {
+                if let error { throw error }
+                guard (response as? HTTPURLResponse)?.statusCode == 200, let data else { throw URLError(.badServerResponse) }
+                let entries = try JSONDecoder().decode([String: NativeAnnotations].self, from: data)
+                return entries["\(bookID):\(format)"]?.last_read_positions ?? []
+            }
+            returned.fulfill()
+        }.resume()
+        wait(for: [returned], timeout: 10)
+        return try XCTUnwrap(value).get()
+    }
+
+    private func waitForRemoteReaderPosition(_ url: URL, bookID: String, format: String,
+                                             excluding knownDevices: Set<String>, page: Int?) throws -> NativePosition {
+        let deadline = Date().addingTimeInterval(20)
+        repeat {
+            let stored = try remoteReaderPositions(url, bookID: bookID, format: format)
+            if let new = stored.first(where: { position in
+                !knownDevices.contains(position.device) &&
+                    (page.map { position.cfi.contains("vndYabr_lastReadPage=\($0);") } ?? true)
+            }) { return new }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline
+        throw URLError(.timedOut, userInfo: [NSLocalizedDescriptionKey: "No native position reached the isolated Calibre server"])
+    }
+
+    private func waitForBS3Page(format: String, reader: String? = nil, matching condition: @escaping (Int) -> Bool) -> Int {
+        var page = 0
+        let visible = NSPredicate { _, _ in
+            if format == "EPUB" {
+                let chapter = "BS3 Chapter "
+                let headings = self.app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", chapter))
+                for heading in headings.allElementsBoundByIndex where heading.isHittable {
+                    let number = heading.label.dropFirst(chapter.count).prefix(while: \.isNumber)
+                    guard let index = Int(number), condition(index) else { continue }
+                    page = index
+                    return true
+                }
+                return false
+            }
+            if reader == "YabrPDF" {
+                let indicator = self.app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[1-5] / 5")).firstMatch
+                guard indicator.exists, let number = Int(indicator.label.prefix(while: \.isNumber)),
+                      condition(number) else { return false }
+                page = number
+                return true
+            }
+            let screenshot = XCUIScreen.main.screenshot().image
+            guard let cg = screenshot.cgImage,
+                  let pixel = cg.cropping(to: CGRect(x: cg.width / 2, y: cg.height * 42 / 100, width: 1, height: 1))
+            else { return false }
+            var rgb = [UInt8](repeating: 0, count: 4)
+            guard let context = CGContext(data: &rgb, width: 1, height: 1, bitsPerComponent: 8,
+                                          bytesPerRow: 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let colors = [[245, 159, 176], [142, 205, 250], [153, 222, 157], [245, 203, 128], [190, 164, 240]]
+            guard let index = colors.firstIndex(where: { color in
+                zip(rgb, color).allSatisfy { abs(Int($0.0) - $0.1) < 27 }
+            }), condition(index + 1) else { return false }
+            page = index + 1
+            return true
+        }
+        let ready = XCTNSPredicateExpectation(predicate: visible, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, "No matching \(format) page: \(app.debugDescription)")
+        return page
+    }
+
     func testDetailRefreshKeepsCachedReadAndHistoryReturn() throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["YABR_DETAIL_REFRESH_CONTROL_URL"] == nil,
                       "Requires the BD1 metadata-control proxy")
@@ -2367,8 +2578,12 @@ final class CalibreOnboardingUITests: XCTestCase {
         connect(name: "BD1 Detail Server", url: singleURL)
         waitForEnabled(element("server.connection.confirm"))
         element("server.connection.confirm").tap()
-        element("screen.browse.book-list")
-        element("browse.book.mock").tap()
+        if let bookID = ProcessInfo.processInfo.environment["YABR_BS3_BOOK"] {
+            openBS3Book(bookID)
+        } else {
+            element("screen.browse.book-list")
+            element("browse.book.mock").tap()
+        }
         waitForReadLabel("Download and Read")
         element("book-detail.download-only").tap()
         waitForReadLabel("Read")

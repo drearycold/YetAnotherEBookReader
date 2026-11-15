@@ -343,7 +343,64 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
         XCTAssertEqual(highlights.count, 1)
         XCTAssertEqual(highlights.first?.content, "text")
     }
+
+    func testHighlightRemovalAfterFiftyMillisecondsSurvivesTheOlderServerCopy() throws {
+        let bookID = "quick_removal^test_lib@server-uuid"
+        let original = Date(timeIntervalSince1970: 1_700_000_000.100)
+        let highlight = TestFixtures.makeHighlight(bookId: bookID, readerName: ReaderType.YabrEPUB.rawValue, date: original)
+        let oldAnswer = try XCTUnwrap(highlight.toCalibreBookAnnotationHighlightEntry())
+        var removed = highlight
+        removed.removed = true
+        removed.date = original.addingTimeInterval(0.050)
+        repository.saveHighlight(removed)
+        XCTAssertEqual(repository.syncHighlights(entries: [oldAnswer], forBookId: bookID), 1)
+        XCTAssertEqual(repository.getHighlight(byId: highlight.id)?.removed, true)
+
+        let echoedRemoval = try XCTUnwrap(removed.toCalibreBookAnnotationHighlightEntry())
+        XCTAssertEqual(repository.syncHighlights(entries: [echoedRemoval], forBookId: bookID), 0)
+        XCTAssertEqual(repository.getHighlight(byId: highlight.id)?.removed, true)
+    }
     
+    @MainActor
+    func testScopedHighlightMergeUsesTheFormatAndPreservesCompatibleReaderIdentity() throws {
+        let book = TestFixtures.makeBook()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let folio = TestFixtures.makeHighlight(bookId: book.bookPrefId, readerName: ReaderType.YabrEPUB.rawValue, date: date)
+        let pdf = TestFixtures.makeHighlight(bookId: book.bookPrefId, readerName: ReaderType.YabrPDF.rawValue,
+                                             date: date, note: "Local PDF", ranges: "pdf-location")
+        var legacyPDF = pdf
+        legacyPDF.id = UUID().uuidString
+        legacyPDF.readerName = ""
+        var readium = folio
+        readium.id = UUID().uuidString
+        readium.readerName = ReaderType.ReadiumEPUB.rawValue
+        [folio, pdf, legacyPDF, readium].forEach(repository.saveHighlight)
+
+        // The same EPUB can return a highlight created by a different EPUB reader.
+        var remote = [readium, pdf, legacyPDF].map { highlight in
+            var highlight = highlight
+            highlight.readerName = ReaderType.YabrEPUB.rawValue
+            highlight.date = date.addingTimeInterval(60)
+            highlight.note = "From the EPUB endpoint"
+            return highlight
+        }
+        remote[1].removed = true
+        let entries = try remote.map { try XCTUnwrap($0.toCalibreBookAnnotationHighlightEntry()) }
+        let merged = try repository.mergeRemoteAnnotations(for: book, format: .EPUB, entry: .init(highlight: entries),
+                                                           configuration: nil)
+        XCTAssertEqual(merged.highlights.map(\.uuid), [try XCTUnwrap(uuidFolioToCalibre(folio.id))])
+        XCTAssertEqual(repository.getHighlight(byId: readium.id)?.note, "From the EPUB endpoint")
+        XCTAssertEqual(repository.getHighlight(byId: readium.id)?.readerName, ReaderType.ReadiumEPUB.rawValue)
+        XCTAssertEqual(repository.getHighlight(byId: pdf.id)?.note, "Local PDF")
+        XCTAssertEqual(repository.getHighlight(byId: pdf.id)?.removed, false)
+        XCTAssertEqual(repository.getHighlight(byId: legacyPDF.id)?.readerName, "")
+        XCTAssertEqual(repository.getHighlight(byId: legacyPDF.id)?.note, "Local PDF")
+
+        let comic = try repository.mergeRemoteAnnotations(for: book, format: .CBZ, entry: .init(highlight: entries),
+                                                          configuration: nil)
+        XCTAssertFalse(comic.needsUpload)
+    }
+
     func testSyncHighlights_duplicateAndInvalidEntriesBehavior() throws {
         let bookId = "sync_hl_duplicates^test_lib@server-uuid"
         

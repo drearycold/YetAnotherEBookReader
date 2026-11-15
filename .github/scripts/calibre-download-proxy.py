@@ -10,11 +10,15 @@ YABR_DETAIL_REFRESH_CONTROL_URL, with success/failed/unavailable metadata modes.
 BD4 uses /bd4-control as YABR_DESCRIPTION_CONTROL_URL to switch between long
 and short descriptions for book 1. Use a library with a second book for the
 empty-description case. Other onboarding tests use their usual setup.
-The proxy forwards read requests; its control endpoint changes only fixture state.
+The proxy defaults to reads. For BS3, pass --sync-fixture with a loopback
+Digest-authenticated Calibre server and set YABR_FIXTURE_USER and
+YABR_FIXTURE_PASSWORD for the seeded test account. This also forwards the
+position and annotation POSTs. Control endpoints change only fixture state.
 """
 
 import argparse
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -23,14 +27,48 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-def serve(upstream, port):
+def serve(upstream, port, sync_fixture=False):
     state = {"mode": "success", "attempts": 0, "detail_mode": "success", "manifest_mode": "real"}
     state["description_mode"] = None
     lock = threading.Condition()
     # A system proxy must never send these loopback requests to another machine.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    read_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    if sync_fixture:
+        if urllib.parse.urlparse(upstream).hostname != "127.0.0.1":
+            raise ValueError("The sync fixture requires a loopback Calibre server")
+        credentials = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        credentials.add_password(None, upstream, os.environ["YABR_FIXTURE_USER"], os.environ["YABR_FIXTURE_PASSWORD"])
+
+    def open_upstream(request):
+        if not sync_fixture:
+            return read_opener.open(request, timeout=30)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                             urllib.request.HTTPDigestAuthHandler(credentials))
+        return opener.open(request, timeout=30)
 
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            path = urllib.parse.urlparse(self.path).path
+            if not sync_fixture or not path.startswith(("/book-set-last-read-position/", "/book-update-annotations/")):
+                self.reply(405, b"Unsupported fixture mutation", "text/plain")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "-1"))
+            except ValueError:
+                length = -1
+            if not 0 < length <= 8 * 1024 * 1024:
+                self.reply(400, b"Invalid fixture request length", "text/plain")
+                return
+            request = urllib.request.Request(upstream + self.path, data=self.rfile.read(length), method="POST",
+                                             headers={"Content-Type": "application/json"})
+            try:
+                with open_upstream(request) as response:
+                    self.reply(response.status, response.read(), response.headers.get("Content-Type", "application/json"))
+            except urllib.error.HTTPError as error:
+                self.reply(error.code, error.read(), error.headers.get("Content-Type", "text/plain"))
+            except urllib.error.URLError:
+                self.reply(502, b"Cannot reach the fixture calibre server", "text/plain")
+
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path == "/p3-control":
@@ -123,7 +161,7 @@ def serve(upstream, port):
                         self.reply(504, b"Download was not released", "text/plain")
                         return
             try:
-                with opener.open(upstream + self.path, timeout=30) as response:
+                with open_upstream(upstream + self.path) as response:
                     body = response.read()
                     if parsed.path.startswith("/ajax/books/"):
                         with lock:
@@ -167,5 +205,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--upstream", default="http://127.0.0.1:8080")
     parser.add_argument("--port", type=int, default=18082)
+    parser.add_argument("--sync-fixture", action="store_true")
     args = parser.parse_args()
-    serve(args.upstream.rstrip("/"), args.port)
+    serve(args.upstream.rstrip("/"), args.port, args.sync_fixture)

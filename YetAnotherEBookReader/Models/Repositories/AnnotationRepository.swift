@@ -260,17 +260,28 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             realm = current
         }
         let id = book.bookPrefId
-        let pending = syncHighlights(entries: entry.highlight ?? [], forBookId: id, using: realm)
+        let highlightReader: ReaderType?
+        switch format {
+        case .EPUB: highlightReader = .YabrEPUB
+        case .PDF: highlightReader = .YabrPDF
+        case .CBZ, .UNKNOWN: highlightReader = nil
+        }
+        let pending = highlightReader.map {
+            syncHighlights(entries: entry.highlight ?? [], forBookId: id, using: realm, importedReader: $0)
+        } ?? 0
         let bookmarks = format.bookmarkPosType.map {
             syncBookmarks(entries: entry.bookmark ?? [], forBookId: id, posType: $0, using: realm)
         } ?? []
-        let needsUpload = pending > 0 || !bookmarks.isEmpty
-        let highlights = needsUpload
-            ? realm.objects(BookHighlightRealm.self).filter("bookId == %@", id).compactMap {
+        let highlights: [CalibreBookAnnotationHighlightEntry]
+        if let highlightReader, pending > 0 || !bookmarks.isEmpty {
+            highlights = realm.objects(BookHighlightRealm.self)
+                .filter("bookId == %@ AND readerName == %@", id, highlightReader.rawValue).compactMap {
                 $0.toDomain().toCalibreBookAnnotationHighlightEntry()
             }
-            : []
-        return .init(highlights: highlights, bookmarks: bookmarks, needsUpload: needsUpload)
+        } else {
+            highlights = []
+        }
+        return .init(highlights: highlights, bookmarks: bookmarks, needsUpload: !highlights.isEmpty || !bookmarks.isEmpty)
     }
 
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, posType: String) -> [CalibreBookAnnotationBookmarkEntry] {
@@ -327,7 +338,8 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         return syncHighlights(entries: entries, forBookId: bookId, using: realm)
     }
     
-    private func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, using realm: Realm) -> Int {
+    private func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, using realm: Realm,
+                                importedReader: ReaderType? = nil) -> Int {
         let state = AppPerformanceSignpost.begin("HighlightMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("HighlightMerge", state, "Entries: \(entries.count)")
@@ -339,7 +351,13 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             localHighlightsById[obj.highlightId] = obj
         }
         
-        var pending = highlightObjects.count
+        var pending = Set(highlightObjects.compactMap { object -> String? in
+            if let importedReader,
+               object.readerName != importedReader.rawValue || uuidFolioToCalibre(object.highlightId) == nil {
+                return nil
+            }
+            return object.highlightId
+        })
         
         struct DeduplicatedHighlight {
             let entry: CalibreBookAnnotationHighlightEntry
@@ -378,41 +396,40 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         
         var actions = [HighlightAction]()
+        var missingReaders = [BookHighlightRealm]()
         
+        let wireDateFormatter = ISO8601DateFormatter()
+        wireDateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         deduplicatedEntries.forEach { hl in
             let highlightId = hl.highlightId
             let date = hl.date
             let entry = hl.entry
-            
-            if entry.removed == true {
-                if let object = localHighlightsById[highlightId] {
-                    if object.date <= date + 0.1 {
-                        actions.append(HighlightAction(existingObject: object, date: date, entry: entry, isUpdate: true))
-                        pending -= 1
-                    } else if date <= object.date + 0.1 {
-                        // no-op
-                    } else {
-                        pending -= 1
-                    }
+
+            if let object = localHighlightsById[highlightId] {
+                if let importedReader, ReaderType(rawValue: object.readerName)?.format != importedReader.format {
+                    // A matching UUID can identify an older blank-reader row
+                    // when its saved location does not point to another format.
+                    guard object.readerName.isEmpty, legacyHighlight(object, matches: importedReader.format) else { return }
+                    missingReaders.append(object)
+                    pending.insert(highlightId)
                 }
-            } else {
-                if let object = localHighlightsById[highlightId] {
-                    if object.date <= date + 0.1 {
-                        actions.append(HighlightAction(existingObject: object, date: date, entry: entry, isUpdate: true))
-                        pending -= 1
-                    } else if date <= object.date + 0.1 {
-                        // no-op
-                    } else {
-                        pending -= 1
-                    }
-                } else {
-                    actions.append(HighlightAction(existingObject: nil, date: date, entry: entry, isUpdate: false))
-                }
+                // Calibre echoes the millisecond timestamp we send. Compare
+                // at that precision so an echo is equal and an actual newer
+                // local edit or removal is still sent.
+                let localDate = parseAnnotationDate(wireDateFormatter.string(from: object.date)) ?? object.date
+                guard localDate <= date else { return }
+                actions.append(HighlightAction(existingObject: object, date: date, entry: entry, isUpdate: true))
+                pending.remove(highlightId)
+            } else if entry.removed != true {
+                actions.append(HighlightAction(existingObject: nil, date: date, entry: entry, isUpdate: false))
             }
         }
         
-        if !actions.isEmpty {
+        if !actions.isEmpty || !missingReaders.isEmpty {
             let changesBlock = {
+                if let importedReader {
+                    for object in missingReaders { object.readerName = importedReader.rawValue }
+                }
                 for action in actions {
                     let date = action.date
                     let entry = action.entry
@@ -438,6 +455,7 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                         highlightRealm.contentPre = ""
                         highlightRealm.date = date
                         highlightRealm.highlightId = highlightId
+                        highlightRealm.readerName = importedReader?.rawValue ?? ""
                         highlightRealm.page = spineIndex + 1
                         highlightRealm.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
                         highlightRealm.startOffset = 0
@@ -465,6 +483,17 @@ final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             }
         }
         
-        return pending
+        return pending.count
+    }
+
+    private func legacyHighlight(_ highlight: BookHighlightRealm, matches format: Format) -> Bool {
+        switch format {
+        case .EPUB:
+            return highlight.ranges?.isEmpty != false
+        case .PDF:
+            return [highlight.cfiStart, highlight.cfiEnd, highlight.spineName].allSatisfy { $0?.isEmpty != false }
+        case .CBZ, .UNKNOWN:
+            return false
+        }
     }
 }
