@@ -211,6 +211,222 @@ final class CalibreServerContractTests: XCTestCase {
         XCTAssertEqual(stored.filter { $0.removed != true }.map(\.title), ["\(chapter) storm"])
     }
 
+    func testTwoAppContainersExchangePositionsAndAnnotationEditsThroughRefresh() async throws {
+        // The merge inserts in title order. With an old fixed CFI, this
+        // prior run's visible bookmark wins the subsequent position lookup.
+        let priorTitle = "A BS3 prior revised \(UUID().uuidString)"
+        try await upload(bookmarks: [bookmark(title: priorTitle, pos: "epubcfi(/6/8)", date: Date().addingTimeInterval(-60))])
+        let existing = Set(try await fetchAnnotations().annotations_map.bookmark?.map(\.pos) ?? [])
+        // index.html is the second spine item of the seeded EPUB. Pick unused
+        // character offsets in its actual paragraphs, including tombstones.
+        let paragraphs = [(2, "Contract Test Book"), (6, "Chapter One"), (10, "It was a bright cold day in April."),
+                          (14, "Chapter Two"), (18, "The second chapter.")]
+        let available = paragraphs.flatMap { step, text in
+            (0..<text.utf16.count).map { "epubcfi(/6/4!/4/\(step)/1:\($0))" }
+        }.filter { !existing.contains($0) }.shuffled()
+        let removableCFI = try XCTUnwrap(available.first, "The seeded EPUB needs an unused bookmark location")
+        let renameCFI = try XCTUnwrap(available.dropFirst().first, "The seeded EPUB needs a second unused bookmark location")
+        let first = try makeRefreshDevice()
+        let second = try makeRefreshDevice()
+        XCTAssertNotEqual(first.databaseService.cacheConfigurationSnapshot?.id, second.databaseService.cacheConfigurationSnapshot?.id)
+        let prefix = "BS3-\(UUID().uuidString)"
+        let firstPosition = TestFixtures.makeReadingPosition(id: first.deviceName, lastReadPage: 2,
+            lastProgress: 30, epoch: Date().timeIntervalSince1970 - 120)
+        let secondPosition = TestFixtures.makeReadingPosition(id: second.deviceName, lastReadPage: 5,
+            lastProgress: 75, epoch: firstPosition.epoch + 60)
+        let highlightID = UUID().uuidString
+        let highlight = highlight(id: highlightID, date: Date().addingTimeInterval(-60), content: "Shared passage", note: "First note")
+        first.readingPositionRepository.savePosition(firstPosition, for: book)
+        first.annotationRepository.saveHighlight(highlight)
+        for cfi in [removableCFI, renameCFI] {
+            XCTAssertEqual(first.annotationRepository.saveBookmark(bookmark(title: prefix, pos: cfi, date: Date())).0, 1)
+        }
+        XCTAssertTrue(second.readingPositionRepository.getPositions(for: book).isEmpty)
+        XCTAssertTrue(deviceBookmarks(second, prefix: prefix).isEmpty)
+
+        let sent = try await refreshDevice(first, via: .detail)
+        XCTAssertEqual(sent.metadata[book.id], .updated)
+        XCTAssertEqual(sent.localMerges, 1)
+        XCTAssertEqual(sent.uploaded, 2)
+        XCTAssertEqual(sent.rejected + sent.uncertain + sent.discarded, 0)
+        let received = try await refreshDevice(second, via: .shelf)
+        XCTAssertEqual(received.uploaded, 0)
+        XCTAssertEqual(second.bookManager.booksInShelf[book.inShelfId]?.title, "Contract Test Book")
+        assertContractPosition(firstPosition, in: second)
+        XCTAssertEqual(second.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true)
+            .first(where: { $0.id == highlightID })?.note, "First note")
+        XCTAssertEqual(deviceBookmarks(second, prefix: prefix), [prefix, "\(prefix) #2"])
+
+        second.readingPositionRepository.savePosition(secondPosition, for: book)
+        var renamed = try XCTUnwrap(second.annotationRepository.getBookmark(byPos: renameCFI, bookId: book.bookPrefId)
+            .flatMap { $0.title == "\(prefix) #2" ? $0 : nil }, "The bookmark being edited must belong to this run")
+        renamed.title = "\(prefix) revised"
+        let edit = second.annotationRepository.saveBookmark(renamed)
+        XCTAssertEqual(edit.0, 2)
+        XCTAssertEqual(edit.1, "\(prefix) #2")
+        _ = try XCTUnwrap(second.annotationRepository.getBookmark(byPos: removableCFI, bookId: book.bookPrefId)
+            .flatMap { $0.title == prefix ? $0 : nil }, "The bookmark being removed must belong to this run")
+        second.annotationRepository.removeBookmark(pos: removableCFI, bookId: book.bookPrefId)
+        let secondHighlight = try XCTUnwrap(second.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true)
+            .first(where: { $0.id == highlightID }))
+        XCTAssertEqual(secondHighlight.readerName, ReaderType.YabrEPUB.rawValue)
+        // Recreate a row saved by the older importer before editing it on B.
+        var legacyHighlight = secondHighlight
+        legacyHighlight.readerName = ""
+        second.annotationRepository.saveHighlight(legacyHighlight)
+        second.annotationRepository.updateHighlightNote(id: secondHighlight.id, note: "Second note")
+        let closed = try await refreshDevice(second, via: .readerClose)
+        XCTAssertEqual(closed.uploaded, 2)
+        XCTAssertEqual(closed.rejected + closed.uncertain + closed.discarded, 0)
+        let editedRemote = try await storedHighlights(id: highlightID)
+        XCTAssertEqual(editedRemote.first?.notes, "Second note")
+        _ = try await refreshDevice(first, via: .detail)
+        assertContractPosition(firstPosition, in: first)
+        assertContractPosition(secondPosition, in: first)
+        XCTAssertEqual(first.readingPositionRepository.getPosition(for: book, policy: .latest)?.id, second.deviceName)
+        XCTAssertEqual(first.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true)
+            .first(where: { $0.id == highlightID })?.note, "Second note")
+        XCTAssertEqual(deviceBookmarks(first, prefix: prefix), ["\(prefix) revised"])
+
+        let firstHighlight = try XCTUnwrap(first.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true)
+            .first(where: { $0.id == highlightID }))
+        first.annotationRepository.removeHighlight(id: firstHighlight.id)
+        _ = try await refreshDevice(first, via: .readerClose)
+        _ = try await refreshDevice(second, via: .detail)
+        XCTAssertFalse(second.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true)
+            .contains(where: { $0.id == highlightID }))
+        let remote = try await fetchAnnotations()
+        let prior = try XCTUnwrap(remote.annotations_map.bookmark?.first { $0.title == priorTitle })
+        XCTAssertEqual(prior.pos, "epubcfi(/6/8)")
+        XCTAssertNotEqual(prior.removed, true, "Retitling this run's bookmark must leave earlier runs intact")
+        let ids = Set([first.deviceName, second.deviceName])
+        let positions = remote.last_read_positions.filter { ids.contains($0.device) }
+        XCTAssertEqual(positions.count, 2)
+        XCTAssertTrue(positions.allSatisfy { $0.epoch >= secondPosition.epoch + 60 })
+        let stored = try await storedHighlights(id: highlightID)
+        XCTAssertEqual(stored.first?.removed, true)
+        await second.calibreServerService.logger.flushPendingActivitiesForTesting()
+        let activity = second.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: book.id,
+                                                                        since: .distantPast)
+        XCTAssertTrue(activity.contains { $0.kind == .batchMetadata && $0.state == .finished(.succeeded) })
+        for kind: ActivityLogKind in [.readingPosition, .annotations] {
+            XCTAssertTrue(activity.contains {
+                $0.kind == kind && $0.request.httpMethod == "POST" && $0.state == .finished(.succeeded)
+            })
+        }
+    }
+
+    func testRefreshKeepsHighlightsInTheirCalibreFormat() async throws {
+        let metadata = try await service.getBooksMetadata(task: XCTUnwrap(service.buildBooksMetadataTask(library: library, books: [book])))
+        let formats = try XCTUnwrap(metadata.booksMetadataEntry?[book.id.description] ?? nil).formats
+        XCTAssertTrue(formats.contains(where: { $0.uppercased() == "PDF" }), "Use a freshly seeded contract library with both formats")
+        let device = try makeRefreshDevice()
+        let epub = highlight(id: UUID().uuidString, date: Date().addingTimeInterval(-60), content: "EPUB passage")
+        var pdf = highlight(id: UUID().uuidString, date: epub.date, content: "PDF passage")
+        pdf.readerName = ReaderType.YabrPDF.rawValue
+        pdf.ranges = #"{"page":1,"ranges":[{"location":0,"length":10}]}"#
+        pdf.cfiStart = nil
+        pdf.cfiEnd = nil
+        pdf.spineName = nil
+        try await upload(highlights: [epub], format: .EPUB)
+        let importedEPUB = try await refreshDevice(device, via: .detail)
+        XCTAssertEqual(importedEPUB.localMerges, 1)
+        XCTAssertEqual(device.annotationRepository.getHighlight(byId: epub.id)?.readerName, ReaderType.YabrEPUB.rawValue)
+
+        var cached = try XCTUnwrap(device.bookRepository.getBook(id: book.inShelfId))
+        cached.formats["EPUB"]?.cached = false
+        cached.formats["PDF"]?.cached = true
+        device.bookManager.updateBook(book: cached)
+        let emptyPDF = try await refreshDevice(device, via: .shelf)
+        XCTAssertEqual(emptyPDF.localMerges, 1)
+        XCTAssertEqual(emptyPDF.uploaded, 0)
+        let leakedToPDF = try await storedHighlights(id: epub.id, format: .PDF)
+        XCTAssertTrue(leakedToPDF.isEmpty, "The PDF endpoint must not receive the imported EPUB highlight")
+
+        try await upload(highlights: [pdf], format: .PDF)
+        _ = try await refreshDevice(device, via: .detail)
+        XCTAssertEqual(device.annotationRepository.getHighlight(byId: pdf.id)?.readerName, ReaderType.YabrPDF.rawValue)
+        cached.formats["PDF"]?.cached = false
+        cached.formats["EPUB"]?.cached = true
+        device.bookManager.updateBook(book: cached)
+        let epubOnly = try await refreshDevice(device, via: .shelf)
+        XCTAssertEqual(epubOnly.uploaded, 0)
+        let leakedToEPUB = try await storedHighlights(id: pdf.id)
+        XCTAssertTrue(leakedToEPUB.isEmpty, "The EPUB endpoint must not receive the imported PDF highlight")
+
+        cached.formats["PDF"]?.cached = true
+        device.bookManager.updateBook(book: cached)
+        device.annotationRepository.updateHighlightNote(id: epub.id, note: "EPUB edit")
+        device.annotationRepository.removeHighlight(id: pdf.id)
+        let delivered = try await refreshDevice(device, via: .readerClose)
+        XCTAssertEqual(delivered.localMerges, 2)
+        XCTAssertEqual(delivered.uploaded, 2)
+        XCTAssertEqual(delivered.rejected + delivered.uncertain + delivered.discarded, 0)
+        let epubAnswer = try await storedHighlights(id: epub.id)
+        let pdfAnswer = try await storedHighlights(id: pdf.id, format: .PDF)
+        XCTAssertEqual(epubAnswer.first?.notes, "EPUB edit")
+        XCTAssertEqual(pdfAnswer.first?.removed, true)
+        let finalPDF = try await storedHighlights(id: epub.id, format: .PDF)
+        let finalEPUB = try await storedHighlights(id: pdf.id)
+        XCTAssertTrue(finalPDF.isEmpty)
+        XCTAssertTrue(finalEPUB.isEmpty)
+        await device.calibreServerService.logger.flushPendingActivitiesForTesting()
+        let uploads = device.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: book.id, since: .distantPast)
+            .filter { $0.kind == .annotations && $0.request.httpMethod == "POST" }
+        let postedFormats = uploads.compactMap { $0.request.endpointURL?.split(separator: "/").last }.map(String.init).sorted()
+        XCTAssertEqual(postedFormats, ["EPUB", "PDF"])
+    }
+
+    private enum RefreshEntry { case detail, shelf, readerClose }
+
+    private func makeRefreshDevice() throws -> AppContainer {
+        let device = MockAppContainerFactory.makeContainer()
+        device.deviceName = "BS3-\(UUID().uuidString)"
+        try device.serverManager.addServer(server: library.server, libraries: [library])
+        device.calibreServerInfoStaging = container.calibreServerInfoStaging
+        device.bookManager.updateBook(book: book)
+        return device
+    }
+
+    private func refreshDevice(_ device: AppContainer, via entry: RefreshEntry) async throws -> BookRefreshCoordinator.State {
+        let stream = device.bookManager.bookRefreshUpdates()
+        let done = expectation(description: "Calibre refresh and uploads finished")
+        var result: BookRefreshCoordinator.State?
+        let observer = Task { @MainActor in
+            for await state in stream where !state.refreshing && state.pendingUploads == 0 {
+                result = state
+                done.fulfill()
+                return
+            }
+        }
+        defer { observer.cancel() }
+        switch entry {
+        case .detail:
+            _ = await device.bookManager.getBooksMetadata(request: .init(library: library, books: [book.id], getAnnotations: true))
+        case .shelf:
+            device.bookManager.refreshShelfMetadataV2(for: [book.inShelfId], serverReachableChanged: false)
+        case .readerClose:
+            await device.sessionManager.onBookReaderClosed(book: book,
+                lastPosition: .init(readerName: ReaderType.YabrEPUB.rawValue))
+        }
+        await fulfillment(of: [done], timeout: 10)
+        XCTAssertFalse(device.librarySyncStatus[library.id]?.isUpd ?? true)
+        return try XCTUnwrap(result)
+    }
+
+    private func assertContractPosition(_ position: BookDeviceReadingPosition, in device: AppContainer,
+                                        file: StaticString = #filePath, line: UInt = #line) {
+        let saved = device.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(position.id))
+        XCTAssertEqual(saved?.epoch, position.epoch, file: file, line: line)
+        XCTAssertEqual(saved?.lastReadPage, position.lastReadPage, file: file, line: line)
+        XCTAssertEqual(saved?.lastProgress, position.lastProgress, file: file, line: line)
+    }
+
+    private func deviceBookmarks(_ device: AppContainer, prefix: String) -> [String] {
+        device.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true)
+            .map(\.title).filter { $0.hasPrefix(prefix) }.sorted()
+    }
+
     /// Positions and annotations are the user's own data: calibre lets a read-only account
     /// (which can't change the library) save them.
     func testAReadOnlyUserStillSavesItsReadingPosition() async throws {
@@ -527,13 +743,13 @@ final class CalibreServerContractTests: XCTestCase {
         if let error = result.error { throw error }
     }
 
-    private func upload(highlights: [BookHighlight] = [], bookmarks: [BookBookmark] = []) async throws {
+    private func upload(highlights: [BookHighlight] = [], bookmarks: [BookBookmark] = [], format: Format = .EPUB) async throws {
         let highlightEntries = highlights.compactMap { $0.toCalibreBookAnnotationHighlightEntry() }
         XCTAssertEqual(highlightEntries.count, highlights.count, "every highlight converts")
         let task = try service.buildUpdateAnnotationsTask(
             library: library,
             bookId: book.id,
-            format: .EPUB,
+            format: format,
             highlights: highlightEntries,
             bookmarks: bookmarks.map { $0.toCalibreBookAnnotationBookmarkEntry() }
         )
@@ -542,17 +758,18 @@ final class CalibreServerContractTests: XCTestCase {
     }
 
     /// The book's positions and annotations, as the app's sync reads them.
-    private func fetchAnnotations(in library: CalibreLibrary? = nil) async throws -> CalibreBookAnnotationsResult {
+    private func fetchAnnotations(in library: CalibreLibrary? = nil, format: Format = .EPUB) async throws -> CalibreBookAnnotationsResult {
         var book = self.book!
         if let library {
             book = CalibreBook(id: book.id, library: library)
             book.inShelf = true
             book.formats = self.book.formats
         }
+        book.formats = [format.rawValue: try XCTUnwrap(self.book.formats[Format.EPUB.rawValue])]
         let task = try XCTUnwrap(service.buildBooksMetadataTask(library: book.library, books: [book], getAnnotations: true))
         let result = await service.getAnnotations(task: task)
-        if let error = result.error { throw error }
-        return try XCTUnwrap(result.booksAnnotationsEntry?["\(book.id):\(Format.EPUB.rawValue)"])
+        if let error = result.annotationsError { throw error }
+        return try XCTUnwrap(result.booksAnnotationsEntry?["\(book.id):\(format.rawValue)"])
     }
 
     /// A device's bookmarks: its own in-memory database.
@@ -581,9 +798,9 @@ final class CalibreServerContractTests: XCTestCase {
         return Dictionary(bookmarks.map { ($0.pos, $0.title) }) { [$0, $1].sorted().joined(separator: " + ") }
     }
 
-    private func storedHighlights(id: String) async throws -> [CalibreBookAnnotationHighlightEntry] {
+    private func storedHighlights(id: String, format: Format = .EPUB) async throws -> [CalibreBookAnnotationHighlightEntry] {
         let calibreId = try XCTUnwrap(uuidFolioToCalibre(id))
-        return (try await fetchAnnotations().annotations_map.highlight ?? []).filter { $0.uuid == calibreId }
+        return (try await fetchAnnotations(format: format).annotations_map.highlight ?? []).filter { $0.uuid == calibreId }
     }
 
     private func storedBookmarks(title: String) async throws -> [CalibreBookAnnotationBookmarkEntry] {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A calibre-server for CalibreServerContractTests. The library holds one EPUB and an integer
+# A calibre-server for CalibreServerContractTests. The library holds one EPUB/PDF book and an integer
 # custom column, #read_progress, and is named with a space and non-ASCII characters (its key is
 # "Test_Library_测试"). It has three users: contract-writer, the read-only contract-reader, and
 # contract-restricted, whose per-library restriction matches no book.
@@ -29,6 +29,8 @@ seed() {
   "$BIN/ebook-convert" "$dir/book.txt" "$dir/book.epub" --title "Contract Test Book" --authors "Test Author" > "$dir/convert.log"
   mkdir -p "$library"
   "$BIN/calibredb" add --with-library "$library" "$dir/book.epub"
+  python3 "$(dirname "$0")/calibre-bs3-books.py" "$dir/formats" --pdf-only
+  "$BIN/calibredb" add_format --with-library "$library" 1 "$dir/formats/BS3-PDF.pdf"
   # Like the reading-progress column the Goodreads sync writes (readingProgressColumnName).
   "$BIN/calibredb" add_custom_column --with-library "$library" read_progress "Read progress" int
   "$BIN/calibre-server" --userdb "$dir/users.sqlite" --manage-users -- add "$WRITER" "$WRITER_PASSWORD"

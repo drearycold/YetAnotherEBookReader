@@ -2,8 +2,8 @@
 
 ## Current Focus
 
-**Book Metadata Refresh and Sync Coordination (BS2)** is on
-`codex/book-metadata-refresh-bs2`, based on `300ff3cb` after BS1 PR #157.
+**Book Metadata Refresh and Sync Coordination (BS3)** is on
+`codex/book-metadata-refresh-bs3`, based on `73b58f4e` after BS2 PR #158.
 The earlier PDF investigation remains under Current Branch Notes.
 
 ## Book Refresh and Sync Direction (2026-11-14)
@@ -12,9 +12,6 @@ The remote book refresh pipeline serves Book Detail, shelf refresh and
 reader-close sync. It coordinates batches, metadata persistence, shelf
 reconciliation, position and annotation merges, and follow-up uploads.
 Browse keeps its own CC-scoped writer and shares metadata version checks.
-
-BS3 should verify Book Detail, shelf and reader-close flows end to end
-across the readers and real multi-device Calibre workflows.
 
 Reuse BookMetadataSyncWorker, the existing position/highlight/bookmark merge
 algorithms, AL diagnostics, CC context patterns and SC commit-result rules.
@@ -164,7 +161,6 @@ reading and History return journey through the Calibre 9.18 fixture.
 The first run stopped when SimRenderServer crashed. A fresh isolated
 installation completed the journey. The proxy forwards reads; the real
 9.11.0 contracts and controlled POST fixtures cover write behavior.
-BS3 can extend native coverage to the other reader and multi-device flows.
 
 #### BS2 capacity review
 
@@ -191,6 +187,99 @@ switch away and back. They assert the active limit, terminal outcomes,
 committed shelf values and the reader-close notification. Mac Catalyst
 built successfully. See `/tmp/YabrBS2/capacity-verified.xcresult` and
 `/tmp/YabrBS2/capacity-catalyst.log`.
+
+### BS3 end-to-end verification
+
+The two-AppContainer contract uses independent metadata and position Realms,
+different device identities and a shared isolated Digest-authenticated
+Calibre account. It exercises app refresh, shelf refresh and reader close.
+Both device positions reach the other container. The app's CFI preserves its
+reading epoch, while Calibre's top-level epoch records the upload time.
+Bookmark titles, retitling and deletion are tested through the same
+operations. The operation stream and Activity Log distinguish successful
+local merge and actual POST completion.
+
+The first contract run reproduced an imported highlight's note edit
+staying local. Remote inserts left the reader blank, so the existing entry
+encoder skipped the edit. The importer now keeps the EPUB or PDF reader and
+fills blank names on matching older rows. The same contract then exposed a
+100 ms merge tolerance overwriting a quick local removal. Highlights now
+compare the local wire timestamp with the received timestamp, so an exact
+echo settles and a newer edit or removal survives. A fixed 50 ms test covers
+this without timing assumptions. Schema 151 and the bookmark merge policy
+are unchanged. Evidence is under `/tmp/YabrBS3`.
+
+The full iPhone 17 unit run recorded 1,238 cases, with 1,235 passed, two
+existing expected PDFKit failures and one opt-in benchmark skipped. All
+22 Calibre 9.11.0 contracts ran and passed. The iOS Simulator Release and
+Mac Catalyst builds passed with the locked packages. Calibre 9.18's earlier
+read-only position POST 403 remains a separate version observation.
+
+To repeat the native matrix, create books with
+`.github/scripts/calibre-bs3-books.py` and add them to the stopped, isolated
+library from `calibre-contract-server.sh`. Restart calibre-server and start
+`calibre-download-proxy.py --sync-fixture` with the seeded writer's credentials
+in `YABR_FIXTURE_USER` and `YABR_FIXTURE_PASSWORD`. The proxy accepts writes
+only for the isolated loopback fixture. Use Standard Release app copies in
+independent simulator containers. The opt-in UI test uses
+`YABR_BS3_BOOK`, `YABR_BS3_LIBRARY`, `YABR_BS3_FORMAT` and
+`YABR_BS3_READER`. `YABR_BS3_PREFERRED_READER` lets the old PDF test request
+YabrPDF and assert the Readium fallback. `YABR_BS3_EXISTING_DEVICES`
+specifies how many peer positions should be present before opening. The
+Book Detail controls still cover 503, retry and explicit null.
+
+Native Release passed Book Detail's 503 automatic retry and manual retry,
+explicit null, cached EPUB, close and History return on iPhone 17 and
+iPhone 7. The iPhone 17 position journeys passed for Folio EPUB, Readium
+EPUB, Readium CBZ, and YabrPDF. The proxy and Calibre both recorded successful
+position POSTs. Folio on iPhone 17 saved chapter 2, a separate iPad mini
+installation opened chapter 2 and saved chapter 3, and the original iPhone
+showed the iPad position in History while resuming its own chapter 2.
+Calibre retained both positions. The screens and server values are in
+`/tmp/YabrBS3/Folio17Readback-attachments` and `native-server-final.json`.
+
+Readium PDF opened on iPhone 7 when the preferred reader was YabrPDF.
+The old simulator did not complete the second-device Folio advance or
+Readium PDF position round trip. Some fresh instances stayed on an empty
+Browse list even though Calibre returned search and metadata responses.
+Readium PDF on iPhone 17 opened the file, but the scroll and edge-tap
+drivers did not verify an advance. Readium PDF position upload and resume
+are unverified natively. Native annotation edits, system Split View, and
+physical devices were outside this run. The dual-container server contract
+covers highlight and bookmark edits, independent of the native UI
+position matrix.
+
+#### BS3 review regressions
+
+The review seeded one real Calibre book in EPUB and PDF. With EPUB imported
+before a PDF-only refresh, the EPUB UUID appeared in PDF's server response.
+The reverse refresh copied the PDF UUID into EPUB as well. Both directions
+failed on each pre-fix run in `/tmp/YabrBS3/review-red.log`. On the fixed path,
+the scoped merge counts pending uploads and serializes outgoing highlights
+within their format. A UUID already assigned to another format is kept.
+Readium rows can merge an incoming highlight in their own format while
+retaining their reader, and keep the existing encoder eligibility. A
+blank-reader legacy row is attributed only when its UUID appears in that
+endpoint and its saved location does not indicate a different format.
+The real contract checks both endpoints and reads back an EPUB edit and a
+PDF removal. A separate Realm fixture checks the local payload, a
+cross-format removal, ambiguous legacy rows and the Readium reader identity.
+
+Two unseeded repetitions did not reproduce the bookmark collision. A
+retained prior bookmark whose title sorts before the new run reproduced it
+deterministically at the shared CFI. The wrong bookmark was chosen, the
+new run's second title remained, and the prior bookmark became removed.
+The fixture allocates unused character offsets in the seeded EPUB's actual
+paragraphs. It checks ownership before the rename and removal and verifies
+the prior bookmark is still live. Both real contracts and the Realm case
+passed twice against the same server state. See `bookmark-red.log` and
+`review-green-repeat.xcresult` in `/tmp/YabrBS3`.
+
+After review, the full iPhone 17 run recorded 1,240 tests, with 1,237
+passed, two existing expected failures and one opt-in benchmark skipped.
+All 23 Calibre 9.11.0 contracts passed. iOS Simulator Release and Mac
+Catalyst built. The native results above describe the pre-review matrix;
+Readium PDF native page advance, upload and resume remain unverified.
 
 ## Next Refactoring Direction: Local File Operations (2026-11-13)
 

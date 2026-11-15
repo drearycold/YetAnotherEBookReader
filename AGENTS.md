@@ -167,7 +167,7 @@ stores, merges and refuses what the app sends. They skip unless
 `TEST_RUNNER_YABR_CALIBRE_URL` is set.
 
 `.github/scripts/calibre-contract-server.sh start DIR` seeds an empty `DIR`:
-- a library named `Test Library 测试` (key `Test_Library_测试`) with one EPUB
+- a library named `Test Library 测试` (key `Test_Library_测试`) with one book in EPUB and PDF
   and an integer custom column `#read_progress`;
 - users `contract-writer`, the read-only `contract-reader`, and
   `contract-restricted`, whose per-library restriction matches no book.
