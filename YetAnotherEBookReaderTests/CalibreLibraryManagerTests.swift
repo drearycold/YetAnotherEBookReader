@@ -162,7 +162,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let mockSession = URLSession(configuration: sessionConfig)
         
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
                 container.calibreServerService.metadataSessions[key] = mockSession
@@ -210,7 +210,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let mockSession = URLSession(configuration: sessionConfig)
         
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
                 container.calibreServerService.metadataSessions[key] = mockSession
@@ -647,6 +647,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let refresh = Task { await container.bookManager.getBooksMetadata(
             request: .init(library: library, books: ids, getAnnotations: true)) }
         await fulfillment(of: [batchReachedFollowUp], timeout: 10)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, true)
         original.refresh()
         XCTAssertEqual(original.object(ofType: CalibreBookRealm.self, forPrimaryKey: books[0].inShelfId)?.title, "Committed 1")
 
@@ -897,10 +898,11 @@ final class CalibreLibraryManagerTests: XCTestCase {
         configureReachableMockSession()
         let session = URLSession(configuration: sessionConfig)
         container.calibreServerService.metadataSessions[
-            CalibreServerURLSessionKey(server: server, timeout: 600, qos: .default)] = session
+            CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)] = session
         let book = shelveForMetadataTest(101)
         let first = expectation(description: "First request held")
         let second = expectation(description: "Second request held")
+        libraryManager.librarySyncStatus[library.id] = .init(library: library)
         let held = DeferredMetadataProtocol.Requests(first: first, second: second)
         DeferredMetadataProtocol.requests = held
         defer {
@@ -915,14 +917,567 @@ final class CalibreLibraryManagerTests: XCTestCase {
 
         try held.answer(1, body: #"{"101":\#(Self.bookEntryJSON(title: "New result", modified: "2026-06-23T18:00:00.123999Z"))}"#)
         let latest = await newer.value
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, true,
+                       "The first refresh is still waiting for its metadata")
         try held.answer(0, body: #"{"101":\#(Self.bookEntryJSON(title: "Old result"))}"#)
         let late = await older.value
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, false)
 
         XCTAssertEqual(latest[book.id], .updated)
         XCTAssertEqual(late[book.id], .unchanged)
         databaseService.refreshMainRealm()
         XCTAssertEqual(container.bookRepository.getBook(id: book.inShelfId)?.title, "New result")
         XCTAssertEqual(container.bookManager.booksInShelf[book.inShelfId]?.title, "New result")
+    }
+
+    func testBookRefreshRetriesOnlyOneTransientMetadataFailure() async throws {
+        configureReachableMockSession()
+        let book = shelveForMetadataTest(101)
+        let attempts = BatchSizes()
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            attempts.append(1)
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (response, Data())
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+        let result = await container.bookManager.getBooksMetadata(
+            request: .init(library: library, books: [book.id], getAnnotations: false))
+        XCTAssertEqual(attempts.values, [1, 1])
+        XCTAssertEqual(result[book.id], .failed("The server could not refresh book details (HTTP 503). Please try again."))
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, false)
+    }
+
+    func testCancelledRefreshLeavesOtherLibraryBusyUntilItsOwnAnswer() async throws {
+        configureReachableMockSession()
+        let firstBook = shelveForMetadataTest(101)
+        let otherLibrary = CalibreLibrary(server: server, key: "other", name: "Other BS2 library")
+        try libraryRepository.saveLibrary(otherLibrary)
+        libraryManager.calibreLibraries[otherLibrary.id] = otherLibrary
+        var otherBook = CalibreBook(id: 101, library: otherLibrary)
+        otherBook.inShelf = true
+        container.bookManager.updateBook(book: otherBook)
+        let first = expectation(description: "First library entered transport")
+        let second = expectation(description: "Second library entered transport")
+        let held = DeferredMetadataProtocol.Requests(first: first, second: second)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeferredMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        container.calibreServerService.metadataSessions[
+            CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)] = session
+        DeferredMetadataProtocol.requests = held
+        defer { DeferredMetadataProtocol.requests = nil; session.invalidateAndCancel() }
+        let one = Task { await container.bookManager.getBooksMetadata(
+            request: .init(library: library, books: [firstBook.id], getAnnotations: false)) }
+        await fulfillment(of: [first], timeout: 5)
+        let two = Task { await container.bookManager.getBooksMetadata(
+            request: .init(library: otherLibrary, books: [otherBook.id], getAnnotations: false)) }
+        await fulfillment(of: [second], timeout: 5)
+        one.cancel()
+        let cancelled = await one.value
+        XCTAssertEqual(cancelled[firstBook.id], .cancelled)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, false)
+        XCTAssertEqual(libraryManager.librarySyncStatus[otherLibrary.id]?.isUpd, true)
+        try held.answer(1, body: #"{"101":\#(Self.bookEntryJSON(title: "Other library completed"))}"#)
+        let success = await two.value
+        XCTAssertEqual(success[otherBook.id], .updated)
+        XCTAssertEqual(libraryManager.librarySyncStatus[otherLibrary.id]?.isUpd, false)
+        XCTAssertEqual(container.bookRepository.getBook(id: firstBook.inShelfId)?.title, firstBook.title)
+        XCTAssertEqual(container.bookRepository.getBook(id: otherBook.inShelfId)?.title, "Other library completed")
+    }
+
+    func testRemovingLibraryDuringRetryBackoffStopsOldRequest() async throws {
+        configureReachableMockSession()
+        let book = shelveForMetadataTest(101)
+        let attempts = BatchSizes()
+        MockURLProtocol.requestHandler = { request in
+            attempts.append(1)
+            let url = try XCTUnwrap(request.url)
+            return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 503, httpVersion: nil, headerFields: nil)), Data())
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+        let states = container.bookManager.bookRefreshUpdates()
+        let retired = expectation(description: "Library removed when refresh enters backoff")
+        let observer = Task { @MainActor in
+            for await state in states where state.waitingToRetry {
+                XCTAssertTrue(libraryManager.librarySyncStatus[library.id]?.isUpd == true)
+                XCTAssertNoThrow(try libraryManager.removeLibrary(library: library))
+                retired.fulfill()
+                return
+            }
+        }
+        defer { observer.cancel() }
+        let result = await container.bookManager.getBooksMetadata(
+            request: .init(library: library, books: [book.id], getAnnotations: false))
+        await fulfillment(of: [retired], timeout: 5)
+        XCTAssertEqual(attempts.values, [1])
+        XCTAssertEqual(result[book.id], .superseded)
+        XCTAssertNil(container.bookRepository.getBook(id: book.inShelfId))
+        XCTAssertNil(libraryManager.librarySyncStatus[library.id])
+    }
+
+    func testBookRefreshReportsAnnotationReadFailureAfterMetadataCommit() async throws {
+        configureReachableMockSession()
+        let book = shelveForMetadataTest(101)
+        let log = MockURLProtocol.answer([
+            "/ajax/books/test_lib": #"{"101":\#(Self.bookEntryJSON(title: "Committed metadata"))}"#
+        ])
+        let states = container.bookManager.bookRefreshUpdates()
+        let result = await container.bookManager.getBooksMetadata(
+            request: .init(library: library, books: [book.id], getAnnotations: true))
+        let state = await terminalRefreshStates(states, count: 1).first
+        XCTAssertEqual(result[book.id], .updated)
+        XCTAssertEqual(state?.metadata[book.id], .updated)
+        XCTAssertEqual(state?.annotationFailures, 1)
+        XCTAssertEqual(state?.localMerges, 0)
+        XCTAssertEqual(log.unexpected, ["/book-get-annotations/test_lib/101-EPUB"])
+        XCTAssertEqual(container.bookRepository.getBook(id: book.inShelfId)?.title, "Committed metadata")
+    }
+
+    func testBookRefreshOwnsUploadsAndReportsPartialDelivery() async throws {
+        configureReachableMockSession()
+        let book = shelveForMetadataTest(123)
+        let a = TestFixtures.makeReadingPosition(id: "a", lastReadPage: 1, epoch: 100)
+        let b = TestFixtures.makeReadingPosition(id: "b", lastReadPage: 2, epoch: 200)
+        let remote = TestFixtures.makeReadingPosition(id: "remote", lastReadPage: 3, epoch: 300)
+        container.readingPositionRepository.savePosition(a, for: book)
+        container.readingPositionRepository.savePosition(b, for: book)
+        let bookmark = TestFixtures.makeBookmark(bookId: book.bookPrefId, pos: "epubcfi(/4/2/4)", title: "Local pending bookmark")
+        XCTAssertEqual(container.annotationRepository.saveBookmark(bookmark).0, 1)
+        let annotation = try JSONEncoder().encode(["123:EPUB": CalibreBookAnnotationsResult(
+            last_read_positions: [remote.toEntry()], annotations_map: .init(bookmark: [], highlight: []))])
+        let held = expectation(description: "First POST is held after metadata and local merge")
+        let release = DispatchSemaphore(value: 0)
+        let posts = BatchSizes()
+        defer { release.signal(); MockURLProtocol.requestHandler = nil }
+        MockURLProtocol.requestHandler = { request in
+            let url = try XCTUnwrap(request.url)
+            let response: (Int, Data)
+            switch url.path {
+            case "/ajax/books/test_lib":
+                response = (200, Data(#"{"123":\#(Self.bookEntryJSON(title: "Merged book"))}"#.utf8))
+            case "/book-get-annotations/test_lib/123-EPUB":
+                response = (200, annotation)
+            case "/book-set-last-read-position/test_lib/123/EPUB":
+                XCTAssertEqual(request.httpMethod, "POST")
+                if posts.values.isEmpty {
+                    posts.append(403)
+                    held.fulfill()
+                    guard release.wait(timeout: .now() + 10) == .success else { throw URLError(.timedOut) }
+                    response = (403, Data("private Calibre body".utf8))
+                } else {
+                    posts.append(200)
+                    response = (200, Data())
+                }
+            case "/book-update-annotations/test_lib/123/EPUB":
+                let body = try Self.requestBody(request)
+                XCTAssertTrue(String(decoding: body, as: UTF8.self).contains(bookmark.title))
+                posts.append(422)
+                response = (422, Data("private annotation body".utf8))
+            default: throw URLError(.unsupportedURL)
+            }
+            return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: response.0, httpVersion: nil, headerFields: nil)), response.1)
+        }
+        let states = container.bookManager.bookRefreshUpdates()
+        let refresh = Task { await container.bookManager.getBooksMetadata(
+            request: .init(library: library, books: [book.id], getAnnotations: true)) }
+        await fulfillment(of: [held], timeout: 10)
+        let metadata = await refresh.value
+        XCTAssertEqual(metadata[book.id], .updated)
+        XCTAssertEqual(libraryManager.librarySyncStatus[library.id]?.isUpd, false)
+        XCTAssertEqual(Set(container.readingPositionRepository.getPositions(for: book).map(\.id)), ["a", "b", "remote"])
+        release.signal()
+        let state = await terminalRefreshStates(states, count: 1).first
+        XCTAssertEqual(state?.localMerges, 1)
+        XCTAssertEqual(state?.annotationReads, 1)
+        XCTAssertEqual(state?.uploaded, 1)
+        XCTAssertEqual(state?.rejected, 2)
+        XCTAssertEqual(posts.values, [403, 200, 422])
+        XCTAssertEqual(container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).map(\.title),
+                       [bookmark.title])
+        await container.calibreServerService.logger.flushPendingActivitiesForTesting()
+        let log = container.activityLogRepository.fetchTestSnapshots(libraryId: library.id, bookId: book.id,
+                                                                      since: .distantPast)
+        XCTAssertTrue(log.contains { $0.kind == .readingPosition && $0.result.errorCategory == .authentication })
+        XCTAssertTrue(log.contains { $0.kind == .annotations && $0.result.httpStatusCode == 422 })
+        XCTAssertFalse(log.contains { $0.result.detail?.contains("private Calibre body") == true })
+    }
+
+    func testOlderQueuedPositionIsDiscardedBeforeNewPositionIsSent() async throws {
+        try await assertQueuedPositionDelivery(firstPostFails: false)
+    }
+
+    func testTransportFailureDiscardsSnapshotsTakenBeforeTheAmbiguousPostSettled() async throws {
+        try await assertQueuedPositionDelivery(firstPostFails: true, includePDF: true)
+    }
+
+    private func assertQueuedPositionDelivery(firstPostFails: Bool, includePDF: Bool = false) async throws {
+        configureReachableMockSession()
+        // The class shares its test Realm. Use a fresh book identity per format case.
+        let id: Int32 = includePDF ? 121 : 120
+        var book = shelveForMetadataTest(id)
+        if includePDF {
+            book.formats["PDF"] = book.formats["EPUB"]
+            container.bookManager.updateBook(book: book)
+            container.readingPositionRepository.savePosition(
+                TestFixtures.makeReadingPosition(id: "a", readerName: "YabrPDF", epoch: 400), for: book)
+        }
+        let a = TestFixtures.makeReadingPosition(id: "a", lastReadPage: 1, epoch: 100)
+        let oldB = TestFixtures.makeReadingPosition(id: "b", lastReadPage: 2, epoch: 200)
+        let newB = TestFixtures.makeReadingPosition(id: "b", lastReadPage: 8, epoch: 800)
+        container.readingPositionRepository.savePosition(a, for: book)
+        container.readingPositionRepository.savePosition(oldB, for: book)
+        let entered = expectation(description: "First position POST is held")
+        let epochs = BatchSizes()
+        let noAnnotations = CalibreBookAnnotationsResult(
+            last_read_positions: [], annotations_map: .init(bookmark: [], highlight: []))
+        var annotations = ["\(id):EPUB": noAnnotations]
+        if includePDF { annotations["\(id):PDF"] = noAnnotations }
+        let annotation = try JSONEncoder().encode(annotations)
+        let held = DeferredMetadataProtocol.Requests(first: entered, second: nil)
+        DeferredMetadataProtocol.requests = held
+        DeferredMetadataProtocol.automaticResponse = { request in
+            let url = try XCTUnwrap(request.url)
+            let body: Data
+            switch url.path {
+            case "/ajax/books/test_lib":
+                body = Data(#"{"\#(id)":\#(Self.bookEntryJSON(title: "Merged book"))}"#.utf8)
+            case let path where path.hasPrefix("/book-get-annotations/test_lib/"):
+                body = annotation
+            case "/book-set-last-read-position/test_lib/\(id)/EPUB", "/book-set-last-read-position/test_lib/\(id)/PDF":
+                let entry = try JSONDecoder().decode(CalibreBookLastReadPositionEntry.self, from: Self.requestBody(request))
+                epochs.append(Int(entry.epoch))
+                if epochs.values.count == 1 { return nil }
+                body = Data()
+            default: throw URLError(.unsupportedURL)
+            }
+            return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), body)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeferredMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let key = CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)
+        container.calibreServerService.metadataSessions[key] = session
+        defer {
+            DeferredMetadataProtocol.automaticResponse = nil
+            DeferredMetadataProtocol.requests = nil
+            session.invalidateAndCancel()
+        }
+        let updates = container.bookManager.bookRefreshUpdates()
+        let request = CalibreBooksMetadataRequest(library: library, books: [book.id], getAnnotations: true)
+        _ = await container.bookManager.getBooksMetadata(request: request)
+        await fulfillment(of: [entered], timeout: 5)
+        container.readingPositionRepository.savePosition(newB, for: book)
+        _ = await container.bookManager.getBooksMetadata(request: request)
+        let firstEpoch = try XCTUnwrap(epochs.values.first)
+        XCTAssertEqual(epochs.values.count, 1)
+        XCTAssertTrue(includePDF ? [100, 400].contains(firstEpoch) : firstEpoch == 100)
+        if firstPostFails {
+            try held.fail(0, error: URLError(.networkConnectionLost))
+        } else {
+            try held.answer(0, body: "")
+        }
+        let results = await terminalRefreshStates(updates, count: 2)
+        XCTAssertEqual(epochs.values, firstPostFails ? [firstEpoch] : [100, 100, 800])
+        XCTAssertEqual(results.reduce(0) { $0 + $1.discarded }, firstPostFails ? 5 : 1)
+        XCTAssertEqual(results.reduce(0) { $0 + $1.uploaded }, firstPostFails ? 0 : 3)
+        XCTAssertEqual(results.reduce(0) { $0 + $1.uncertain }, firstPostFails ? 1 : 0)
+        XCTAssertEqual(container.readingPositionRepository.getPositions(for: book).first { $0.id == "b" }?.epoch, 800)
+    }
+
+    func testShelfRefreshRetainsTheSeventeenthLibraryUntilCapacityFrees() async throws {
+        try await assertShelfRefreshAtCapacity(afterReaderClose: false)
+    }
+
+    func testReaderCloseRetainsRefreshWhileSixteenOperationsOwnUploads() async throws {
+        try await assertShelfRefreshAtCapacity(afterReaderClose: true)
+    }
+
+    func testWaitingShelfRefreshRetiresOnHideAndRestoreWithoutBlockingTheNextLibrary() async throws {
+        try await assertShelfRefreshAtCapacity(afterReaderClose: false, retirement: .hideAndRestore)
+    }
+
+    func testWaitingShelfRefreshCannotSurviveDatabaseSwitchAwayAndBack() async throws {
+        try await assertShelfRefreshAtCapacity(afterReaderClose: false, retirement: .replaceDatabase)
+    }
+
+    private enum CapacityRetirement { case hideAndRestore, replaceDatabase }
+
+    private func assertShelfRefreshAtCapacity(afterReaderClose: Bool, retirement: CapacityRetirement? = nil) async throws {
+        configureReachableMockSession()
+        container.bookManager.booksInShelf = [:]
+        var books = [CalibreBook]()
+        for index in 0..<(retirement == .hideAndRestore ? 18 : 17) {
+            let key = "capacity_\(index)"
+            let library = CalibreLibrary(server: server, key: key, name: "Capacity \(index)")
+            try libraryRepository.saveLibrary(library)
+            libraryManager.calibreLibraries[library.id] = library
+            var book = CalibreBook(id: Int32(501 + index), library: library)
+            book.title = "Original \(book.id)"
+            book.inShelf = true
+            if afterReaderClose && index < 16 {
+                book.formats["EPUB"] = .init(serverSize: 0, serverMTime: .distantPast, cached: true,
+                                               cacheSize: 123, cacheMTime: .distantPast)
+                container.readingPositionRepository.savePosition(
+                    TestFixtures.makeReadingPosition(id: "local", epoch: 100), for: book)
+            }
+            container.bookManager.updateBook(book: book)
+            books.append(book)
+        }
+        let manager = container.bookManager
+        let states = manager.bookRefreshUpdates()
+        let terminalStates = manager.bookRefreshUpdates()
+        let sixteenCompletedMetadata = XCTestExpectation(description: "Sixteen refreshes handed off uploads")
+        let metadataObserver = Task { @MainActor in
+            var seen = Set<UUID>()
+            for await state in states where !state.refreshing && state.pendingUploads > 0 {
+                seen.insert(state.id)
+                if seen.count == 16 { sixteenCompletedMetadata.fulfill(); return }
+            }
+        }
+        defer { metadataObserver.cancel() }
+
+        let filled = expectation(description: "The held requests occupy all available lanes")
+        let overflow = XCTestExpectation(description: "A freed slot admits an additional library")
+        let held = DeferredMetadataProtocol.Requests(first: nil, second: nil, onAppend: { count in
+            if count == (afterReaderClose ? 4 : 16) { filled.fulfill() }
+            if !afterReaderClose, count == 17 { overflow.fulfill() }
+        })
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeferredMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        container.calibreServerService.metadataSessions[
+            CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)
+        ] = session
+        let closingBook = try XCTUnwrap(books.last)
+        DeferredMetadataProtocol.requests = held
+        DeferredMetadataProtocol.automaticResponse = { request in
+            let url = try XCTUnwrap(request.url)
+            let extra = url.path.hasPrefix("/ajax/books/") && url.lastPathComponent == closingBook.library.key
+            switch url.path {
+            case let path where path.hasPrefix("/ajax/books/"):
+                if !afterReaderClose { return nil }
+                let id = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value)
+                if extra { overflow.fulfill() }
+                return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)),
+                        Data(Self.capacityMetadataBody(id: id).utf8))
+            case let path where path.hasPrefix("/book-get-annotations/"):
+                let entries = try Self.capacityEmptyAnnotations(path: path)
+                return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), entries)
+            case let path where path.hasPrefix("/book-set-last-read-position/"):
+                return nil
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer {
+            manager.cancelBookRefreshes()
+            session.invalidateAndCancel()
+            DeferredMetadataProtocol.automaticResponse = nil
+            DeferredMetadataProtocol.requests = nil
+        }
+
+        let initiallyRequested = afterReaderClose ? books.dropLast() : books[...]
+        manager.refreshShelfMetadataV2(for: Set(initiallyRequested.map(\.inShelfId)), serverReachableChanged: false)
+        await fulfillment(of: [filled], timeout: 5)
+
+        if afterReaderClose {
+            await fulfillment(of: [sixteenCompletedMetadata], timeout: 5)
+            XCTAssertEqual(held.count, 4)
+            XCTAssertTrue(books.dropLast().allSatisfy { libraryManager.librarySyncStatus[$0.library.id]?.isUpd == false })
+            await container.sessionManager.onBookReaderClosed(book: closingBook,
+                lastPosition: .init(readerName: ReaderType.YabrEPUB.rawValue))
+            let signals = container.calibreUpdates()
+            let notified = expectation(description: "Admitted reader-close refresh publishes its committed book")
+            let observer = Task { @MainActor in
+                for await signal in signals {
+                    if case .book(let book) = signal, book.inShelfId == closingBook.inShelfId,
+                       book.title == "Refreshed \(closingBook.id)" {
+                        notified.fulfill()
+                        return
+                    }
+                }
+            }
+            defer { observer.cancel() }
+            XCTAssertEqual(held.count, 4)
+            try held.answer(0, body: "")
+            await fulfillment(of: [overflow, notified], timeout: 5)
+        } else {
+            XCTAssertEqual(held.count, 16)
+            XCTAssertEqual(books.filter { libraryManager.librarySyncStatus[$0.library.id]?.isUpd == true }.count, 16)
+            let sent = Set(try (0..<16).map { try held.url(at: $0).lastPathComponent })
+            let waiting = books.filter { !sent.contains($0.library.key) }.sorted { $0.library.id < $1.library.id }
+            let expected = try XCTUnwrap(waiting.last)
+            let explicit = await manager.getBooksMetadata(request: .init(
+                library: expected.library, books: [expected.id], getAnnotations: false))
+            XCTAssertEqual(explicit[expected.id], .failed("Book sync is busy. Please try again."))
+            var expectedIDs = [expected.id]
+            if retirement == .replaceDatabase {
+                let original = try XCTUnwrap(databaseService.realm)
+                try databaseService.openMainRealm(conf: .init(
+                    inMemoryIdentifier: UUID().uuidString, schemaVersion: DatabaseSchema.version))
+                try databaseService.openMainRealm(conf: original.configuration)
+                let retired = await terminalRefreshStates(terminalStates, count: 17)
+                XCTAssertEqual(retired.count, 17)
+                XCTAssertTrue(retired.allSatisfy(\.superseded))
+                XCTAssertEqual(held.count, 16)
+                XCTAssertEqual(container.bookRepository.getBook(id: expected.inShelfId)?.title, expected.title)
+                XCTAssertFalse(books.contains { libraryManager.librarySyncStatus[$0.library.id]?.isUpd == true })
+                withExtendedLifetime(original) {}
+                return
+            }
+            if retirement == .hideAndRestore {
+                let stale = try XCTUnwrap(waiting.first)
+                let retiredStates = manager.bookRefreshUpdates()
+                try libraryManager.hideLibrary(libraryId: stale.library.id, serverID: server.id)
+                try libraryManager.restoreLibrary(libraryId: stale.library.id, serverID: server.id)
+                let retiredState = await finishedCapacityRefresh(stale, in: retiredStates)
+                let retired = try XCTUnwrap(retiredState)
+                XCTAssertTrue(retired.superseded)
+                XCTAssertEqual(retired.metadata[stale.id], .superseded)
+            } else {
+                var book = CalibreBook(id: 602, library: expected.library)
+                book.inShelf = true
+                container.bookManager.updateBook(book: book)
+                expectedIDs.append(book.id)
+                manager.refreshShelfMetadataV2(for: [expected.inShelfId], serverReachableChanged: false)
+                manager.refreshShelfMetadataV2(for: [book.inShelfId], serverReachableChanged: false)
+            }
+            try held.fail(0, error: URLError(.badURL))
+            await fulfillment(of: [overflow], timeout: 3)
+            guard held.count >= 17 else { return }
+            let lastURL = try held.url(at: 16)
+            XCTAssertEqual(lastURL.lastPathComponent, expected.library.key)
+            let ids = try XCTUnwrap(URLComponents(url: lastURL, resolvingAgainstBaseURL: false)?.queryItems?.first?.value)
+            XCTAssertEqual(ids.split(separator: ",").compactMap { Int32($0) }, expectedIDs)
+            try held.answer(16, body: Self.capacityMetadataBody(id: ids))
+            let finished = await finishedCapacityRefresh(expected, in: terminalStates)
+            XCTAssertEqual(finished?.metadata, Dictionary(uniqueKeysWithValues: expectedIDs.map { ($0, .updated) }))
+            XCTAssertEqual(manager.booksInShelf[expected.inShelfId]?.title, "Refreshed \(expected.id)")
+            XCTAssertEqual(libraryManager.librarySyncStatus[expected.library.id]?.isUpd, false)
+            return
+        }
+
+        let finished = await finishedCapacityRefresh(closingBook, in: terminalStates)
+        XCTAssertEqual(finished?.metadata[closingBook.id], .updated)
+        XCTAssertEqual(container.bookRepository.getBook(id: closingBook.inShelfId)?.title, "Refreshed \(closingBook.id)")
+        XCTAssertEqual(manager.booksInShelf[closingBook.inShelfId]?.title, "Refreshed \(closingBook.id)")
+        XCTAssertEqual(libraryManager.librarySyncStatus[closingBook.library.id]?.isUpd, false)
+    }
+
+    private func finishedCapacityRefresh(_ book: CalibreBook, in stream: AsyncStream<BookRefreshCoordinator.State>) async
+        -> BookRefreshCoordinator.State? {
+        let finished = expectation(description: "Deferred refresh of \(book.library.key) reached a terminal state")
+        var result: BookRefreshCoordinator.State?
+        let observer = Task { @MainActor in
+            for await state in stream where state.libraryID == book.library.id && !state.refreshing && state.pendingUploads == 0 {
+                result = state
+                finished.fulfill()
+                return
+            }
+        }
+        defer { observer.cancel() }
+        await fulfillment(of: [finished], timeout: 5)
+        return result
+    }
+
+    nonisolated private static func capacityMetadataBody(id: String) -> String {
+        let entries = id.split(separator: ",").map { id in
+            #""\#(id)":\#(Self.bookEntryJSON(title: "Refreshed \(id)"))"#
+        }
+        return "{" + entries.joined(separator: ",") + "}"
+    }
+
+    nonisolated private static func capacityEmptyAnnotations(path: String) throws -> Data {
+        guard let format = path.split(separator: "/").last?.split(separator: "-"), format.count == 2 else {
+            return Data("{}".utf8)
+        }
+        let entry = CalibreBookAnnotationsResult(last_read_positions: [],
+            annotations_map: .init(bookmark: [], highlight: []))
+        return try JSONEncoder().encode(["\(format[0]):\(format[1])": entry])
+    }
+
+    func testBookRefreshOwnerCancellationDropsQueuedPostsAndLetsInFlightPostSettle() async throws {
+        configureReachableMockSession()
+        let book = shelveForMetadataTest(101)
+        for (device, epoch) in [("a", 100.0), ("b", 200.0)] {
+            container.readingPositionRepository.savePosition(TestFixtures.makeReadingPosition(id: device, epoch: epoch), for: book)
+        }
+        let annotation = try JSONEncoder().encode(["101:EPUB": CalibreBookAnnotationsResult(
+            last_read_positions: [], annotations_map: .init(bookmark: [], highlight: []))])
+        let firstPost = expectation(description: "Owner has one in-flight POST")
+        let held = DeferredMetadataProtocol.Requests(first: firstPost, second: nil)
+        let posts = BatchSizes()
+        DeferredMetadataProtocol.requests = held
+        DeferredMetadataProtocol.automaticResponse = { request in
+            let url = try XCTUnwrap(request.url)
+            let body: Data
+            switch url.path {
+            case "/ajax/books/test_lib":
+                body = Data(#"{"101":\#(Self.bookEntryJSON(title: "Owned upload"))}"#.utf8)
+            case "/book-get-annotations/test_lib/101-EPUB":
+                body = annotation
+            case "/book-set-last-read-position/test_lib/101/EPUB":
+                posts.append(1)
+                if posts.values.count == 1 { return nil }
+                body = Data()
+            default: throw URLError(.unsupportedURL)
+            }
+            return (try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), body)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeferredMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        container.calibreServerService.metadataSessions[
+            CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)] = session
+        defer {
+            DeferredMetadataProtocol.automaticResponse = nil
+            DeferredMetadataProtocol.requests = nil
+            session.invalidateAndCancel()
+        }
+        let states = container.bookManager.bookRefreshUpdates()
+        _ = await container.bookManager.getBooksMetadata(request: .init(library: library, books: [book.id], getAnnotations: true))
+        await fulfillment(of: [firstPost], timeout: 5)
+        container.bookManager.cancelBookRefreshes()
+        try held.answer(0, body: "")
+        let state = await terminalRefreshStates(states, count: 1).first
+        XCTAssertEqual(state?.cancelled, true)
+        XCTAssertEqual(state?.uploaded, 1)
+        XCTAssertEqual(state?.discarded, 1)
+        XCTAssertEqual(posts.values, [1])
+        XCTAssertEqual(container.readingPositionRepository.getPositions(for: book).count, 2)
+        XCTAssertEqual(container.bookRepository.getBook(id: book.inShelfId)?.title, "Owned upload")
+    }
+
+    nonisolated private static func requestBody(_ request: URLRequest) throws -> Data {
+        if let body = request.httpBody { return body }
+        let stream = try XCTUnwrap(request.httpBodyStream)
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count < 0 { throw URLError(.cannotDecodeRawData) }
+            if count == 0 { return data }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+    }
+
+    private func terminalRefreshStates(_ source: AsyncStream<BookRefreshCoordinator.State>, count: Int) async
+        -> [BookRefreshCoordinator.State] {
+        let finished = expectation(description: "Refresh and owned upload work finished")
+        var results: [UUID: BookRefreshCoordinator.State] = [:]
+        let task = Task { @MainActor in
+            for await state in source where !state.refreshing && state.pendingUploads == 0 {
+                results[state.id] = state
+                if results.count == count { finished.fulfill(); return }
+            }
+        }
+        defer { task.cancel() }
+        await fulfillment(of: [finished], timeout: 10)
+        return Array(results.values)
     }
 
     func testRetainedMetadataCannotClearANewerUnavailableAnswer() async throws {
@@ -933,7 +1488,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [DeferredMetadataProtocol.self]
         let session = URLSession(configuration: sessionConfig)
-        let key = CalibreServerURLSessionKey(server: server, timeout: 600, qos: .default)
+        let key = CalibreServerURLSessionKey(server: server, timeout: 30, qos: .default)
         container.calibreServerService.metadataSessions[key] = session
         DeferredMetadataProtocol.requests = held
         defer {
@@ -1148,22 +1703,32 @@ final class CalibreLibraryManagerTests: XCTestCase {
 
     private final class DeferredMetadataProtocol: URLProtocol, @unchecked Sendable {
         static var requests: Requests?
+        static var automaticResponse: ((URLRequest) throws -> (HTTPURLResponse, Data)?)?
 
         final class Requests {
             private let lock = NSLock()
             private var pending = [DeferredMetadataProtocol]()
-            private let first: XCTestExpectation
-            private let second: XCTestExpectation
+            private let first: XCTestExpectation?
+            private let second: XCTestExpectation?
+            private let onAppend: (Int) -> Void
 
-            init(first: XCTestExpectation, second: XCTestExpectation) {
+            var count: Int { lock.withLock { pending.count } }
+
+            init(first: XCTestExpectation?, second: XCTestExpectation?, onAppend: @escaping (Int) -> Void = { _ in }) {
                 self.first = first
                 self.second = second
+                self.onAppend = onAppend
             }
 
             func append(_ request: DeferredMetadataProtocol) {
                 let count = lock.withLock { pending.append(request); return pending.count }
-                if count == 1 { first.fulfill() }
-                if count == 2 { second.fulfill() }
+                if count == 1 { first?.fulfill() }
+                if count == 2 { second?.fulfill() }
+                onAppend(count)
+            }
+
+            func url(at index: Int) throws -> URL {
+                try XCTUnwrap(lock.withLock { pending.indices.contains(index) ? pending[index].request.url : nil })
             }
 
             func answer(_ index: Int, body: String) throws {
@@ -1174,11 +1739,28 @@ final class CalibreLibraryManagerTests: XCTestCase {
                 entry.client?.urlProtocol(entry, didLoad: Data(body.utf8))
                 entry.client?.urlProtocolDidFinishLoading(entry)
             }
+
+            func fail(_ index: Int, error: Error) throws {
+                let entry = try XCTUnwrap(lock.withLock { pending.indices.contains(index) ? pending[index] : nil })
+                entry.client?.urlProtocol(entry, didFailWithError: error)
+            }
         }
 
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-        override func startLoading() { Self.requests?.append(self) }
+        override func startLoading() {
+            do {
+                if let (response, body) = try Self.automaticResponse?(request) {
+                    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                    client?.urlProtocol(self, didLoad: body)
+                    client?.urlProtocolDidFinishLoading(self)
+                } else {
+                    Self.requests?.append(self)
+                }
+            } catch {
+                client?.urlProtocol(self, didFailWithError: error)
+            }
+        }
         override func stopLoading() {}
     }
 
@@ -1279,7 +1861,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let mockSession = URLSession(configuration: sessionConfig)
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
                 container.calibreServerService.metadataSessions[key] = mockSession
@@ -1287,7 +1869,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         }
     }
 
-    private static let newestChange = "2026-06-23T18:00:00.123456+00:00"
+    nonisolated private static let newestChange = "2026-06-23T18:00:00.123456+00:00"
 
     /// What calibre answers `syncLibrary` for the test library: 12 books, the newest book 101 with
     /// an int column made by `calibredb add_custom_column` ("display": {}), and the categories.
@@ -1317,7 +1899,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         """
     }
 
-    private static func bookEntryJSON(title: String, modified: String = newestChange) -> String {
+    nonisolated private static func bookEntryJSON(title: String, modified: String = newestChange) -> String {
         """
         {"title": "\(title)", "uuid": "uuid-\(title)", "authors": ["Author"], "formats": ["epub"],
          "user_metadata": {}, "tags": [], "author_sort": "", "title_sort": "", "thumbnail": "",

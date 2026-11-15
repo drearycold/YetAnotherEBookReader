@@ -458,7 +458,7 @@ class BookDetailViewModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             let key = CalibreServerURLSessionKey(server: mockCalibreBook.library.server, timeout: timeout, qos: .default)
             mockAppContainer.calibreServerService.metadataSessions[key] = session
         }
@@ -1534,7 +1534,7 @@ class BookDetailViewModelTests: XCTestCase {
         
         let calibreServerService = mockAppContainer.calibreServerService
         let library = book.library
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
                 calibreServerService.metadataSessions[key] = mockSession
@@ -1571,7 +1571,7 @@ class BookDetailViewModelTests: XCTestCase {
         
         let calibreServerService = mockAppContainer.calibreServerService
         let library = book.library
-        for timeout in [10.0, 600.0] {
+        for timeout in [10.0, 30.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
                 calibreServerService.metadataSessions[key] = mockSession

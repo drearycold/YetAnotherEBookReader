@@ -75,7 +75,7 @@ extension CalibreServerService {
         }
     }
 
-    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default,
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default, timeout: Double = 600,
                           checkCurrent: () throws -> Void = {}) async -> CalibreBooksTask {
         guard let metadataUrl = task.metadataUrl,
               metadataUrl.isHTTP,
@@ -86,7 +86,7 @@ extension CalibreServerService {
         do {
             return try await withRequestActivity(
                 .batchMetadata, request: URLRequest(url: metadataUrl), server: task.library.server,
-                libraryId: task.library.id, bookIds: Set(task.books), qos: qos, resultError: { result in
+                libraryId: task.library.id, bookIds: Set(task.books), timeout: timeout, qos: qos, resultError: { result in
                     if let error = result.error { return error }
                     // A null entry answers for a deleted or restricted book. A missing key
                     // leaves that book unanswered even if the other results can be used.

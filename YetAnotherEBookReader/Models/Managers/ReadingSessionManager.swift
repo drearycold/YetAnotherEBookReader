@@ -693,6 +693,7 @@ class ReadingSessionManager {
         return readerInfo
     }
     
+    @MainActor
     func handleBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
         guard let container = container else { return }
         
@@ -726,6 +727,7 @@ class ReadingSessionManager {
         }
     }
     
+    @MainActor
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard let readingBook = self.readingBook,
               let updatedReadingPosition = container?.readingPositionRepository.getPositions(for: readingBook).first,

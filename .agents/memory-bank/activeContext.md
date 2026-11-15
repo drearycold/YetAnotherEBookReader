@@ -2,8 +2,8 @@
 
 ## Current Focus
 
-**Book Metadata Refresh and Sync Coordination (BS1)** is on
-`codex/book-metadata-refresh-bs1`, based on `694d44e5` after FI3 PR #156.
+**Book Metadata Refresh and Sync Coordination (BS2)** is on
+`codex/book-metadata-refresh-bs2`, based on `300ff3cb` after BS1 PR #157.
 The earlier PDF investigation remains under Current Branch Notes.
 
 ## Book Refresh and Sync Direction (2026-11-14)
@@ -13,12 +13,8 @@ reader-close sync. It coordinates batches, metadata persistence, shelf
 reconciliation, position and annotation merges, and follow-up uploads.
 Browse keeps its own CC-scoped writer and shares metadata version checks.
 
-BS2 should give retries and follow-up sync/uploads a clear owner and bounded
-lifetime, with aggregate busy state for overlapping operations. Distinguish
-metadata refresh, local merge and remote upload outcomes without making a
-failed upload undo committed metadata or local annotations. BS3 should verify
-Book Detail, shelf and reader-close flows end to end and complete the relevant
-Calibre contracts.
+BS3 should verify Book Detail, shelf and reader-close flows end to end
+across the readers and real multi-device Calibre workflows.
 
 Reuse BookMetadataSyncWorker, the existing position/highlight/bookmark merge
 algorithms, AL diagnostics, CC context patterns and SC commit-result rules.
@@ -114,6 +110,87 @@ books they use. Evidence is in `/tmp/YabrBS1/review-red.log`,
 `review-final.xcresult` and `review-shelf-output.xcresult`.
 The review passed 241 focused tests, a six-case rerun covering Recent and
 Discover output and both scope controls, and a Mac Catalyst build.
+
+### BS2 operation ownership
+
+`BookRefreshCoordinator` owns the caller and shelf refresh tasks and subsequent
+uploads with a stable in-memory ID and BS1's pinned scope. A caller's
+cancellation reaches only its refresh task. Metadata and local merges settle
+before that caller returns. Uploads handed off by a completed local merge
+remain owned by the coordinator and report separately. `isUpd` aggregates
+active fetch, retry, commit and local merge across the library. Uploads have
+their own pending and completion counts on the operation stream. The stream
+also reports metadata, annotation reads and local merge outcomes for diagnosis.
+The activity log retains sanitized HTTP attempts and their outcomes.
+
+There are up to 16 active operations, four concurrent uploading books, and
+800 outstanding POSTs in memory. The same remote book's POSTs run in order
+under its server UUID, library key and numeric book ID. Each position POST
+uses the latest eligible local snapshot for that device and format and checks
+it again at transport. Scope replacement drops queued work. An in-flight POST
+keeps its book's lane until it settles. Its server effect can already have
+occurred, so the old operation alone records its late completion.
+
+The metadata GET retries once after a short cancellable backoff for selected
+transport failures or HTTP 408, 502, 503 and 504. A retry checks the saved scope
+and book rows. Authentication, invalid payload and explicit null receive their
+own outcomes. Requests in this pipeline use a 30-second resource timeout.
+POSTs are sent once. If the connection is lost after dispatch, delivery is
+uncertain and same-book snapshots from before that failure are discarded.
+A new refresh reads the server first. Committed local metadata, positions and
+annotations remain in their repositories.
+
+The BS1 baseline showed the second same-library refresh clearing the busy flag
+while the first request was still held. See `/tmp/YabrBS2/busy-red.log`.
+The BS2 fixtures hold metadata and position POSTs, inspect the actual request
+body, and observe the activity log and operation stream. They cover retry
+exhaustion, removing a library during backoff, different-library cancellation,
+the 201-book boundary, annotation read failure after a metadata commit,
+mixed 403/200/422 uploads, and clearing queued snapshots after a transport
+failure. The old position sent before a newer local position remains ordered;
+a queued old position is discarded by comparing its original reading epoch
+and CFI to the current local value at transport. Tests keep the two providers'
+existing Realm and merge rules.
+
+The final iPhone 17 focused run passed 226 tests. The full suite recorded
+1,232 cases, with 1,229 passed, two existing expected PDFKit failures and
+one opt-in benchmark skipped. All 21 contracts passed against Calibre 9.11.0.
+iOS Simulator Release and Mac Catalyst builds passed with the locked
+packages. Evidence is in `/tmp/YabrBS2`.
+
+The isolated iPhone 17 Release app passed the native Book Detail
+HTTP 503, automatic retry and manual retry, explicit null, cached EPUB
+reading and History return journey through the Calibre 9.18 fixture.
+The first run stopped when SimRenderServer crashed. A fresh isolated
+installation completed the journey. The proxy forwards reads; the real
+9.11.0 contracts and controlled POST fixtures cover write behavior.
+BS3 can extend native coverage to the other reader and multi-device flows.
+
+#### BS2 capacity review
+
+The baseline held 16 active requests through the real shelf entry point,
+then freed a slot. The seventeenth library never reached transport. A second
+fixture finished metadata for all 16 operations and held their uploads.
+Closing a reader for another shelf book lost its refresh even after an
+upload finished. Both failures are in `/tmp/YabrBS2/capacity-red.log`.
+
+The coordinator now admits waiting shelf refreshes in submission order
+as either refresh completion or upload completion frees a slot. Waiting
+work uses one entry per current library and source, with each still-shelved
+book captured once in that scope. Repeated requests union book IDs without
+losing their place. Database epochs and retired library lifetimes invalidate
+waiting work. The normal repository checks still validate the library and
+book rows before transport and commit. `isUpd` continues to track admitted
+refreshes; the operation stream indicates capacity waiting. An explicit
+caller at capacity still gets the retry message.
+
+The iPhone 17 review run passed 204 focused tests. Its four capacity fixtures
+cover the seventeenth library and merged book IDs, reader close with all
+slots retained for uploads, hide and restore while queued, and database
+switch away and back. They assert the active limit, terminal outcomes,
+committed shelf values and the reader-close notification. Mac Catalyst
+built successfully. See `/tmp/YabrBS2/capacity-verified.xcresult` and
+`/tmp/YabrBS2/capacity-catalyst.log`.
 
 ## Next Refactoring Direction: Local File Operations (2026-11-13)
 

@@ -19,6 +19,14 @@ enum CalibreAPIError: LocalizedError, Sendable {
     case unsupportedPayload
     case unknown(Error)
 
+    var allowsBookRefreshRetry: Bool {
+        switch self {
+        case .httpStatus(let status, _): return [408, 502, 503, 504].contains(status)
+        case .transport(let error): return [.timedOut, .networkConnectionLost, .cannotConnectToHost].contains(error.code)
+        default: return false
+        }
+    }
+
     init(error: Error) {
         if let calibreError = error as? CalibreAPIError {
             self = calibreError

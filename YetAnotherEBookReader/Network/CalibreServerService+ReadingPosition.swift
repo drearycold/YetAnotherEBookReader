@@ -45,13 +45,13 @@ extension CalibreServerService {
         )
     }
 
-    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask,
+    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask, timeout: Double = 600,
                                    checkCurrent: () throws -> Void = {}) async -> CalibreBookSetLastReadPositionTask {
         var result = task
         do {
             (result.data, result.urlResponse) = try await withRequestActivity(
                 .readingPosition, request: task.urlRequest, server: task.library.server,
-                libraryId: task.library.id, bookIds: [task.bookId], checkCurrent: checkCurrent
+                libraryId: task.library.id, bookIds: [task.bookId], timeout: timeout, checkCurrent: checkCurrent
             ) { data, response in
                 try validateMutationResponse(data, response: response)
                 return (data, response)

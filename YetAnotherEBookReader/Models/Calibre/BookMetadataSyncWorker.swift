@@ -38,6 +38,9 @@ final class BookMetadataSyncWorker {
         var positionsToUpload: [UploadPositions] = []
         var annotationsToUpload: [UploadAnnotations] = []
         var changedPositionShelfIDs = Set<String>()
+        var mergedJobs = 0
+        var failedJobs = 0
+        var skippedJobs = 0
     }
     
     init(
@@ -58,8 +61,11 @@ final class BookMetadataSyncWorker {
             await withCheckedContinuation { continuation in
                 queue.async {
                     var outcome = SyncOutcome()
-                    for job in jobs {
-                        guard (try? lifetime.checkCurrent()) != nil else { break }
+                    for (index, job) in jobs.enumerated() {
+                        guard (try? lifetime.checkCurrent()) != nil else {
+                            outcome.skippedJobs += jobs.count - index
+                            break
+                        }
                         var changedPositionShelfID: String?
                         do {
                             let batch: SyncOutcome
@@ -77,9 +83,12 @@ final class BookMetadataSyncWorker {
                             }
                             outcome.positionsToUpload.append(contentsOf: batch.positionsToUpload)
                             outcome.annotationsToUpload.append(contentsOf: batch.annotationsToUpload)
+                            outcome.mergedJobs += 1
                         } catch CacheContextError.superseded {
+                            outcome.skippedJobs += 1
                             continue
                         } catch {
+                            outcome.failedJobs += 1
                             logger.error("Could not merge remote positions or annotations: \(error.localizedDescription)")
                         }
                         // Position writes are committed in the server's Realm even
@@ -99,7 +108,7 @@ final class BookMetadataSyncWorker {
                               changedPositionShelfID: inout String?) throws -> SyncOutcome {
         var needsUpload = job.needUpload
         if configuration != nil {
-            guard let format = book.formats[job.format.rawValue] else { return .init() }
+            guard let format = book.formats[job.format.rawValue] else { throw CacheContextError.superseded }
             needsUpload = needsUpload && book.inShelf && format.cached
         }
         let pending = try positions.mergeRemotePositions(entries: job.entry.last_read_positions, for: book)

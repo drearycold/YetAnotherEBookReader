@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 
 final class CalibreServerService {
+    static let bookRefreshTimeout = 30.0
     var logger: CalibreActivityLogger
     weak var config: AppContainerProtocol?
     var database: DatabaseService
@@ -192,6 +193,9 @@ final class CalibreServerService {
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         urlSessionConfiguration.timeoutIntervalForRequest = key.timeout
+        if key.timeout == Self.bookRefreshTimeout {
+            urlSessionConfiguration.timeoutIntervalForResource = key.timeout
+        }
         urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
         let urlSessionDelegate = CalibreServerTaskDelegate(key.server)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
@@ -290,8 +294,8 @@ final class CalibreServerService {
         parse: (Data, HTTPURLResponse) throws -> T
     ) async throws -> T {
         try await withActivity(kind, request: request, libraryId: libraryId, bookIds: bookIds, resultError: resultError) { activity in
-            try checkCurrent()
-            let (data, response) = try await validatedData(for: request, server: server, timeout: timeout, qos: qos, activity: activity)
+            let (data, response) = try await validatedData(for: request, server: server, timeout: timeout, qos: qos,
+                                                           activity: activity, checkCurrent: checkCurrent)
             return try parse(data, response)
         }
     }
@@ -305,7 +309,7 @@ final class CalibreServerService {
 
     func validatedData(
         for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default,
-        activity: CalibreOperationRequests? = nil
+        activity: CalibreOperationRequests? = nil, checkCurrent: () throws -> Void = {}
     ) async throws -> (Data, HTTPURLResponse) {
         let started = DispatchTime.now().uptimeNanoseconds
         let delegate = activity.map { _ in CalibreServerDiagnosticTaskDelegate(server) }
@@ -313,7 +317,9 @@ final class CalibreServerService {
         let response: URLResponse
         do {
             (data, response) = try await withURLSession(server: server, timeout: timeout, qos: qos) {
-                try await $0.data(for: request, delegate: delegate)
+                try Task.checkCancellation()
+                try checkCurrent()
+                return try await $0.data(for: request, delegate: delegate)
             }
         } catch {
             activity?.record(request, since: started, status: delegate?.authenticationStatusCode)
@@ -434,7 +440,7 @@ final class CalibreOperationRequests {
             result.errorCategory = .serverRejected
             result.detail = "Server rejected request"
         case .unknown(let underlying):
-            cancelled = underlying is CancellationError
+            cancelled = underlying is CancellationError || (underlying as? CacheContextError) == .superseded
             result.errorCategory = cancelled ? .transport : .unknown
             result.detail = cancelled ? "Cancelled" : "Unexpected error"
         }
