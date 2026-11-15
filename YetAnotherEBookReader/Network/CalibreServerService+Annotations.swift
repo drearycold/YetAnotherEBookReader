@@ -8,7 +8,8 @@
 import Foundation
 
 extension CalibreServerService {
-    func getAnnotations(task: CalibreBooksTask, checkCurrent: () throws -> Void = {}) async -> CalibreBooksTask {
+    func getAnnotations(task: CalibreBooksTask, timeout: Double = 600,
+                        checkCurrent: () throws -> Void = {}) async -> CalibreBooksTask {
         guard let annotationsUrl = task.annotationsUrl,
               annotationsUrl.isHTTP else {
             return task
@@ -17,7 +18,7 @@ extension CalibreServerService {
         do {
             let (result, _): (CalibreBooksTask, CalibreAPIError?) = try await withRequestActivity(
                 .annotations, request: URLRequest(url: annotationsUrl), server: task.library.server,
-                libraryId: task.library.id, bookIds: Set(task.books), resultError: { $0.1 },
+                libraryId: task.library.id, bookIds: Set(task.books), timeout: timeout, resultError: { $0.1 },
                 checkCurrent: checkCurrent
             ) { data, response in
                 var result = task
@@ -71,13 +72,13 @@ extension CalibreServerService {
         )
     }
 
-    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask,
+    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask, timeout: Double = 600,
                                 checkCurrent: () throws -> Void = {}) async -> CalibreBookUpdateAnnotationsTask {
         var result = task
         do {
             (result.data, result.urlResponse) = try await withRequestActivity(
                 .annotations, request: task.urlRequest, server: task.library.server,
-                libraryId: task.library.id, bookIds: [task.bookId], checkCurrent: checkCurrent
+                libraryId: task.library.id, bookIds: [task.bookId], timeout: timeout, checkCurrent: checkCurrent
             ) { data, response in
                 try validateMutationResponse(data, response: response)
                 return (data, response)

@@ -662,6 +662,7 @@ final class ReadingSessionManagerTests: XCTestCase {
         )
     }
     
+    @MainActor
     func testUpdateCurrentPosition_savesViaRepository() throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
